@@ -1,0 +1,20 @@
+{
+  "name": "example-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "check-types": "turbo run check-types",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+  },
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "turbo": "2.10.12",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=22"
+  }
+}

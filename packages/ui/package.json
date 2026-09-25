@@ -1,0 +1,25 @@
+{
+  "name": "@experiments/ui",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./*": "./src/*.tsx"
+  },
+  "scripts": {
+    "lint": "oxlint --deny-warnings .",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@experiments/oxlint-config": "workspace:*",
+    "@experiments/typescript-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "oxlint": "1.78.0",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}
