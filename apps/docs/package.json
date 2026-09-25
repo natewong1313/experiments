@@ -7,7 +7,7 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "oxlint --deny-warnings .",
+    "lint": "oxlint --deny-warnings --type-aware .",
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {
@@ -23,6 +23,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "oxlint": "1.78.0",
+    "oxlint-tsgolint": "7.0.2003",
     "typescript": "7.0.2"
   }
 }

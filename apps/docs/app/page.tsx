@@ -1,7 +1,8 @@
 import { Button } from "@experiments/ui/button";
 import { Card } from "@experiments/ui/card";
+import type { JSX } from "react";
 
-export default function Page() {
+export default function Page(): JSX.Element {
   return (
     <main>
       <h1>Docs</h1>

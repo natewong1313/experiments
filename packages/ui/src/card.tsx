@@ -1,13 +1,15 @@
-import { ReactNode } from "react";
+import type { JSX, ReactNode } from "react";
 
-interface CardProps {
+type CardProps = {
   title: string;
   children: ReactNode;
-}
+};
 
-export const Card = ({ title, children }: CardProps) => (
-  <section className="card">
-    <h2>{title}</h2>
-    {children}
-  </section>
-);
+export function Card({ title, children }: CardProps): JSX.Element {
+  return (
+    <section className="card">
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}

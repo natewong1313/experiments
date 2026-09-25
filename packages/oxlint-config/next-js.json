@@ -1,12 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "extends": ["./base.json"],
-  "plugins": ["typescript", "react", "react-hooks", "unicorn", "promise", "oxc"],
-  "env": { "builtin": true, "browser": true },
-  "ignorePatterns": [
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts"
-  ]
+  "plugins": ["typescript", "react", "react-hooks", "unicorn", "promise", "import", "node", "oxc"],
+  "env": { "builtin": true, "browser": true }
 }
