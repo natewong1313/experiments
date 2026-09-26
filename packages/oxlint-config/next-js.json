@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "extends": ["./base.json"],
-  "plugins": ["typescript", "react", "react-hooks", "unicorn", "promise", "import", "node", "oxc"],
+  "plugins": ["typescript", "react", "react-hooks", "unicorn", "promise", "import", "node", "oxc", "vitest"],
   "env": { "builtin": true, "browser": true }
 }

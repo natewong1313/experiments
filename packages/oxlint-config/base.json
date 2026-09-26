@@ -6,7 +6,8 @@
     "promise",
     "import",
     "node",
-    "oxc"
+    "oxc",
+    "vitest"
   ],
   "categories": {
     "correctness": "error"
@@ -306,6 +307,16 @@
     "unicorn/require-module-specifiers": "error",
     "unicorn/switch-case-braces": "error",
     "unicorn/switch-case-break-position": "error",
-    "unicorn/throw-new-error": "error"
+    "unicorn/throw-new-error": "error",
+    "vitest/hoisted-apis-on-top": "error",
+    "vitest/no-focused-tests": "error",
+    "vitest/no-identical-title": "error",
+    "vitest/no-interpolation-in-snapshots": "error",
+    "vitest/no-standalone-expect": "error",
+    "vitest/prefer-snapshot-hint": ["error", "multi"],
+    "vitest/require-awaited-expect-poll": "error",
+    "vitest/require-local-test-context-for-concurrent-snapshots": "error",
+    "vitest/valid-expect": "error",
+    "vitest/valid-expect-in-promise": "error"
   }
 }
