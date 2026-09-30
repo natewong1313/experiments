@@ -1,0 +1,22 @@
+{
+  "name": "@experiments/ahp-conformance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@microsoft/agent-host-protocol": "0.9.0",
+    "@experiments/protocol-schemas": "workspace:*"
+  },
+  "scripts": {
+    "test": "vitest run --testTimeout 90000",
+    "lint": "oxlint --deny-warnings .",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@experiments/oxlint-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "oxlint": "1.78.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

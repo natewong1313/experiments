@@ -1,31 +1,55 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "typescript",
-    "unicorn",
-    "promise",
-    "import",
-    "node",
-    "oxc",
-    "vitest"
-  ],
+  "jsPlugins": ["eslint-plugin-zod"],
+  "plugins": ["typescript", "unicorn", "promise", "import", "node", "oxc", "vitest"],
   "categories": {
     "correctness": "error"
   },
   "rules": {
+    "zod/array-style": ["error", { "style": "function" }],
+    "zod/consistent-import": "error",
+    "zod/consistent-import-source": "error",
+    "zod/consistent-object-schema-type": "error",
+    "zod/consistent-schema-output-type-style": ["error", { "style": "output" }],
+    "zod/consistent-schema-var-name": ["error", { "after": "Schema" }],
+    "zod/no-any-schema": "error",
+    "zod/no-coerce-boolean": "error",
+    "zod/no-duplicate-schema-methods": "error",
+    "zod/no-empty-custom-schema": "error",
+    "zod/no-native-enum": "error",
+    "zod/no-number-schema-with-finite": "error",
+    "zod/no-number-schema-with-int": "error",
+    "zod/no-number-schema-with-is-finite": "error",
+    "zod/no-number-schema-with-is-int": "error",
+    "zod/no-number-schema-with-safe": "error",
+    "zod/no-number-schema-with-step": "error",
+    "zod/no-optional-and-default-together": "error",
+    "zod/no-promise-schema": "error",
+    "zod/no-schema-with-is-nullable": "error",
+    "zod/no-schema-with-is-optional": "error",
+    "zod/no-throw-in-refine": "error",
+    "zod/no-transform-in-record-key": "error",
+    "zod/no-unnecessary-readonly": "error",
+    "zod/prefer-enum-over-literal-union": "error",
+    "zod/prefer-loose-object": "error",
+    "zod/prefer-map-set-size-over-min-max": "error",
+    "zod/prefer-meta": "error",
+    "zod/prefer-meta-last": "error",
+    "zod/prefer-nullish": "error",
+    "zod/prefer-strict-object": "error",
+    "zod/prefer-string-length-over-min-max": "error",
+    "zod/prefer-top-level-string-formats": "error",
+    "zod/prefer-trim-before-string-length-checks": "error",
+    "zod/prefer-tuple-over-array-length": "error",
+    "zod/require-brand-type-parameter": "error",
+    "zod/require-error-message": "error",
     "eslint/array-callback-return": "error",
     "eslint/capitalized-comments": "error",
-    "eslint/curly": [
-      "error",
-      "all"
-    ],
+    "eslint/curly": ["error", "all"],
     "eslint/default-case-last": "error",
     "eslint/default-param-last": "error",
     "eslint/eqeqeq": "error",
-    "eslint/func-style": [
-      "error",
-      "declaration"
-    ],
+    "eslint/func-style": ["error", "declaration"],
     "eslint/grouped-accessor-pairs": "error",
     "eslint/max-classes-per-file": [
       "error",
@@ -48,7 +72,7 @@
     "eslint/max-lines-per-function": [
       "error",
       {
-        "max": 100
+        "max": 200
       }
     ],
     "eslint/max-nested-callbacks": [
@@ -57,14 +81,8 @@
         "max": 2
       }
     ],
-    "eslint/max-params": [
-      "error",
-      4
-    ],
-    "eslint/max-statements": [
-      "error",
-      100
-    ],
+    "eslint/max-params": ["error", 4],
+    "eslint/max-statements": ["error", 100],
     "eslint/new-cap": "error",
     "eslint/no-array-constructor": "error",
     "eslint/no-await-in-loop": "error",
@@ -109,22 +127,13 @@
     "eslint/prefer-promise-reject-errors": "error",
     "eslint/prefer-template": "error",
     "eslint/preserve-caught-error": "error",
-    "import/consistent-type-specifier-style": [
-      "error",
-      "prefer-top-level-if-only-type-imports"
-    ],
+    "import/consistent-type-specifier-style": ["error", "prefer-top-level-if-only-type-imports"],
     "import/export": "error",
     "import/exports-last": "error",
-    "import/extensions": [
-      "error",
-      "never"
-    ],
+    "import/extensions": ["error", "never"],
     "import/first": "error",
     "import/group-exports": "error",
-    "import/max-dependencies": [
-      "error",
-      15
-    ],
+    "import/max-dependencies": ["error", 15],
     "import/named": "error",
     "import/newline-after-import": "error",
     "import/no-duplicates": "error",
@@ -136,16 +145,11 @@
     "import/no-unassigned-import": [
       "error",
       {
-        "allow": [
-          "**/*.css"
-        ]
+        "allow": ["**/*.css"]
       }
     ],
     "node/callback-return": "error",
-    "node/exports-style": [
-      "error",
-      "exports"
-    ],
+    "node/exports-style": ["error", "exports"],
     "oxc/branches-sharing-code": "error",
     "oxc/no-accumulating-spread": "error",
     "oxc/no-barrel-file": "error",
@@ -168,28 +172,16 @@
         "default": "array"
       }
     ],
-    "typescript/class-literal-property-style": [
-      "error",
-      "getters"
-    ],
-    "typescript/consistent-generic-constructors": [
-      "error",
-      "type-annotation"
-    ],
-    "typescript/consistent-indexed-object-style": [
-      "error",
-      "record"
-    ],
+    "typescript/class-literal-property-style": ["error", "getters"],
+    "typescript/consistent-generic-constructors": ["error", "type-annotation"],
+    "typescript/consistent-indexed-object-style": ["error", "record"],
     "typescript/consistent-type-assertions": [
       "error",
       {
         "assertionStyle": "never"
       }
     ],
-    "typescript/consistent-type-definitions": [
-      "error",
-      "type"
-    ],
+    "typescript/consistent-type-definitions": ["error", "type"],
     "typescript/consistent-type-exports": "error",
     "typescript/consistent-type-imports": "error",
     "typescript/dot-notation": "error",
@@ -201,10 +193,7 @@
       }
     ],
     "typescript/explicit-module-boundary-types": "error",
-    "typescript/method-signature-style": [
-      "error",
-      "method"
-    ],
+    "typescript/method-signature-style": ["error", "method"],
     "typescript/no-confusing-non-null-assertion": "error",
     "typescript/no-confusing-void-expression": "error",
     "typescript/no-empty-object-type": "error",
@@ -299,10 +288,7 @@
     "unicorn/prefer-string-replace-all": "error",
     "unicorn/prefer-string-trim-start-end": "error",
     "unicorn/prefer-structured-clone": "error",
-    "unicorn/prefer-ternary": [
-      "error",
-      "only-single-line"
-    ],
+    "unicorn/prefer-ternary": ["error", "only-single-line"],
     "unicorn/prefer-top-level-await": "error",
     "unicorn/require-module-specifiers": "error",
     "unicorn/switch-case-braces": "error",
