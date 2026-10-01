@@ -20,6 +20,7 @@ import type {
   LoadSessionResponse,
   NewSessionRequest,
   NewSessionResponse,
+  RequestPermissionResponse,
   SessionId,
   SessionNotification,
   SessionUpdate,
@@ -41,7 +42,9 @@ type MatchingVariant<T, U> = U extends { sessionUpdate: infer Kind }
   ? Extract<T, { sessionUpdate: Kind }>
   : U extends { type: infer Kind }
     ? Extract<T, { type: Kind }>
-    : T;
+    : U extends { outcome: infer Kind extends string }
+      ? Extract<T, { outcome: Kind }>
+      : T;
 type FieldDrift<T, U> = {
   [K in keyof KnownFields<U>]-?: K extends keyof T
     ? Equal<
@@ -89,6 +92,7 @@ type _AcpDrift = [
   Expect<Drift<Upstream.NewSessionResponse, NewSessionResponse>>,
   Expect<Drift<Upstream.LoadSessionRequest, LoadSessionRequest>>,
   Expect<Drift<Upstream.LoadSessionResponse, LoadSessionResponse>>,
+  Expect<Drift<Upstream.RequestPermissionResponse, RequestPermissionResponse>>,
   Expect<Drift<Upstream.ContentBlock, ContentBlock>>,
   Expect<Drift<Upstream.ContentBlock, TextContent>>,
   Expect<Drift<Upstream.ToolCallContent, ToolCallContent>>,

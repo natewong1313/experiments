@@ -12,6 +12,9 @@ const NewSessionResponseSchema = z.looseObject({
   sessionId: SessionIdSchema,
 });
 const LoadSessionResponseSchema = z.looseObject({});
+const RequestPermissionResponseSchema = z.strictObject({
+  outcome: z.strictObject({ outcome: z.literal("cancelled") }),
+});
 
 const TextContentSchema = z.looseObject({
   type: z.literal("text"),
@@ -90,6 +93,9 @@ type NewSessionRequest = z.output<typeof NewSessionRequestSchema>;
 type LoadSessionRequest = z.output<typeof LoadSessionRequestSchema>;
 type NewSessionResponse = z.output<typeof NewSessionResponseSchema>;
 type LoadSessionResponse = z.output<typeof LoadSessionResponseSchema>;
+type RequestPermissionResponse = z.output<
+  typeof RequestPermissionResponseSchema
+>;
 type TextContent = z.output<typeof TextContentSchema>;
 type ContentBlock = z.output<typeof ContentBlockSchema>;
 type ToolCallContent = z.output<typeof ToolCallContentSchema>;
@@ -104,6 +110,7 @@ export {
   LoadSessionResponseSchema,
   NewSessionRequestSchema,
   NewSessionResponseSchema,
+  RequestPermissionResponseSchema,
   SessionIdSchema,
   SessionNotificationSchema,
   SessionUpdateSchema,
@@ -116,6 +123,7 @@ export {
   type LoadSessionResponse,
   type NewSessionRequest,
   type NewSessionResponse,
+  type RequestPermissionResponse,
   type SessionId,
   type SessionNotification,
   type SessionUpdate,
