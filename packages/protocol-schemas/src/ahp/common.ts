@@ -6,6 +6,8 @@ type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 const uriSchema = z.string();
 const metaSchema = z.record(z.string(), z.unknown());
 const MIN_SEQUENCE = 0;
+const MIN_CLIENT_ID_LENGTH = 1;
+const clientIdSchema = z.string().min(MIN_CLIENT_ID_LENGTH);
 
 const seqSchema = z
   .number()
@@ -176,6 +178,7 @@ type ErrorInfo = z.output<typeof ErrorInfoSchema>;
 type ConfigSchema = z.output<typeof ConfigSchemaSchema>;
 
 export {
+  clientIdSchema,
   configPropertyFields,
   ConfigPropertySchema,
   ConfigSchemaSchema,
