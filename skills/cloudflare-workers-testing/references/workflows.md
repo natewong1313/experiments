@@ -12,7 +12,10 @@ import { introspectWorkflowInstance } from "cloudflare:test";
 import { expect, test } from "vitest";
 
 test("completes the workflow", async () => {
-  const instance = await introspectWorkflowInstance(env.MY_WORKFLOW, "test-run");
+  const instance = await introspectWorkflowInstance(
+    env.MY_WORKFLOW,
+    "test-run",
+  );
   try {
     await instance.modify(async (modifier) => {
       await modifier.disableSleeps();

@@ -1,0 +1,2 @@
+- Always run oxlint against your changes, run `pnpm run lint`
+- Always run formatting after your changes, run `pnpm run format`

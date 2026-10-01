@@ -43,9 +43,15 @@ const server = createTestHarness({
   workers: [{ configPath: "./wrangler.jsonc" }],
 });
 
-beforeAll(async () => { await server.listen(); });
-afterEach(async () => { await server.reset(); });
-afterAll(async () => { await server.close(); });
+beforeAll(async () => {
+  await server.listen();
+});
+afterEach(async () => {
+  await server.reset();
+});
+afterAll(async () => {
+  await server.close();
+});
 
 test("serves the route", async () => {
   const response = await server.fetch("/health");

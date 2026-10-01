@@ -8,16 +8,22 @@ Use `createMessageBatch()` and `getQueueResult()` from `cloudflare:test` to call
 
 ```ts
 import { env } from "cloudflare:workers";
-import { createExecutionContext, createMessageBatch, getQueueResult } from "cloudflare:test";
+import {
+  createExecutionContext,
+  createMessageBatch,
+  getQueueResult,
+} from "cloudflare:test";
 import { expect, test } from "vitest";
 import worker from "../src/index";
 
 test("acknowledges a processed message", async () => {
-  const batch = createMessageBatch("jobs", [{
-    id: "message-1",
-    timestamp: new Date(1000),
-    body: { userId: "123" },
-  }]);
+  const batch = createMessageBatch("jobs", [
+    {
+      id: "message-1",
+      timestamp: new Date(1000),
+      body: { userId: "123" },
+    },
+  ]);
   const ctx = createExecutionContext();
   await worker.queue(batch, env, ctx);
   const result = await getQueueResult(batch, ctx);
