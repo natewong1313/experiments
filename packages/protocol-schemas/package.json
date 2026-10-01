@@ -4,13 +4,16 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/ahp/index.ts"
+    ".": "./src/ahp/index.ts",
+    "./ahp": "./src/ahp/index.ts",
+    "./acp": "./src/acp/index.ts"
   },
   "dependencies": {
     "@microsoft/agent-host-protocol": "0.9.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "0.26.0",
     "@experiments/oxlint-config": "workspace:*",
     "@experiments/typescript-config": "workspace:*",
     "@types/node": "26.6.3",

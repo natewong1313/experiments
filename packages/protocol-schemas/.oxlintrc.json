@@ -8,6 +8,12 @@
   },
   "overrides": [
     {
+      "files": ["src/acp/**"],
+      "rules": {
+        "zod/consistent-object-schema-type": ["error", { "allow": ["strictObject", "looseObject"] }]
+      }
+    },
+    {
       "files": ["test/**"],
       "rules": {
         "eslint/no-magic-numbers": "off"
