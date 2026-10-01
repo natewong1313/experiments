@@ -1,0 +1,13 @@
+{
+  "name": "harness-container-runtime",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.99.2",
+    "@hono/node-server": "2.1.1",
+    "hono": "4.13.8",
+    "pi-acp": "0.0.33",
+    "ws": "8.21.3",
+    "zod": "4.6.5"
+  }
+}

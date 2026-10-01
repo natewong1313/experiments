@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./node_modules/@experiments/oxlint-config/base.json"],
+  "ignorePatterns": ["worker-configuration.d.ts"],
+  "overrides": [
+    {
+      "files": ["container/*.ts", "scripts/*.ts", "test/*.ts"],
+      "rules": {
+        "import/extensions": ["error", "always", { "ignorePackages": true }]
+      }
+    },
+    {
+      "files": [
+        "container/bridge.ts",
+        "scripts/websocket-stream.ts",
+        "test/bridge.test.ts"
+      ],
+      "rules": {
+        "promise/avoid-new": "off"
+      }
+    },
+    {
+      "files": ["test/*.ts"],
+      "rules": {
+        "eslint/no-magic-numbers": "off",
+        "eslint/max-nested-callbacks": "off",
+        "unicorn/max-nested-calls": "off"
+      }
+    }
+  ]
+}

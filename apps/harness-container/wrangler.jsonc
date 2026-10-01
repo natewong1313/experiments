@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "harness-container",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "observability": { "enabled": true },
+  "containers": [
+    {
+      "class_name": "HarnessContainer",
+      "image": "./Dockerfile",
+      "instance_type": "basic",
+      "max_instances": 5,
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "HARNESS_CONTAINER", "class_name": "HarnessContainer" },
+    ],
+  },
+  "exports": {
+    "HarnessContainer": { "type": "durable-object", "storage": "sqlite" },
+  },
+  "secrets": {
+    "required": ["CLOUDFLARE_API_KEY", "CLOUDFLARE_ACCOUNT_ID"],
+  },
+}
