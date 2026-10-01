@@ -1,8 +1,16 @@
 import * as z from "zod";
-import { ErrorInfoSchema, UsageInfoSchema, isoTimestampSchema, uriSchema } from "../common";
+import {
+  ErrorInfoSchema,
+  UsageInfoSchema,
+  isoTimestampSchema,
+  uriSchema,
+} from "../common";
 
 const AutomationRunLifecycleSchema = z.discriminatedUnion("status", [
-  z.strictObject({ status: z.literal("pending"), createdAt: isoTimestampSchema }),
+  z.strictObject({
+    status: z.literal("pending"),
+    createdAt: isoTimestampSchema,
+  }),
   z.strictObject({
     status: z.literal("running"),
     createdAt: isoTimestampSchema,
@@ -66,8 +74,14 @@ const AutomationRunActionSchema = z.discriminatedUnion("type", [
     type: z.literal("automationRun/lifecycleChanged"),
     lifecycle: AutomationRunLifecycleSchema,
   }),
-  z.strictObject({ type: z.literal("automationRun/sessionSet"), session: uriSchema }),
-  z.strictObject({ type: z.literal("automationRun/sessionRemoved"), session: uriSchema }),
+  z.strictObject({
+    type: z.literal("automationRun/sessionSet"),
+    session: uriSchema,
+  }),
+  z.strictObject({
+    type: z.literal("automationRun/sessionRemoved"),
+    session: uriSchema,
+  }),
   z.strictObject({
     type: z.literal("automationRun/primarySessionChanged"),
     primarySession: uriSchema.optional(),

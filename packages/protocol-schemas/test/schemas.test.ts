@@ -12,7 +12,11 @@ import {
 
 describe("jsonrpc frames", () => {
   it("parses a success reply", () => {
-    const parsed = JsonRpcReplySchema.safeParse({ jsonrpc: "2.0", id: 1, result: {} });
+    const parsed = JsonRpcReplySchema.safeParse({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {},
+    });
     expect(parsed.success).toBe(true);
   });
 
@@ -36,7 +40,11 @@ describe("jsonrpc frames", () => {
   });
 
   it("rejects a frame with a wrong protocol version", () => {
-    const parsed = JsonRpcReplySchema.safeParse({ jsonrpc: "1.0", id: 1, result: {} });
+    const parsed = JsonRpcReplySchema.safeParse({
+      jsonrpc: "1.0",
+      id: 1,
+      result: {},
+    });
     expect(parsed.success).toBe(false);
   });
 

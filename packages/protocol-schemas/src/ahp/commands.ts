@@ -12,7 +12,9 @@ const ImplementationSchema = z.strictObject({
 
 const AutomationCapabilitiesSchema = z.strictObject({
   create: z.strictObject({}).optional(),
-  schedules: z.strictObject({ minIntervalMinutes: z.number().optional() }).optional(),
+  schedules: z
+    .strictObject({ minIntervalMinutes: z.number().optional() })
+    .optional(),
   runCancellation: z.strictObject({}).optional(),
   runHistoryLimit: z.number().optional(),
 });
@@ -60,10 +62,12 @@ const ResourceReadResultSchema = z.strictObject({
 });
 
 const ResourceListResultSchema = z.strictObject({
-  entries: z.array(z.strictObject({
-    name: z.string(),
-    type: z.enum(["file", "directory"]),
-  })),
+  entries: z.array(
+    z.strictObject({
+      name: z.string(),
+      type: z.enum(["file", "directory"]),
+    }),
+  ),
 });
 
 const ResourceResolveResultSchema = z.strictObject({

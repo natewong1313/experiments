@@ -1,5 +1,10 @@
 import * as z from "zod";
-import { StringOrMarkdownSchema, TextRangeSchema, metaSchema, uriSchema } from "../common";
+import {
+  StringOrMarkdownSchema,
+  TextRangeSchema,
+  metaSchema,
+  uriSchema,
+} from "../common";
 
 const AnnotationsSummarySchema = z.strictObject({
   resource: uriSchema,
@@ -34,7 +39,10 @@ const AnnotationsStateSchema = z.strictObject({
 });
 
 const AnnotationsActionSchema = z.discriminatedUnion("type", [
-  z.strictObject({ type: z.literal("annotations/set"), annotation: AnnotationSchema }),
+  z.strictObject({
+    type: z.literal("annotations/set"),
+    annotation: AnnotationSchema,
+  }),
   z.strictObject({
     type: z.literal("annotations/updated"),
     annotationId: z.string(),
@@ -43,7 +51,10 @@ const AnnotationsActionSchema = z.discriminatedUnion("type", [
     range: TextRangeSchema.optional(),
     resolved: z.boolean().optional(),
   }),
-  z.strictObject({ type: z.literal("annotations/removed"), annotationId: z.string() }),
+  z.strictObject({
+    type: z.literal("annotations/removed"),
+    annotationId: z.string(),
+  }),
   z.strictObject({
     type: z.literal("annotations/entrySet"),
     annotationId: z.string(),

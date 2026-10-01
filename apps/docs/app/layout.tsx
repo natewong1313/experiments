@@ -7,7 +7,11 @@ export const metadata: Metadata = {
   description: "The example docs app",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }): JSX.Element {
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
   return (
     <html lang="en">
       <body>{children}</body>

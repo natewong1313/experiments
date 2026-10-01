@@ -12,7 +12,12 @@ const sessionStatusSchema = z.number();
 
 const ModelSelectionSchema = z.strictObject({
   id: z.string(),
-  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  config: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.number(), z.boolean(), z.null()]),
+    )
+    .optional(),
 });
 
 const AgentSelectionSchema = z.strictObject({
@@ -74,7 +79,11 @@ const McpServerStateSchema = z.discriminatedUnion("kind", [
 
 const CustomizationEnablementSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("global"), enabled: z.boolean() }),
-  z.strictObject({ kind: z.literal("workspace"), uri: uriSchema, enabled: z.boolean() }),
+  z.strictObject({
+    kind: z.literal("workspace"),
+    uri: uriSchema,
+    enabled: z.boolean(),
+  }),
   z.strictObject({ kind: z.literal("session"), enabled: z.boolean() }),
 ]);
 
@@ -132,8 +141,12 @@ const HookCustomizationSchema = z.strictObject({
 const emptyRecordSchema = z.strictObject({});
 
 const AhpMcpUiHostCapabilitiesSchema = z.strictObject({
-  serverTools: z.strictObject({ listChanged: z.boolean().optional() }).optional(),
-  serverResources: z.strictObject({ listChanged: z.boolean().optional() }).optional(),
+  serverTools: z
+    .strictObject({ listChanged: z.boolean().optional() })
+    .optional(),
+  serverResources: z
+    .strictObject({ listChanged: z.boolean().optional() })
+    .optional(),
   logging: emptyRecordSchema.optional(),
   sampling: z.strictObject({ tools: emptyRecordSchema.optional() }).optional(),
 });
@@ -191,7 +204,9 @@ const PluginCustomizationSchema = z.strictObject({
 
 const ClientPluginCustomizationSchema = PluginCustomizationSchema.extend({
   nonce: z.string().optional(),
-  childEnablement: z.record(z.string(), z.array(CustomizationEnablementSchema)).optional(),
+  childEnablement: z
+    .record(z.string(), z.array(CustomizationEnablementSchema))
+    .optional(),
 });
 
 const DirectoryCustomizationSchema = z.strictObject({
@@ -223,14 +238,18 @@ type McpOAuthClient = z.output<typeof McpOAuthClientSchema>;
 type CustomizationEnablement = z.output<typeof CustomizationEnablementSchema>;
 type Customization = z.output<typeof CustomizationSchema>;
 type PluginCustomization = z.output<typeof PluginCustomizationSchema>;
-type ClientPluginCustomization = z.output<typeof ClientPluginCustomizationSchema>;
+type ClientPluginCustomization = z.output<
+  typeof ClientPluginCustomizationSchema
+>;
 type DirectoryCustomization = z.output<typeof DirectoryCustomizationSchema>;
 type AgentCustomization = z.output<typeof AgentCustomizationSchema>;
 type SkillCustomization = z.output<typeof SkillCustomizationSchema>;
 type PromptCustomization = z.output<typeof PromptCustomizationSchema>;
 type RuleCustomization = z.output<typeof RuleCustomizationSchema>;
 type HookCustomization = z.output<typeof HookCustomizationSchema>;
-type ChildMcpServerCustomization = z.output<typeof ChildMcpServerCustomizationSchema>;
+type ChildMcpServerCustomization = z.output<
+  typeof ChildMcpServerCustomizationSchema
+>;
 
 export {
   AgentCustomizationSchema,

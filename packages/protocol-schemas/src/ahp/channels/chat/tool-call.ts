@@ -54,7 +54,11 @@ const TerminalCommandResultSchema = z.strictObject({
 
 const ToolResultContentSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("text"), text: z.string() }),
-  z.strictObject({ type: z.literal("embeddedResource"), data: z.string(), contentType: z.string() }),
+  z.strictObject({
+    type: z.literal("embeddedResource"),
+    data: z.string(),
+    contentType: z.string(),
+  }),
   z.strictObject({ ...ContentRefSchema.shape, type: z.literal("resource") }),
   z.strictObject({ ...FileEditSchema.shape, type: z.literal("fileEdit") }),
   z.strictObject({
@@ -73,13 +77,14 @@ const ToolResultContentSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-
 const ToolCallResultSchema = z.strictObject({
   success: z.boolean(),
   pastTenseMessage: StringOrMarkdownSchema,
   content: z.array(ToolResultContentSchema).optional(),
   structuredContent: z.record(z.string(), z.unknown()).optional(),
-  error: z.strictObject({ message: z.string(), code: z.string().optional() }).optional(),
+  error: z
+    .strictObject({ message: z.string(), code: z.string().optional() })
+    .optional(),
 });
 
 const toolCallPostConfirmationFields = {
@@ -119,7 +124,10 @@ const ToolCallAuthRequiredStateSchema = z.strictObject({
   ...toolCallParameterFields,
   ...toolCallPostConfirmationFields,
   status: z.literal("auth-required"),
-  contributor: z.strictObject({ kind: z.literal("mcp"), customizationId: z.string() }),
+  contributor: z.strictObject({
+    kind: z.literal("mcp"),
+    customizationId: z.string(),
+  }),
   auth: McpAuthRequirementSchema,
   content: z.array(ToolResultContentSchema).optional(),
 });
@@ -161,9 +169,15 @@ type ToolResultContent = z.output<typeof ToolResultContentSchema>;
 type ToolCallResult = z.output<typeof ToolCallResultSchema>;
 type ToolCallState = z.output<typeof ToolCallStateSchema>;
 type ToolCallRunningState = z.output<typeof ToolCallRunningStateSchema>;
-type ToolCallAuthRequiredState = z.output<typeof ToolCallAuthRequiredStateSchema>;
-type ToolCallPendingConfirmationState = z.output<typeof ToolCallPendingConfirmationStateSchema>;
-type ToolCallPendingResultConfirmationState = z.output<typeof ToolCallPendingResultConfirmationStateSchema>;
+type ToolCallAuthRequiredState = z.output<
+  typeof ToolCallAuthRequiredStateSchema
+>;
+type ToolCallPendingConfirmationState = z.output<
+  typeof ToolCallPendingConfirmationStateSchema
+>;
+type ToolCallPendingResultConfirmationState = z.output<
+  typeof ToolCallPendingResultConfirmationStateSchema
+>;
 type TerminalCommandResult = z.output<typeof TerminalCommandResultSchema>;
 
 export {

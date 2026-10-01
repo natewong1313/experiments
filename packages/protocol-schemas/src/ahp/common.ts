@@ -7,12 +7,22 @@ const uriSchema = z.string();
 const metaSchema = z.record(z.string(), z.unknown());
 const MIN_SEQUENCE = 0;
 
-const seqSchema = z.number().refine((value) => Number.isSafeInteger(value) && value >= MIN_SEQUENCE, {
-  error: "Expected a nonnegative safe integer sequence number",
+const seqSchema = z
+  .number()
+  .refine((value) => Number.isSafeInteger(value) && value >= MIN_SEQUENCE, {
+    error: "Expected a nonnegative safe integer sequence number",
+  });
+const isoTimestampSchema = z.iso.datetime({
+  offset: true,
+  message: "Expected an ISO 8601 timestamp",
 });
-const isoTimestampSchema = z.iso.datetime({ offset: true, message: "Expected an ISO 8601 timestamp" });
 
-const jsonPrimitiveSchema: z.ZodType<JsonPrimitive> = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const jsonPrimitiveSchema: z.ZodType<JsonPrimitive> = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => {
   return z.union([
     jsonPrimitiveSchema,
@@ -21,7 +31,10 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => {
   ]);
 });
 
-const StringOrMarkdownSchema = z.union([z.string(), z.strictObject({ markdown: z.string() })]);
+const StringOrMarkdownSchema = z.union([
+  z.string(),
+  z.strictObject({ markdown: z.string() }),
+]);
 
 const IconSchema = z.strictObject({
   src: uriSchema,
@@ -66,18 +79,24 @@ const ContentRefSchema = z.strictObject({
 });
 
 const FileEditSchema = z.strictObject({
-  before: z.strictObject({
-    uri: uriSchema,
-    content: ContentRefSchema,
-  }).optional(),
-  after: z.strictObject({
-    uri: uriSchema,
-    content: ContentRefSchema,
-  }).optional(),
-  diff: z.strictObject({
-    added: z.number().optional(),
-    removed: z.number().optional(),
-  }).optional(),
+  before: z
+    .strictObject({
+      uri: uriSchema,
+      content: ContentRefSchema,
+    })
+    .optional(),
+  after: z
+    .strictObject({
+      uri: uriSchema,
+      content: ContentRefSchema,
+    })
+    .optional(),
+  diff: z
+    .strictObject({
+      added: z.number().optional(),
+      removed: z.number().optional(),
+    })
+    .optional(),
 });
 
 const UsageInfoSchema = z.strictObject({
@@ -144,7 +163,9 @@ type Meta = z.output<typeof metaSchema>;
 type Seq = z.output<typeof seqSchema>;
 type StringOrMarkdown = z.output<typeof StringOrMarkdownSchema>;
 type Icon = z.output<typeof IconSchema>;
-type ProtectedResourceMetadata = z.output<typeof ProtectedResourceMetadataSchema>;
+type ProtectedResourceMetadata = z.output<
+  typeof ProtectedResourceMetadataSchema
+>;
 type TextPosition = z.output<typeof TextPositionSchema>;
 type TextRange = z.output<typeof TextRangeSchema>;
 type TextSelection = z.output<typeof TextSelectionSchema>;

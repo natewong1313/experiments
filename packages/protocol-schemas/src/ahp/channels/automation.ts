@@ -1,10 +1,13 @@
 import * as z from "zod";
-import { ConfigSchemaSchema, isoTimestampSchema, metaSchema, uriSchema } from "../common";
+import {
+  ConfigSchemaSchema,
+  isoTimestampSchema,
+  metaSchema,
+  uriSchema,
+} from "../common";
 import { AgentSelectionSchema, ModelSelectionSchema } from "../primitives";
 import { MessageSchema } from "./chat/message";
-import {
-  AutomationRunSummarySchema,
-} from "./automation-run";
+import { AutomationRunSummarySchema } from "./automation-run";
 
 const AutomationScheduleSchema = z.strictObject({
   expression: z.string(),
@@ -24,11 +27,13 @@ const AutomationTriggerSchema = z.discriminatedUnion("kind", [
     type: z.string(),
     title: z.string(),
     description: z.string().optional(),
-    events: z.array(z.strictObject({
-      id: z.string(),
-      title: z.string(),
-      description: z.string().optional(),
-    })),
+    events: z.array(
+      z.strictObject({
+        id: z.string(),
+        title: z.string(),
+        description: z.string().optional(),
+      }),
+    ),
     config: z.record(z.string(), z.unknown()).optional(),
   }),
 ]);
@@ -37,11 +42,13 @@ const AutomationTriggerDefinitionSchema = z.strictObject({
   type: z.string(),
   title: z.string(),
   description: z.string().optional(),
-  events: z.array(z.strictObject({
-    id: z.string(),
-    title: z.string(),
-    description: z.string().optional(),
-  })),
+  events: z.array(
+    z.strictObject({
+      id: z.string(),
+      title: z.string(),
+      description: z.string().optional(),
+    }),
+  ),
   configSchema: ConfigSchemaSchema.optional(),
 });
 
@@ -105,15 +112,24 @@ const AutomationActionSchema = z.discriminatedUnion("type", [
     type: z.literal("automation/set"),
     automation: AutomationEntrySchema,
   }),
-  z.strictObject({ type: z.literal("automation/removed"), resource: uriSchema }),
+  z.strictObject({
+    type: z.literal("automation/removed"),
+    resource: uriSchema,
+  }),
 ]);
 
 type AutomationSchedule = z.output<typeof AutomationScheduleSchema>;
 type AutomationTrigger = z.output<typeof AutomationTriggerSchema>;
-type AutomationTriggerDefinition = z.output<typeof AutomationTriggerDefinitionSchema>;
-type AutomationSessionTemplate = z.output<typeof AutomationSessionTemplateSchema>;
+type AutomationTriggerDefinition = z.output<
+  typeof AutomationTriggerDefinitionSchema
+>;
+type AutomationSessionTemplate = z.output<
+  typeof AutomationSessionTemplateSchema
+>;
 type AutomationDefinition = z.output<typeof AutomationDefinitionSchema>;
-type AutomationDefinitionPatch = z.output<typeof AutomationDefinitionPatchSchema>;
+type AutomationDefinitionPatch = z.output<
+  typeof AutomationDefinitionPatchSchema
+>;
 type AutomationOperation = z.output<typeof AutomationOperationSchema>;
 type AutomationEntry = z.output<typeof AutomationEntrySchema>;
 type AutomationState = z.output<typeof AutomationStateSchema>;

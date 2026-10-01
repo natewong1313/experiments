@@ -29,17 +29,21 @@ const SessionMetadataSchema = z.strictObject({
   title: z.string(),
   status: sessionStatusSchema,
   activity: z.string().optional(),
-  origin: z.discriminatedUnion("kind", [
-    z.strictObject({
-      kind: z.literal("automation"),
-      automation: uriSchema,
-      run: uriSchema,
-    }),
-  ]).optional(),
-  project: z.strictObject({
-    uri: uriSchema,
-    displayName: z.string(),
-  }).optional(),
+  origin: z
+    .discriminatedUnion("kind", [
+      z.strictObject({
+        kind: z.literal("automation"),
+        automation: uriSchema,
+        run: uriSchema,
+      }),
+    ])
+    .optional(),
+  project: z
+    .strictObject({
+      uri: uriSchema,
+      displayName: z.string(),
+    })
+    .optional(),
   workingDirectories: z.array(uriSchema).optional(),
   annotations: AnnotationsSummarySchema.optional(),
 });
@@ -59,16 +63,20 @@ const SessionSummarySchema = z.strictObject({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-const SessionConfigPropertySchema: z.ZodType<SessionConfigProperty> = z.lazy(() => {
-  return z.strictObject({
-    ...configPropertyFields,
-    enumDynamic: z.boolean().optional(),
-    sessionMutable: z.boolean().optional(),
-    items: sessionConfigPropertySchemaLazy.optional(),
-    properties: z.record(z.string(), sessionConfigPropertySchemaLazy).optional(),
-    additionalProperties: sessionConfigPropertySchemaLazy.optional(),
-  });
-});
+const SessionConfigPropertySchema: z.ZodType<SessionConfigProperty> = z.lazy(
+  () => {
+    return z.strictObject({
+      ...configPropertyFields,
+      enumDynamic: z.boolean().optional(),
+      sessionMutable: z.boolean().optional(),
+      items: sessionConfigPropertySchemaLazy.optional(),
+      properties: z
+        .record(z.string(), sessionConfigPropertySchemaLazy)
+        .optional(),
+      additionalProperties: sessionConfigPropertySchemaLazy.optional(),
+    });
+  },
+);
 
 const sessionConfigPropertySchemaLazy = SessionConfigPropertySchema;
 

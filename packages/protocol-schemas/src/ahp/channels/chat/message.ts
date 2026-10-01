@@ -73,9 +73,15 @@ const MessageSchema = z.strictObject({
 
 type MessageOrigin = z.output<typeof MessageOriginSchema>;
 type SimpleMessageAttachment = z.output<typeof SimpleMessageAttachmentSchema>;
-type MessageEmbeddedResourceAttachment = z.output<typeof MessageEmbeddedResourceAttachmentSchema>;
-type MessageResourceAttachment = z.output<typeof MessageResourceAttachmentSchema>;
-type MessageAnnotationsAttachment = z.output<typeof MessageAnnotationsAttachmentSchema>;
+type MessageEmbeddedResourceAttachment = z.output<
+  typeof MessageEmbeddedResourceAttachmentSchema
+>;
+type MessageResourceAttachment = z.output<
+  typeof MessageResourceAttachmentSchema
+>;
+type MessageAnnotationsAttachment = z.output<
+  typeof MessageAnnotationsAttachmentSchema
+>;
 type MessageChatAttachment = z.output<typeof MessageChatAttachmentSchema>;
 type MessageAttachment = z.output<typeof MessageAttachmentSchema>;
 type Message = z.output<typeof MessageSchema>;

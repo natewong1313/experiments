@@ -7,7 +7,11 @@ import {
   uriSchema,
 } from "../../common";
 import { McpAuthRequirementSchema } from "../../primitives";
-import { ChatInputAnswerSchema, ChatInputRequestSchema, ChatInputResponseKindSchema } from "./input";
+import {
+  ChatInputAnswerSchema,
+  ChatInputRequestSchema,
+  ChatInputResponseKindSchema,
+} from "./input";
 import { MessageSchema } from "./message";
 import { ErrorResponsePartSchema, ResponsePartSchema } from "./parts";
 import { TurnSchema } from "./state";
@@ -214,7 +218,4 @@ const ChatActionSchema = z.union([
 
 type ChatAction = z.output<typeof ChatActionSchema>;
 
-export {
-  ChatActionSchema,
-  type ChatAction,
-};
+export { ChatActionSchema, type ChatAction };

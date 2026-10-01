@@ -8,14 +8,18 @@ import { CustomizationSchema } from "../primitives";
 import { TerminalInfoSchema } from "./terminal";
 
 const AgentCapabilitiesSchema = z.strictObject({
-  multipleChats: z.strictObject({
-    fork: z.boolean().optional(),
-    sideChat: z.boolean().optional(),
-  }).optional(),
-  multipleWorkingDirectories: z.strictObject({
-    immutablePrimary: z.boolean().optional(),
-    primaryReplacement: z.boolean().optional(),
-  }).optional(),
+  multipleChats: z
+    .strictObject({
+      fork: z.boolean().optional(),
+      sideChat: z.boolean().optional(),
+    })
+    .optional(),
+  multipleWorkingDirectories: z
+    .strictObject({
+      immutablePrimary: z.boolean().optional(),
+      primaryReplacement: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 type AgentCapabilities = z.output<typeof AgentCapabilitiesSchema>;
@@ -57,8 +61,14 @@ const RootStateSchema = z.strictObject({
 });
 
 const RootActionSchema = z.discriminatedUnion("type", [
-  z.strictObject({ type: z.literal("root/agentsChanged"), agents: z.array(AgentInfoSchema) }),
-  z.strictObject({ type: z.literal("root/activeSessionsChanged"), activeSessions: z.number() }),
+  z.strictObject({
+    type: z.literal("root/agentsChanged"),
+    agents: z.array(AgentInfoSchema),
+  }),
+  z.strictObject({
+    type: z.literal("root/activeSessionsChanged"),
+    activeSessions: z.number(),
+  }),
   z.strictObject({
     type: z.literal("root/terminalsChanged"),
     terminals: z.array(TerminalInfoSchema),

@@ -1,14 +1,20 @@
 import * as z from "zod";
-import { ErrorInfoSchema, FileEditSchema, StringOrMarkdownSchema } from "../common";
+import {
+  ErrorInfoSchema,
+  FileEditSchema,
+  StringOrMarkdownSchema,
+} from "../common";
 
 const ChangesetSchema = z.strictObject({
   label: z.string(),
   uriTemplate: z.string(),
   description: z.string().optional(),
   changeKind: z.string(),
-  capabilities: z.strictObject({
-    review: z.strictObject({}).optional(),
-  }).optional(),
+  capabilities: z
+    .strictObject({
+      review: z.strictObject({}).optional(),
+    })
+    .optional(),
 });
 
 const ChangesetFileSchema = z.strictObject({
@@ -43,8 +49,14 @@ const ChangesetActionSchema = z.discriminatedUnion("type", [
     status: ChangesetStateSchema.shape.status,
     error: ErrorInfoSchema.optional(),
   }),
-  z.strictObject({ type: z.literal("changeset/fileSet"), file: ChangesetFileSchema }),
-  z.strictObject({ type: z.literal("changeset/fileRemoved"), fileId: z.string() }),
+  z.strictObject({
+    type: z.literal("changeset/fileSet"),
+    file: ChangesetFileSchema,
+  }),
+  z.strictObject({
+    type: z.literal("changeset/fileRemoved"),
+    fileId: z.string(),
+  }),
   z.strictObject({
     type: z.literal("changeset/filesReviewChanged"),
     files: z.array(z.string()),

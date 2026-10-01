@@ -3,7 +3,10 @@ import { uriSchema } from "../common";
 
 const TerminalLifecycleStateSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("running") }),
-  z.strictObject({ status: z.literal("exited"), exitCode: z.number().optional() }),
+  z.strictObject({
+    status: z.literal("exited"),
+    exitCode: z.number().optional(),
+  }),
 ]);
 
 const TerminalClaimSchema = z.discriminatedUnion("kind", [
@@ -63,11 +66,24 @@ const TerminalStateSchema = z.strictObject({
 const TerminalActionSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("terminal/data"), data: z.string() }),
   z.strictObject({ type: z.literal("terminal/input"), data: z.string() }),
-  z.strictObject({ type: z.literal("terminal/resized"), cols: z.number(), rows: z.number() }),
-  z.strictObject({ type: z.literal("terminal/claimed"), claim: TerminalClaimSchema }),
-  z.strictObject({ type: z.literal("terminal/titleChanged"), title: z.string() }),
+  z.strictObject({
+    type: z.literal("terminal/resized"),
+    cols: z.number(),
+    rows: z.number(),
+  }),
+  z.strictObject({
+    type: z.literal("terminal/claimed"),
+    claim: TerminalClaimSchema,
+  }),
+  z.strictObject({
+    type: z.literal("terminal/titleChanged"),
+    title: z.string(),
+  }),
   z.strictObject({ type: z.literal("terminal/cwdChanged"), cwd: uriSchema }),
-  z.strictObject({ type: z.literal("terminal/exited"), exitCode: z.number().optional() }),
+  z.strictObject({
+    type: z.literal("terminal/exited"),
+    exitCode: z.number().optional(),
+  }),
   z.strictObject({ type: z.literal("terminal/cleared") }),
   z.strictObject({ type: z.literal("terminal/commandDetectionAvailable") }),
   z.strictObject({

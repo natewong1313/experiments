@@ -16,14 +16,22 @@ const SideChatSelectionSchema = z.strictObject({
 
 const ChatOriginSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("user") }),
-  z.strictObject({ kind: z.literal("fork"), chat: uriSchema, turnId: z.string() }),
+  z.strictObject({
+    kind: z.literal("fork"),
+    chat: uriSchema,
+    turnId: z.string(),
+  }),
   z.strictObject({
     kind: z.literal("sideChat"),
     chat: uriSchema,
     turnId: z.string(),
     selection: SideChatSelectionSchema.optional(),
   }),
-  z.strictObject({ kind: z.literal("tool"), chat: uriSchema, toolCallId: z.string() }),
+  z.strictObject({
+    kind: z.literal("tool"),
+    chat: uriSchema,
+    toolCallId: z.string(),
+  }),
 ]);
 
 const chatInteractivitySchema = z.enum(["full", "read-only", "hidden"]);

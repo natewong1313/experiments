@@ -35,7 +35,10 @@ const JsonRpcFailureSchema = z.strictObject({
   error: JsonRpcErrorSchema,
 });
 
-const JsonRpcReplySchema = z.union([JsonRpcSuccessSchema, JsonRpcFailureSchema]);
+const JsonRpcReplySchema = z.union([
+  JsonRpcSuccessSchema,
+  JsonRpcFailureSchema,
+]);
 
 type JsonRpcError = z.output<typeof JsonRpcErrorSchema>;
 type JsonRpcRequest = z.output<typeof JsonRpcRequestSchema>;

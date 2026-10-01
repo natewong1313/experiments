@@ -10,12 +10,14 @@ const AuthRequiredDataSchema = z.strictObject({
 });
 
 const PermissionDeniedDataSchema = z.strictObject({
-  request: z.strictObject({
-    channel: uriSchema,
-    uri: uriSchema,
-    read: z.boolean().optional(),
-    write: z.boolean().optional(),
-  }).optional(),
+  request: z
+    .strictObject({
+      channel: uriSchema,
+      uri: uriSchema,
+      read: z.boolean().optional(),
+      write: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 const AhpErrorDataSchema = z.union([
@@ -24,7 +26,9 @@ const AhpErrorDataSchema = z.union([
   PermissionDeniedDataSchema,
 ]);
 
-type UnsupportedProtocolVersionData = z.output<typeof UnsupportedProtocolVersionDataSchema>;
+type UnsupportedProtocolVersionData = z.output<
+  typeof UnsupportedProtocolVersionDataSchema
+>;
 type AuthRequiredData = z.output<typeof AuthRequiredDataSchema>;
 type PermissionDeniedData = z.output<typeof PermissionDeniedDataSchema>;
 type AhpErrorData = z.output<typeof AhpErrorDataSchema>;
