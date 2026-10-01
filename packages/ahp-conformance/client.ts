@@ -12,7 +12,8 @@ import {
 import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { AhpClient, RpcError } from "@microsoft/agent-host-protocol/client";
 import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
-import { expect } from "vitest";
+import { expect, test as baseTest } from "vitest";
+import { withCleanup } from "./cleanup";
 
 const ROOT = "ahp-root://";
 const VERSION = PROTOCOL_VERSION;
@@ -21,12 +22,16 @@ const MUTATIONS = process.env.AHP_TEST_MUTATIONS === "1";
 
 function sessionUri(): string {
   if (!SESSION) {
-
     throw new Error("Set AHP_SESSION_URI for session probes");
-
   }
   return SESSION;
 }
+
+const test = baseTest.extend<{ client: AhpClient }>({
+  client: async ({ task: _task }, use) => {
+    await withClient(use);
+  },
+});
 
 function endpoint(): string {
   const url = process.env.AHP_URL;
@@ -36,18 +41,27 @@ function endpoint(): string {
   return url;
 }
 
-async function withClient<T>(run: (client: AhpClient) => Promise<T>): Promise<T> {
-  const transport = await WebSocketTransport.connect(endpoint());
+async function withClient<T>(
+  run: (client: AhpClient) => Promise<T>,
+  url: string = endpoint(),
+): Promise<T> {
+  const transport = await WebSocketTransport.connect(url);
   const client = new AhpClient(transport, { requestTimeoutMs: 10_000 });
-  client.connect();
-  try {
-    return await run(client);
-  } finally {
-    await client.shutdown();
-  }
+  return await withCleanup(
+    async () => {
+      client.connect();
+      return await run(client);
+    },
+    async () => {
+      await client.shutdown();
+    },
+  );
 }
 
-async function initialized(client: AhpClient, subscriptions: string[] = []): Promise<InitializeResult> {
+async function initialized(
+  client: AhpClient,
+  subscriptions: string[] = [],
+): Promise<InitializeResult> {
   const result = await client.initialize({
     clientId: `conformance-${crypto.randomUUID()}`,
     protocolVersions: [VERSION],
@@ -58,7 +72,11 @@ async function initialized(client: AhpClient, subscriptions: string[] = []): Pro
 
 type StateParser<T> = { parse(value: unknown): T };
 
-function expectState<T>(snapshot: unknown, resource: string, parseState: StateParser<T>): T {
+function expectState<T>(
+  snapshot: unknown,
+  resource: string,
+  parseState: StateParser<T>,
+): T {
   const parsed = SnapshotSchema.parse(snapshot);
   expect(parsed.resource).toBe(resource);
   return parseState.parse(parsed.state);
@@ -76,7 +94,10 @@ function expectChatState(snapshot: unknown, resource: string): ChatState {
   return expectState(snapshot, resource, ChatStateSchema);
 }
 
-async function expectRpcError(run: () => Promise<unknown>, code: number): Promise<RpcError> {
+async function expectRpcError(
+  run: () => Promise<unknown>,
+  code: number,
+): Promise<RpcError> {
   try {
     await run();
   } catch (error) {
@@ -90,27 +111,43 @@ async function expectRpcError(run: () => Promise<unknown>, code: number): Promis
   throw new Error(`Expected AHP error ${code}`);
 }
 
-async function sessionSnapshot(client: AhpClient): Promise<SessionState> {
-  if (!SESSION) {
-    throw new Error("Set AHP_SESSION_URI for session probes");
-  }
-  const subscribed = await client.subscribe(SESSION);
+async function sessionSnapshot(
+  client: AhpClient,
+  resource: string = sessionUri(),
+): Promise<SessionState> {
+  const subscribed = await client.subscribe(resource);
   const { snapshot } = subscribed.result;
-  return expectSessionState(snapshot, SESSION);
+  return expectSessionState(snapshot, resource);
 }
 
 type ChatSnapshot = { uri: string; session: SessionState; state: ChatState };
 
-async function chatSnapshot(client: AhpClient): Promise<ChatSnapshot> {
-  const session = await sessionSnapshot(client);
-  const [chat] = session.chats;
-  if (!chat) {
-    throw new Error("Fixture session has no default chat");
+async function chatSnapshot(
+  client: AhpClient,
+  resource: string = sessionUri(),
+): Promise<ChatSnapshot> {
+  const session = await sessionSnapshot(client, resource);
+  const [firstChat] = session.chats;
+  const hasDefault = typeof session.defaultChat === "string";
+  const chat = hasDefault
+    ? session.chats.find((item) => item.resource === session.defaultChat)
+    : firstChat;
+  if (hasDefault && !chat) {
+    throw new Error(
+      `Fixture session default chat ${session.defaultChat} is absent from the session catalogue`,
+    );
   }
-  const { resource } = chat;
-  const subscribed = await client.subscribe(resource);
+  if (!chat) {
+    throw new Error("Fixture session has no listed chats");
+  }
+  const { resource: chatResource } = chat;
+  const subscribed = await client.subscribe(chatResource);
   const { snapshot } = subscribed.result;
-  return { uri: resource, session, state: expectChatState(snapshot, resource) };
+  return {
+    uri: chatResource,
+    session,
+    state: expectChatState(snapshot, chatResource),
+  };
 }
 
 export {
@@ -127,6 +164,7 @@ export {
   SESSION,
   sessionUri,
   sessionSnapshot,
+  test,
   VERSION,
   withClient,
 };

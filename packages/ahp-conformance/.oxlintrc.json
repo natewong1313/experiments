@@ -3,7 +3,7 @@
   "extends": ["./node_modules/@experiments/oxlint-config/base.json"],
   "overrides": [
     {
-      "files": ["raw.ts"],
+      "files": ["raw.ts", "test-peer.ts"],
       "rules": {
         "promise/avoid-new": "off",
         "promise/no-multiple-resolved": "off"
@@ -14,7 +14,9 @@
       "rules": {
         "eslint/no-magic-numbers": "off",
         "eslint/max-nested-callbacks": "off",
-        "unicorn/max-nested-calls": "off"
+        "unicorn/max-nested-calls": "off",
+        "vitest/no-standalone-expect": "off",
+        "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectState", "expectRootState", "expectSessionState", "expectChatState", "expectRpcError"] }]
       }
     }
   ]
