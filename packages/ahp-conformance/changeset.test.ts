@@ -11,11 +11,13 @@ describe("changeset channel", () => {
       const channel = uri!;
       await initialized(client);
       const subscribed = await client.subscribe(channel);
+
       const state = expectState(
         subscribed.result.snapshot,
         channel,
         ChangesetStateSchema,
       );
+
       expect(["computing", "ready", "error"]).toContain(state.status);
     },
   );
@@ -24,11 +26,13 @@ describe("changeset channel", () => {
     const channel = uri!;
     await initialized(client);
     const subscribed = await client.subscribe(channel);
+
     const state = expectState(
       subscribed.result.snapshot,
       channel,
       ChangesetStateSchema,
     );
+
     for (const file of state.files) {
       expect(file.id.length).toBeGreaterThan(0);
       expect("after" in file.edit || "before" in file.edit).toBe(true);

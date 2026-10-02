@@ -7,12 +7,15 @@ import { createSession } from "./config";
 
 const CONNECT_TIMEOUT_MS = 30_000;
 
-async function connectionError(operation: Promise<unknown>): Promise<unknown> {
+async function connectionError(
+  operation: Promise<unknown>,
+): Promise<Error | null> {
   try {
     await operation;
+
     return null;
   } catch (error) {
-    return error;
+    return error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -26,15 +29,19 @@ it("aborts a stalled connector and closes a socket returned after its deadline",
     const pending = Promise.withResolvers<WebSocket>();
     const signals: AbortSignal[] = [];
     const keys: string[] = [];
+
     const agents = new AgentConnections({
       connect: ({ sessionKey, signal }): Promise<WebSocket> => {
         keys.push(sessionKey);
         signals.push(signal);
+
         return pending.promise;
       },
       updates: (): void => {},
     });
+
     vi.useFakeTimers();
+
     try {
       const record = store.require(uri);
       const failed = connectionError(agents.get(record));
@@ -47,6 +54,7 @@ it("aborts a stalled connector and closes a socket returned after its deadline",
     } finally {
       vi.useRealTimers();
     }
+
     const { 0: client, 1: server } = new WebSocketPair();
     const closed = Promise.withResolvers<boolean>();
     server.addEventListener("close", () => {

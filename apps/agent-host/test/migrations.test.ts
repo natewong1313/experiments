@@ -7,11 +7,23 @@ import { HostStore } from "../src/state/store";
 import { createSession } from "./config";
 
 const LEGACY_MIGRATION_TIME = 1_735_689_600_000;
+
 const SESSION = "ahp-session:/legacy";
+
 const ORIGIN = { clientId: "legacy-client", clientSeq: 1 };
 
-function persistedState(store: HostStore): unknown {
+type PersistedState = {
+  root: ReturnType<HostStore["snapshot"]>;
+  session: ReturnType<HostStore["snapshot"]>;
+  chat: ReturnType<HostStore["snapshot"]>;
+  record: ReturnType<HostStore["require"]>;
+  acknowledgement: ReturnType<HostStore["previous"]>;
+  replay: ReturnType<HostStore["replay"]>;
+};
+
+function persistedState(store: HostStore): PersistedState {
   const record = store.require(SESSION);
+
   return {
     root: store.snapshot(ROOT),
     session: store.snapshot(SESSION),

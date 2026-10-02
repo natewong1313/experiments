@@ -43,23 +43,32 @@ type ConfigPropertyDrift = Drift<
   UpstreamConfigProperty,
   z.output<typeof ConfigPropertySchema>
 >;
+
 type ConfigSchemaDrift = Drift<
   ConfigSchema,
   z.output<typeof ConfigSchemaSchema>
 >;
+
 type ContentRefDrift = Drift<ContentRef, z.output<typeof ContentRefSchema>>;
+
 type ErrorInfoDrift = Drift<ErrorInfo, z.output<typeof ErrorInfoSchema>>;
+
 type FileEditDrift = Drift<FileEdit, z.output<typeof FileEditSchema>>;
+
 type IconDrift = Drift<Icon, z.output<typeof IconSchema>>;
+
 type ProtectedResourceMetadataDrift = Drift<
   ProtectedResourceMetadata,
   z.output<typeof ProtectedResourceMetadataSchema>
 >;
+
 type TextRangeDrift = Drift<TextRange, z.output<typeof TextRangeSchema>>;
+
 type TextSelectionDrift = Drift<
   TextSelection,
   z.output<typeof TextSelectionSchema>
 >;
+
 type UsageInfoDrift = Drift<UsageInfo, z.output<typeof UsageInfoSchema>>;
 
 type _Common = [

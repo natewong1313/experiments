@@ -81,9 +81,13 @@ const ChangesetActionSchema = z.discriminatedUnion("type", [
 ]);
 
 type Changeset = z.output<typeof ChangesetSchema>;
+
 type ChangesetFile = z.output<typeof ChangesetFileSchema>;
+
 type ChangesetOperation = z.output<typeof ChangesetOperationSchema>;
+
 type ChangesetState = z.output<typeof ChangesetStateSchema>;
+
 type ChangesetAction = z.output<typeof ChangesetActionSchema>;
 
 export {

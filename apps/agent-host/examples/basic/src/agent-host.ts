@@ -25,6 +25,7 @@ class AgentHost extends BaseAgentHost<Env> {
   }: AcpConnectionOptions): Promise<WebSocket> {
     const options = { headers: { Upgrade: "websocket" }, signal };
     let response: Response;
+
     if (this.env.ACP_URL === "") {
       response = await this.env.HARNESS_CONTAINER.getByName(sessionKey).fetch(
         "https://agent/acp",
@@ -32,18 +33,24 @@ class AgentHost extends BaseAgentHost<Env> {
       );
     } else {
       const url = new URL(this.env.ACP_URL);
+
       if (url.protocol === "ws:") {
         url.protocol = "http:";
       }
+
       if (url.protocol === "wss:") {
         url.protocol = "https:";
       }
+
       response = await fetch(url, options);
     }
+
     const socket = response.webSocket;
+
     if (response.status !== STATUS_SWITCHING_PROTOCOLS || !socket) {
       throw new Error(`Agent connection failed with HTTP ${response.status}`);
     }
+
     return socket;
   }
 }

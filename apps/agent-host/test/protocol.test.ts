@@ -8,17 +8,22 @@ import { Peer } from "./peer";
 import { createSession } from "./config";
 
 const ROOT = "ahp-root://";
+
 const SESSION = "ahp-session:/protocol-test";
+
 const SECOND_SEQUENCE = 2;
+
 const LAST_ACTION_INDEX = -1;
 
 async function openPeer(stub: DurableObjectStub): Promise<Peer> {
   const response = await stub.fetch("https://host/ahp", {
     headers: { Upgrade: "websocket" },
   });
+
   if (!response.webSocket) {
     throw new Error("Host did not accept the WebSocket upgrade");
   }
+
   return new Peer(response.webSocket);
 }
 
@@ -28,13 +33,16 @@ async function readyHost(): Promise<{
   sequence: number;
 }> {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
+
   const state = await runInDurableObject(stub, (instance, ctx) => {
     expect(instance).toBeDefined();
     const store = new HostStore(ctx);
     createSession(store, SESSION, "protocol-generation");
     store.apply(SESSION, { type: "session/ready" });
+
     return { chat: store.require(SESSION).chatUri, sequence: store.sequence };
   });
+
   return { stub, ...state };
 }
 
@@ -42,6 +50,7 @@ it("delivers duplicate acknowledgements only to their origin and removes dispose
   const { stub, chat } = await readyHost();
   const sender = await openPeer(stub);
   const observer = await openPeer(stub);
+
   try {
     await sender.request("initialize", {
       channel: ROOT,
@@ -55,11 +64,13 @@ it("delivers duplicate acknowledgements only to their origin and removes dispose
       protocolVersions: [PROTOCOL_VERSION],
       initialSubscriptions: [SESSION],
     });
+
     const params = {
       channel: SESSION,
       clientSeq: 1,
       action: { type: "session/titleChanged", title: "Renamed" },
     };
+
     sender.notify("dispatchAction", params);
     await vi.waitFor(() => {
       expect(sender.actions).toHaveLength(1);
@@ -105,12 +116,15 @@ it("delivers duplicate acknowledgements only to their origin and removes dispose
     await sender.request("disposeSession", { channel: SESSION });
     await runInDurableObject(stub, (instance, ctx) => {
       expect(instance).toBeDefined();
+
       for (const socket of ctx.getWebSockets()) {
         const connection = ConnectionSchema.parse(
           socket.deserializeAttachment(),
         );
+
         expect(connection).toMatchObject({ phase: "ready", subscriptions: [] });
       }
+
       expect(new HostStore(ctx).lookup(SESSION)).toBeNull();
     });
     await expect(
@@ -133,6 +147,7 @@ it("routes reconnect through replay or snapshots and enforces the connection pha
   });
   const replay = await openPeer(stub);
   const snapshot = await openPeer(stub);
+
   try {
     expect(await replay.request("ping", { channel: ROOT })).toBeNull();
     await expect(

@@ -4,6 +4,7 @@ import {
   SubscribeResultSchema,
   type ActionEnvelope,
   type ReconnectResult,
+  type Snapshot,
 } from "@experiments/protocol-schemas";
 import { describe, expect } from "vitest";
 import {
@@ -31,9 +32,11 @@ describe("subscriptions and reconnection", () => {
 
   test("accepts an immediate-delivery preference", async ({ client }) => {
     await initialized(client);
+
     const subscribed = await client.subscribe(ROOT, {
       delivery: { maxLatencyMs: 0 },
     });
+
     expectRootState(subscribed.result.snapshot);
   });
 
@@ -70,13 +73,16 @@ describe("subscriptions and reconnection", () => {
           subscriptions: [ROOT],
         }),
       );
+
       const missing = result.type === "replay" ? result.missing : [];
       expect(missing).not.toContain(ROOT);
+
       if (result.type === "snapshot") {
         expectRootState(
           result.snapshots.find((snapshot) => snapshot.resource === ROOT),
         );
       }
+
       await fresh.ping();
     });
   });
@@ -88,12 +94,15 @@ describe("subscriptions and reconnection", () => {
       const clientId = `conformance-${crypto.randomUUID()}`;
       const serverSeq = await captureServerSeq(clientId, [ROOT, uri]);
       const writer = await AhpConnection.open(endpoint());
+
       try {
         await initialize(writer, [uri]);
         const subscribed = await writer.request("subscribe", { channel: uri });
+
         if (!("result" in subscribed)) {
           throw new Error("Fixture session subscription failed");
         }
+
         const { snapshot } = SubscribeResultSchema.parse(subscribed.result);
         const original = expectSessionState(snapshot, uri).title;
         const changed = `AHP reconnect ${crypto.randomUUID()}`;
@@ -105,6 +114,7 @@ describe("subscriptions and reconnection", () => {
               clientSeq: 1,
               action: { type: "session/titleChanged", title: changed },
             });
+
             const accepted = await writer.waitForAction(
               uri,
               "session/titleChanged",
@@ -116,6 +126,7 @@ describe("subscriptions and reconnection", () => {
                   envelope.action.title === changed,
               },
             );
+
             expect(accepted.rejectionReason).toBeUndefined();
             await withClient(async (fresh) => {
               const recovered = ReconnectResultSchema.parse(
@@ -125,14 +136,17 @@ describe("subscriptions and reconnection", () => {
                   subscriptions: [ROOT, uri],
                 }),
               );
+
               if (recovered.type === "replay") {
                 expectReplayRecovery(recovered, serverSeq, accepted);
               } else {
                 const recoveredSnapshot = recovered.snapshots.find(
                   (item) => item.resource === uri,
                 );
+
                 expectSnapshotTitle(recoveredSnapshot, uri, changed);
               }
+
               const current = await fresh.subscribe(uri);
               expect(
                 expectSessionState(current.result.snapshot, uri).title,
@@ -147,6 +161,7 @@ describe("subscriptions and reconnection", () => {
               clientSeq: 2,
               action: { type: "session/titleChanged", title: original },
             });
+
             const restored = await writer.waitForAction(
               uri,
               "session/titleChanged",
@@ -158,6 +173,7 @@ describe("subscriptions and reconnection", () => {
                   envelope.action.title === original,
               },
             );
+
             expect(restored.rejectionReason).toBeUndefined();
           },
         );
@@ -190,6 +206,7 @@ async function captureServerSeq(
         initialSubscriptions: subscriptions,
       }),
     );
+
     return result.serverSeq;
   });
 }
@@ -201,20 +218,23 @@ function expectReplayRecovery(
 ): void {
   expect(result.missing).not.toContain(accepted.channel);
   let previous = since;
+
   for (const envelope of result.actions) {
     expect(envelope.serverSeq).toBeGreaterThan(previous);
     previous = envelope.serverSeq;
   }
+
   const missed = result.actions.find(
     (envelope) =>
       envelope.channel === accepted.channel &&
       envelope.serverSeq === accepted.serverSeq,
   );
+
   expect(missed).toEqual(accepted);
 }
 
 function expectSnapshotTitle(
-  snapshot: unknown,
+  snapshot: Snapshot | undefined,
   uri: string,
   title: string,
 ): void {

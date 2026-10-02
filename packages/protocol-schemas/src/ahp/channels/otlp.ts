@@ -13,6 +13,7 @@ const OtlpExportNotificationSchema = z.strictObject({
 });
 
 type TelemetryCapabilities = z.output<typeof TelemetryCapabilitiesSchema>;
+
 type OtlpExportNotification = z.output<typeof OtlpExportNotificationSchema>;
 
 export {

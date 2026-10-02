@@ -13,13 +13,17 @@ import type { LiveSession } from "../src/sessions/record";
 import { connectPeer, type Peer } from "./peer";
 
 const SESSION = "ahp-session:/reused";
+
 const SWITCHING_PROTOCOLS = 101;
+
 const REOPEN_CALL = 2;
+
 const TOTAL_CONNECTIONS = 3;
 
 async function recordFor(stub: DurableObjectStub): Promise<LiveSession> {
   return await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
+
     return new HostStore(state).require(SESSION);
   });
 }
@@ -52,38 +56,48 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
   const replacementPrompt = Promise.withResolvers<PromptResponse>();
   let calls = 0;
   let prompts = 0;
+
   const fetchSpy = vi
     .spyOn(globalThis, "fetch")
     .mockImplementation(async () => {
       calls++;
+
       if (calls === REOPEN_CALL) {
         return await pendingFetch.promise;
       }
+
       const { 0: client, 1: server } = new WebSocketPair();
       const sessionId = crypto.randomUUID();
+
       const agent: Agent = {
         initialize: async () => ({ protocolVersion: PROTOCOL_VERSION }),
         newSession: async () => ({ sessionId }),
         authenticate: async () => ({}),
         prompt: async () => {
           prompts++;
+
           return await replacementPrompt.promise;
         },
         cancel: async (): Promise<void> => {},
       };
+
       const connection = new AgentSideConnection(
         () => agent,
         websocketStream(server),
       );
+
       servers.push(connection);
       server.accept();
       sockets.push(server);
+
       return new Response(null, {
         status: SWITCHING_PROTOCOLS,
         webSocket: client,
       });
     });
+
   const peer = await connectPeer(stub);
+
   try {
     await peer.request("createSession", { channel: SESSION });
     await waitForReady(stub);
@@ -120,9 +134,11 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
     await vi.waitFor(async () => {
       const record = await recordFor(stub);
       expect(record.chat.activeTurn).toBeUndefined();
+
       const snapshot = await peer.request("subscribe", {
         channel: record.chatUri,
       });
+
       expect(snapshot).toMatchObject({
         snapshot: {
           state: { turns: [{ id: "same-turn-id", state: "complete" }] },
@@ -136,9 +152,11 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
     peer.close();
     await runInDurableObject(stub, async (instance) => {
       expect(instance).toBeDefined();
+
       for (const socket of sockets) {
         socket.close();
       }
+
       await Promise.all(servers.map((server) => server.closed));
     });
     fetchSpy.mockRestore();

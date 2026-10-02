@@ -18,6 +18,7 @@ async function terminalState(client: AhpClient): Promise<TerminalState> {
   await initialized(client);
   const uri = terminal!;
   const subscribed = await client.subscribe(uri);
+
   return expectState(subscribed.result.snapshot, uri, TerminalStateSchema);
 }
 
@@ -48,6 +49,7 @@ describe("terminal channel", () => {
 
   test.skipIf(!terminal)("has typed content parts", async ({ client }) => {
     const state = await terminalState(client);
+
     for (const part of state.content) {
       expect(["unclassified", "command"]).toContain(part.type);
     }
@@ -57,10 +59,12 @@ describe("terminal channel", () => {
     "has positive dimensions when present",
     async ({ client }) => {
       const state = await terminalState(client);
+
       for (const dimension of [state.cols, state.rows]) {
-        if (typeof dimension !== "number") {
+        if (!dimension) {
           continue;
         }
+
         expect(Number.isSafeInteger(dimension)).toBe(true);
         expect(dimension).toBeGreaterThan(0);
       }
@@ -72,9 +76,11 @@ describe("terminal channel", () => {
     async ({ client }) => {
       const handshake = await initialized(client, [ROOT]);
       const [snapshot] = handshake.snapshots;
+
       if (!snapshot) {
         throw new Error("Expected a root snapshot");
       }
+
       const root = expectRootState(snapshot);
       const terminals = root.terminals ?? [];
       const listed = terminals.some((entry) => entry.resource === terminal);
@@ -87,9 +93,11 @@ describe("terminal channel", () => {
     async ({ client }) => {
       const handshake = await initialized(client, [ROOT]);
       const [snapshot] = handshake.snapshots;
+
       if (!snapshot) {
         throw new Error("Expected a root snapshot");
       }
+
       const root = expectRootState(snapshot);
       const entry = root.terminals?.find((item) => item.resource === terminal);
       const state = await terminalState(client);

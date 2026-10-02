@@ -41,26 +41,32 @@ type AutomationDefinitionDrift = Drift<
   AutomationDefinition,
   z.output<typeof AutomationDefinitionSchema>
 >;
+
 type AutomationTriggerDrift = UnionDrift<
   AutomationTrigger,
   z.output<typeof AutomationTriggerSchema>
 >;
+
 type AutomationEntryDrift = Drift<
   AutomationEntry,
   z.output<typeof AutomationEntrySchema>
 >;
+
 type AutomationStateDrift = Drift<
   AutomationState,
   z.output<typeof AutomationStateSchema>
 >;
+
 type AutomationRunSummaryDrift = Drift<
   AutomationRunSummary,
   z.output<typeof AutomationRunSummarySchema>
 >;
+
 type AutomationRunStateDrift = Drift<
   AutomationRunState,
   z.output<typeof AutomationRunStateSchema>
 >;
+
 type TelemetryCapabilitiesDrift = Drift<
   TelemetryCapabilities,
   z.output<typeof TelemetryCapabilitiesSchema>

@@ -59,14 +59,21 @@ const ResponsePartSchema = z.discriminatedUnion("kind", [
 ]);
 
 type MarkdownResponsePart = z.output<typeof MarkdownResponsePartSchema>;
+
 type ResourceResponsePart = z.output<typeof ResourceResponsePartSchema>;
+
 type ToolCallResponsePart = z.output<typeof ToolCallResponsePartSchema>;
+
 type ReasoningResponsePart = z.output<typeof ReasoningResponsePartSchema>;
+
 type SystemNotificationResponsePart = z.output<
   typeof SystemNotificationResponsePartSchema
 >;
+
 type InputRequestResponsePart = z.output<typeof InputRequestResponsePartSchema>;
+
 type ErrorResponsePart = z.output<typeof ErrorResponsePartSchema>;
+
 type ResponsePart = z.output<typeof ResponsePartSchema>;
 
 export {

@@ -13,9 +13,11 @@ describe("telemetry channels", () => {
       const { telemetry } = init;
       const advertised = telemetry?.[signal];
       skip(!advertised, "Telemetry unadvertised");
+
       if (!advertised) {
         return;
       }
+
       const concrete = expandLevelTemplate(advertised);
       expect(concrete.startsWith("ahp-otlp:")).toBe(true);
       const subscribed = await client.subscribe(concrete);
@@ -26,13 +28,16 @@ describe("telemetry channels", () => {
   test("advertises only telemetry URI schemes", async ({ client }) => {
     const init = await initialized(client, [ROOT]);
     const { telemetry } = init;
+
     if (!telemetry) {
       return;
     }
+
     for (const uri of Object.values(telemetry)) {
       if (!uri) {
         continue;
       }
+
       expect(uri.startsWith("ahp-otlp:")).toBe(true);
     }
   });

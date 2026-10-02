@@ -227,26 +227,45 @@ const CustomizationSchema = z.union([
 ]);
 
 type SessionStatus = z.output<typeof sessionStatusSchema>;
+
 type ModelSelection = z.output<typeof ModelSelectionSchema>;
+
 type AgentSelection = z.output<typeof AgentSelectionSchema>;
+
 type ProjectInfo = z.output<typeof ProjectInfoSchema>;
+
 type ToolDefinition = z.output<typeof ToolDefinitionSchema>;
+
 type ToolAnnotations = z.output<typeof ToolAnnotationsSchema>;
+
 type McpAuthRequirement = z.output<typeof McpAuthRequirementSchema>;
+
 type McpServerState = z.output<typeof McpServerStateSchema>;
+
 type McpOAuthClient = z.output<typeof McpOAuthClientSchema>;
+
 type CustomizationEnablement = z.output<typeof CustomizationEnablementSchema>;
+
 type Customization = z.output<typeof CustomizationSchema>;
+
 type PluginCustomization = z.output<typeof PluginCustomizationSchema>;
+
 type ClientPluginCustomization = z.output<
   typeof ClientPluginCustomizationSchema
 >;
+
 type DirectoryCustomization = z.output<typeof DirectoryCustomizationSchema>;
+
 type AgentCustomization = z.output<typeof AgentCustomizationSchema>;
+
 type SkillCustomization = z.output<typeof SkillCustomizationSchema>;
+
 type PromptCustomization = z.output<typeof PromptCustomizationSchema>;
+
 type RuleCustomization = z.output<typeof RuleCustomizationSchema>;
+
 type HookCustomization = z.output<typeof HookCustomizationSchema>;
+
 type ChildMcpServerCustomization = z.output<
   typeof ChildMcpServerCustomizationSchema
 >;

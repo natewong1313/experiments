@@ -34,19 +34,24 @@ type Drift<Upstream extends object, Ours extends object> = SameKeys<
 type Expect<T extends true> = T;
 
 type RootStateDrift = Drift<RootState, z.output<typeof RootStateSchema>>;
+
 type AgentInfoDrift = Drift<AgentInfo, z.output<typeof AgentInfoSchema>>;
+
 type SessionModelInfoDrift = Drift<
   SessionModelInfo,
   z.output<typeof SessionModelInfoSchema>
 >;
+
 type TerminalInfoDrift = Drift<
   TerminalInfo,
   z.output<typeof TerminalInfoSchema>
 >;
+
 type TerminalStateDrift = Drift<
   TerminalState,
   z.output<typeof TerminalStateSchema>
 >;
+
 type TerminalContentPartDrift = Drift<
   TerminalContentPart,
   z.output<typeof TerminalContentPartSchema>

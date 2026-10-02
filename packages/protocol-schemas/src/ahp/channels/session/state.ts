@@ -148,9 +148,13 @@ const SessionStateSchema = z.strictObject({
 });
 
 type SessionLifecycle = z.output<typeof SessionLifecycleSchema>;
+
 type SessionMetadata = z.output<typeof SessionMetadataSchema>;
+
 type ChangesSummary = z.output<typeof ChangesSummarySchema>;
+
 type SessionSummary = z.output<typeof SessionSummarySchema>;
+
 type SessionConfigProperty = {
   type: "string" | "number" | "boolean" | "array" | "object";
   title: string;
@@ -167,10 +171,15 @@ type SessionConfigProperty = {
   properties?: Record<string, SessionConfigProperty>;
   additionalProperties?: SessionConfigProperty;
 };
+
 type SessionConfigSchema = z.output<typeof SessionConfigSchemaSchema>;
+
 type SessionConfigState = z.output<typeof SessionConfigStateSchema>;
+
 type SessionActiveClient = z.output<typeof SessionActiveClientSchema>;
+
 type SessionInputRequest = z.output<typeof SessionInputRequestSchema>;
+
 type SessionState = z.output<typeof SessionStateSchema>;
 
 export {

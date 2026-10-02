@@ -35,9 +35,11 @@ describe("session channel", () => {
       await initialized(client);
       const state = await sessionSnapshot(client);
       const { defaultChat } = state;
+
       if (!defaultChat) {
         return;
       }
+
       const listed = state.chats.some((chat) => chat.resource === defaultChat);
       expect(listed).toBe(true);
     },
@@ -48,9 +50,11 @@ describe("session channel", () => {
     async ({ client }) => {
       await initialized(client);
       const state = await sessionSnapshot(client);
+
       const page = ListSessionsResultSchema.parse(
         await client.request("listSessions", { channel: "ahp-root://" }),
       );
+
       const listed = page.items.find((item) => item.resource === SESSION);
       expect(listed?.provider).toBe(state.provider);
       expect(listed?.title).toBe(state.title);
@@ -62,6 +66,7 @@ describe("session channel", () => {
     async () => {
       const uri = sessionUri();
       const connection = await AhpConnection.open(endpoint());
+
       try {
         await initialize(connection, [uri]);
         const after = connection.checkpoint;
@@ -73,6 +78,7 @@ describe("session channel", () => {
             defaultChat: `ahp-chat:/${crypto.randomUUID()}`,
           },
         });
+
         const envelope = await connection.waitForAction(
           uri,
           "session/defaultChatChanged",
@@ -81,7 +87,8 @@ describe("session channel", () => {
             predicate: (action) => action.origin?.clientSeq === 1,
           },
         );
-        expect(typeof envelope.rejectionReason).toBe("string");
+
+        expect(envelope.rejectionReason).toEqual(expect.any(String));
         expect(envelope.rejectionReason).not.toBe("");
       } finally {
         await connection.close();
@@ -94,18 +101,24 @@ describe("session channel", () => {
     async () => {
       const uri = sessionUri();
       const connection = await AhpConnection.open(endpoint());
+
       try {
         await initialize(connection);
+
         const subscribed = await connection.request("subscribe", {
           channel: uri,
         });
+
         if (!("result" in subscribed)) {
           throw new Error("Fixture session has no snapshot");
         }
+
         const { snapshot } = SubscribeResultSchema.parse(subscribed.result);
+
         if (!snapshot) {
           throw new Error("Fixture session has no snapshot");
         }
+
         const state = expectSessionState(snapshot, uri);
         const original = state.title;
         const changed = `AHP conformance ${crypto.randomUUID()}`;
@@ -117,6 +130,7 @@ describe("session channel", () => {
               clientSeq: 1,
               action: { type: "session/titleChanged", title: changed },
             });
+
             const envelope = await connection.waitForAction(
               uri,
               "session/titleChanged",
@@ -128,6 +142,7 @@ describe("session channel", () => {
                   action.action.title === changed,
               },
             );
+
             expect(envelope.rejectionReason).toBeUndefined();
             await withClient(async (observer) => {
               await initialized(observer);
@@ -147,6 +162,7 @@ describe("session channel", () => {
               clientSeq: 2,
               action: { type: "session/titleChanged", title: original },
             });
+
             const restored = await connection.waitForAction(
               uri,
               "session/titleChanged",
@@ -158,6 +174,7 @@ describe("session channel", () => {
                   action.action.title === original,
               },
             );
+
             expect(restored.rejectionReason).toBeUndefined();
           },
         );

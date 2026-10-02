@@ -11,13 +11,46 @@ import {
   RpcCodes,
   type Connection,
 } from "./protocol";
+import type {
+  ActionEnvelope,
+  SessionSummary,
+} from "@experiments/protocol-schemas/ahp";
 import type { Publication } from "../state/store";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
+
 const NO_CLOSE_STATUS = 1005;
+
 const ABNORMAL_CLOSE = 1006;
+
 const NORMAL_CLOSE = 1000;
+
 const AttachmentLimitSchema = z.array(z.string()).max(MAX_SUBSCRIPTIONS);
+
+type ServerFrame =
+  | {
+      jsonrpc: "2.0";
+      id: string | number | null;
+      result: object | null;
+    }
+  | {
+      jsonrpc: "2.0";
+      id: string | number | null;
+      error: { code: number; message: string; data?: JsonErrorData };
+    }
+  | { jsonrpc: "2.0"; method: string; params: object };
+
+type JsonErrorData = JsonValue | object;
+
+type NotificationParams =
+  | ActionEnvelope
+  | { summary: SessionSummary | undefined }
+  | { session: string }
+  | { session: string; changes: Omit<SessionSummary, "resource"> };
+
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
+
+type JsonObject = { [key: string]: JsonValue };
 
 class AhpClients {
   private readonly ctx: Pick<
@@ -39,9 +72,11 @@ class AhpClients {
         status: STATUS_UPGRADE_REQUIRED,
       });
     }
+
     const { 0: clientSocket, 1: serverSocket } = new WebSocketPair();
     this.ctx.acceptWebSocket(serverSocket);
     serverSocket.serializeAttachment({ phase: "new" });
+
     return new Response(null, {
       status: STATUS_SWITCHING_PROTOCOLS,
       webSocket: clientSocket,
@@ -63,10 +98,11 @@ class AhpClients {
     return ConnectionSchema.parse(socket.deserializeAttachment());
   }
 
-  send(socket: WebSocket, message: unknown): void {
+  send(socket: WebSocket, message: ServerFrame): void {
     if (socket.readyState !== WebSocket.OPEN) {
       return;
     }
+
     try {
       socket.send(JSON.stringify(message));
     } catch {
@@ -74,9 +110,10 @@ class AhpClients {
     }
   }
 
-  notify(channel: string, method: string, params: object): void {
+  notify(channel: string, method: string, params: NotificationParams): void {
     for (const socket of this.ctx.getWebSockets()) {
       const client = this.connection(socket);
+
       if (client.phase === "ready" && client.subscriptions.includes(channel)) {
         this.send(socket, {
           jsonrpc: "2.0",
@@ -91,6 +128,7 @@ class AhpClients {
     for (const envelope of publication.actions) {
       this.notify(envelope.channel, "action", envelope);
     }
+
     if (publication.summary) {
       const { summary } = publication;
       const { resource, ...changes } = summary;
@@ -104,6 +142,7 @@ class AhpClients {
   attach(socket: WebSocket, clientId: string, subscriptions: string[]): void {
     const unique = AttachmentLimitSchema.parse([...new Set(subscriptions)]);
     const attachment = { phase: "ready", clientId, subscriptions: unique };
+
     if (
       new TextEncoder().encode(JSON.stringify(attachment)).byteLength >
       MAX_ATTACHMENT_BYTES
@@ -113,8 +152,10 @@ class AhpClients {
         "Subscriptions exceed the connection storage limit",
       );
     }
+
     for (const existing of this.ctx.getWebSockets()) {
       const client = this.connection(existing);
+
       if (
         existing !== socket &&
         client.phase === "ready" &&
@@ -123,11 +164,13 @@ class AhpClients {
         existing.close(VERSION_REJECT_CLOSE, "Client reconnected elsewhere");
       }
     }
+
     socket.serializeAttachment(attachment);
   }
 
   unsubscribe(socket: WebSocket, channel: string): void {
     const client = this.connection(socket);
+
     if (client.phase === "ready") {
       socket.serializeAttachment({
         ...client,
@@ -139,6 +182,7 @@ class AhpClients {
   dropChannels(channels: string[]): void {
     for (const socket of this.ctx.getWebSockets()) {
       const client = this.connection(socket);
+
       if (client.phase === "ready") {
         socket.serializeAttachment({
           ...client,

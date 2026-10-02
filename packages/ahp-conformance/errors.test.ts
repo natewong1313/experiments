@@ -18,15 +18,19 @@ import { AhpConnection, initialize } from "./raw";
 describe("JSON-RPC and AHP errors", () => {
   test("rejects an unknown method with MethodNotFound", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       await initialize(connection);
+
       const reply = await connection.request(
         "conformance/methodThatDoesNotExist",
         { channel: ROOT },
       );
+
       if (!("error" in reply)) {
         throw new Error("Expected a MethodNotFound error");
       }
+
       expect(reply.error.code).toBe(JsonRpcErrorCodes.MethodNotFound);
     } finally {
       await connection.close();
@@ -35,6 +39,7 @@ describe("JSON-RPC and AHP errors", () => {
 
   test("keeps the connection alive after MethodNotFound", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       await initialize(connection);
       await connection.request("conformance/methodThatDoesNotExist", {
@@ -49,16 +54,21 @@ describe("JSON-RPC and AHP errors", () => {
 
   test("correlates concurrent JSON-RPC responses by request id", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       await initialize(connection);
+
       const replies = await Promise.all([
         connection.request("ping", { channel: ROOT }),
         connection.request("listSessions", { channel: ROOT, limit: 1 }),
       ]);
+
       const [first, second] = replies;
+
       if (!first || !second) {
         throw new Error("Expected two replies");
       }
+
       expect(first.id).not.toBe(second.id);
       expect("result" in first).toBe(true);
       expect("result" in second).toBe(true);
@@ -69,15 +79,19 @@ describe("JSON-RPC and AHP errors", () => {
 
   test("returns a JSON-RPC error object with numeric code and message", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       await initialize(connection);
+
       const reply = await connection.request(
         "conformance/methodThatDoesNotExist",
         { channel: ROOT },
       );
+
       if (!("error" in reply)) {
         throw new Error("Expected an error");
       }
+
       expect(Number.isSafeInteger(reply.error.code)).toBe(true);
       expect(reply.error.message.length).toBeGreaterThan(0);
     } finally {
@@ -90,6 +104,7 @@ describe("JSON-RPC and AHP errors", () => {
   }) => {
     await initialized(client);
     const uri = `ahp-session:/${crypto.randomUUID()}`;
+
     const error = await expectRpcError(
       () =>
         client.request("createSession", {
@@ -98,10 +113,13 @@ describe("JSON-RPC and AHP errors", () => {
         }),
       AhpErrorCodes.ProviderNotFound,
     );
+
     expect(error.code).toBe(AhpErrorCodes.ProviderNotFound);
+
     const page = ListSessionsResultSchema.parse(
       await client.request("listSessions", { channel: ROOT }),
     );
+
     const created = page.items.some((item) => item.resource === uri);
     expect(created).toBe(false);
   });
@@ -120,13 +138,17 @@ describe("JSON-RPC and AHP errors", () => {
     async ({ client }) => {
       const uri = SESSION!;
       await initialized(client);
+
       const page = ListSessionsResultSchema.parse(
         await client.request("listSessions", { channel: ROOT }),
       );
+
       const existing = page.items.find((item) => item.resource === uri);
+
       if (!existing) {
         throw new Error("Fixture session absent from catalogue");
       }
+
       const error = await expectRpcError(
         () =>
           client.request("createSession", {
@@ -135,6 +157,7 @@ describe("JSON-RPC and AHP errors", () => {
           }),
         AhpErrorCodes.SessionAlreadyExists,
       );
+
       expect(error.code).toBe(AhpErrorCodes.SessionAlreadyExists);
     },
   );
@@ -144,6 +167,7 @@ describe("JSON-RPC and AHP errors", () => {
     async ({ client }) => {
       await initialized(client);
       const chat = await chatSnapshot(client);
+
       const error = await expectRpcError(
         () =>
           client.request("fetchTurns", {
@@ -152,6 +176,7 @@ describe("JSON-RPC and AHP errors", () => {
           }),
         JsonRpcErrorCodes.InvalidParams,
       );
+
       expect(error.code).toBe(JsonRpcErrorCodes.InvalidParams);
     },
   );

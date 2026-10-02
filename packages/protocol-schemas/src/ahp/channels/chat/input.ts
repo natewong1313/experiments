@@ -98,10 +98,15 @@ const ChatInputRequestSchema = z.strictObject({
 const ChatInputResponseKindSchema = z.enum(["accept", "decline", "cancel"]);
 
 type ChatInputOption = z.output<typeof ChatInputOptionSchema>;
+
 type ChatInputQuestion = z.output<typeof ChatInputQuestionSchema>;
+
 type ChatInputAnswerValue = z.output<typeof ChatInputAnswerValueSchema>;
+
 type ChatInputAnswer = z.output<typeof ChatInputAnswerSchema>;
+
 type ChatInputRequest = z.output<typeof ChatInputRequestSchema>;
+
 type ChatInputResponseKind = z.output<typeof ChatInputResponseKindSchema>;
 
 export {

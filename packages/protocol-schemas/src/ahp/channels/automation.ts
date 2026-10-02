@@ -119,20 +119,29 @@ const AutomationActionSchema = z.discriminatedUnion("type", [
 ]);
 
 type AutomationSchedule = z.output<typeof AutomationScheduleSchema>;
+
 type AutomationTrigger = z.output<typeof AutomationTriggerSchema>;
+
 type AutomationTriggerDefinition = z.output<
   typeof AutomationTriggerDefinitionSchema
 >;
+
 type AutomationSessionTemplate = z.output<
   typeof AutomationSessionTemplateSchema
 >;
+
 type AutomationDefinition = z.output<typeof AutomationDefinitionSchema>;
+
 type AutomationDefinitionPatch = z.output<
   typeof AutomationDefinitionPatchSchema
 >;
+
 type AutomationOperation = z.output<typeof AutomationOperationSchema>;
+
 type AutomationEntry = z.output<typeof AutomationEntrySchema>;
+
 type AutomationState = z.output<typeof AutomationStateSchema>;
+
 type AutomationAction = z.output<typeof AutomationActionSchema>;
 
 export {

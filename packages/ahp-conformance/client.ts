@@ -4,10 +4,12 @@ import {
   RootStateSchema,
   SessionStateSchema,
   SnapshotSchema,
+  type ChannelState,
   type ChatState,
   type InitializeResult,
   type RootState,
   type SessionState,
+  type Snapshot,
 } from "@experiments/protocol-schemas";
 import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { AhpClient, RpcError } from "@microsoft/agent-host-protocol/client";
@@ -16,14 +18,18 @@ import { expect, test as baseTest } from "vitest";
 import { withCleanup } from "./cleanup";
 
 const ROOT = "ahp-root://";
+
 const VERSION = PROTOCOL_VERSION;
+
 const SESSION = process.env.AHP_SESSION_URI;
+
 const MUTATIONS = process.env.AHP_TEST_MUTATIONS === "1";
 
 function sessionUri(): string {
   if (!SESSION) {
     throw new Error("Set AHP_SESSION_URI for session probes");
   }
+
   return SESSION;
 }
 
@@ -35,9 +41,11 @@ const test = baseTest.extend<{ client: AhpClient }>({
 
 function endpoint(): string {
   const url = process.env.AHP_URL;
+
   if (!url) {
     throw new Error("Set AHP_URL to the host's ws:// or wss:// endpoint");
   }
+
   return url;
 }
 
@@ -47,9 +55,11 @@ async function withClient<T>(
 ): Promise<T> {
   const transport = await WebSocketTransport.connect(url);
   const client = new AhpClient(transport, { requestTimeoutMs: 10_000 });
+
   return await withCleanup(
     async () => {
       client.connect();
+
       return await run(client);
     },
     async () => {
@@ -67,47 +77,59 @@ async function initialized(
     protocolVersions: [VERSION],
     initialSubscriptions: subscriptions,
   });
+
   return InitializeResultSchema.parse(result);
 }
 
-type StateParser<T> = { parse(value: unknown): T };
+type StateParser<T> = { parse(value: ChannelState): T };
 
 function expectState<T>(
-  snapshot: unknown,
+  snapshot: Snapshot | undefined,
   resource: string,
   parseState: StateParser<T>,
 ): T {
   const parsed = SnapshotSchema.parse(snapshot);
   expect(parsed.resource).toBe(resource);
+
   return parseState.parse(parsed.state);
 }
 
-function expectRootState(snapshot: unknown): RootState {
+function expectRootState(snapshot: Snapshot | undefined): RootState {
   return expectState(snapshot, ROOT, RootStateSchema);
 }
 
-function expectSessionState(snapshot: unknown, resource: string): SessionState {
+function expectSessionState(
+  snapshot: Snapshot | undefined,
+  resource: string,
+): SessionState {
   return expectState(snapshot, resource, SessionStateSchema);
 }
 
-function expectChatState(snapshot: unknown, resource: string): ChatState {
+function expectChatState(
+  snapshot: Snapshot | undefined,
+  resource: string,
+): ChatState {
   return expectState(snapshot, resource, ChatStateSchema);
 }
 
-async function expectRpcError(
-  run: () => Promise<unknown>,
+async function expectRpcError<T>(
+  run: () => Promise<T>,
   code: number,
 ): Promise<RpcError> {
   try {
     await run();
   } catch (error) {
     expect(error).toBeInstanceOf(RpcError);
+
     if (error instanceof RpcError) {
       expect(error.code).toBe(code);
+
       return error;
     }
+
     throw error;
   }
+
   throw new Error(`Expected AHP error ${code}`);
 }
 
@@ -117,6 +139,7 @@ async function sessionSnapshot(
 ): Promise<SessionState> {
   const subscribed = await client.subscribe(resource);
   const { snapshot } = subscribed.result;
+
   return expectSessionState(snapshot, resource);
 }
 
@@ -128,21 +151,26 @@ async function chatSnapshot(
 ): Promise<ChatSnapshot> {
   const session = await sessionSnapshot(client, resource);
   const [firstChat] = session.chats;
-  const hasDefault = typeof session.defaultChat === "string";
-  const chat = hasDefault
-    ? session.chats.find((item) => item.resource === session.defaultChat)
+  const { defaultChat } = session;
+
+  const chat = defaultChat
+    ? session.chats.find((item) => item.resource === defaultChat)
     : firstChat;
-  if (hasDefault && !chat) {
+
+  if (defaultChat && !chat) {
     throw new Error(
-      `Fixture session default chat ${session.defaultChat} is absent from the session catalogue`,
+      `Fixture session default chat ${defaultChat} is absent from the session catalogue`,
     );
   }
+
   if (!chat) {
     throw new Error("Fixture session has no listed chats");
   }
+
   const { resource: chatResource } = chat;
   const subscribed = await client.subscribe(chatResource);
   const { snapshot } = subscribed.result;
+
   return {
     uri: chatResource,
     session,

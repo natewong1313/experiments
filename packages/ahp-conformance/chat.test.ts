@@ -3,13 +3,17 @@ import { chatSnapshot, initialized, SESSION, test } from "./client";
 
 function retainedTurnIds(): string[] | null {
   const fixture = process.env.AHP_RETAINED_TURN_IDS;
-  if (typeof fixture !== "string") {
+
+  if (!fixture) {
     return null;
   }
+
   if (!SESSION) {
     throw new Error("AHP_RETAINED_TURN_IDS requires AHP_SESSION_URI");
   }
+
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(fixture);
   } catch (error) {
@@ -18,21 +22,26 @@ function retainedTurnIds(): string[] | null {
       { cause: error },
     );
   }
+
   if (!Array.isArray(parsed) || parsed.length === 0) {
     throw new Error("AHP_RETAINED_TURN_IDS must be a nonempty JSON array");
   }
-  const ids: string[] = [];
-  for (const id of parsed) {
-    if (typeof id !== "string" || id.trim().length === 0) {
-      throw new Error(
-        "AHP_RETAINED_TURN_IDS must contain only nonempty string IDs",
-      );
-    }
-    ids.push(id);
+
+  const ids = parsed.filter(
+    (entry): entry is string =>
+      typeof entry === "string" && entry.trim().length > 0,
+  );
+
+  if (ids.length !== parsed.length) {
+    throw new Error(
+      "AHP_RETAINED_TURN_IDS must contain only nonempty string IDs",
+    );
   }
+
   if (new Set(ids).size !== ids.length) {
     throw new Error("AHP_RETAINED_TURN_IDS must contain unique IDs");
   }
+
   return ids;
 }
 
@@ -44,12 +53,15 @@ describe("chat state", () => {
     async ({ client }) => {
       await initialized(client);
       const chat = await chatSnapshot(client);
+
       const summary = chat.session.chats.find(
         (item) => item.resource === chat.uri,
       );
+
       if (!summary) {
         throw new Error("Chat missing from session catalogue");
       }
+
       expect(summary.title).toBe(chat.state.title);
     },
   );
@@ -59,12 +71,15 @@ describe("chat state", () => {
     async ({ client }) => {
       await initialized(client);
       const chat = await chatSnapshot(client);
+
       const summary = chat.session.chats.find(
         (item) => item.resource === chat.uri,
       );
+
       if (!summary) {
         throw new Error("Chat missing from session catalogue");
       }
+
       expect(summary.status).toBe(chat.state.status);
     },
   );
@@ -75,10 +90,13 @@ describe("chat state", () => {
       await initialized(client);
       const chat = await chatSnapshot(client);
       const directories = chat.state.workingDirectories;
+
       if (!directories) {
         return;
       }
+
       const allowed = new Set(chat.session.workingDirectories);
+
       for (const directory of directories) {
         expect(allowed.has(directory)).toBe(true);
       }

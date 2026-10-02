@@ -5,6 +5,7 @@ async function withCleanup<T>(
   let result!: T;
   let scenarioFailed = false;
   let scenarioError: unknown;
+
   try {
     result = await run();
   } catch (error) {
@@ -14,6 +15,7 @@ async function withCleanup<T>(
 
   let cleanupFailed = false;
   let cleanupError: unknown;
+
   try {
     await cleanup();
   } catch (error) {
@@ -30,12 +32,15 @@ async function withCleanup<T>(
       },
     );
   }
+
   if (scenarioFailed) {
     throw scenarioError;
   }
+
   if (cleanupFailed) {
     throw cleanupError;
   }
+
   return result;
 }
 

@@ -30,6 +30,7 @@ it("reuses adjacent markdown parts and creates a new wire id after reasoning", (
       content: { type: "text", text: "More" },
     },
   } satisfies SessionNotification;
+
   expect(
     acpUpdateToChatActions(
       {
@@ -75,8 +76,11 @@ it("reuses adjacent markdown parts and creates a new wire id after reasoning", (
 });
 
 it("omits unserializable tool input without losing the tool actions", () => {
-  const rawInput: { self?: unknown } = {};
+  type CircularToolInput = { self?: CircularToolInput };
+
+  const rawInput: CircularToolInput = {};
   rawInput.self = rawInput;
+
   const actions = acpUpdateToChatActions(
     { id: "turn", responseParts: [] },
     {
@@ -90,6 +94,7 @@ it("omits unserializable tool input without losing the tool actions", () => {
       },
     },
   );
+
   expect(actions).toEqual([
     {
       type: "chat/toolCallStart",

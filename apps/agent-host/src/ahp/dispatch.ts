@@ -30,11 +30,14 @@ class ActionDispatch {
     input: DispatchActionParams,
   ): void {
     const origin = { clientId: client.clientId, clientSeq: input.clientSeq };
+
     const frame = JSON.stringify({
       channel: input.channel,
       action: input.action,
     });
+
     const previous = this.store.previous(origin);
+
     if (previous) {
       const envelope =
         previous.frame === frame
@@ -46,43 +49,60 @@ class ActionDispatch {
               serverSeq: this.store.sequence,
               rejectionReason: "Client sequence was reused for another action",
             };
+
       this.clients.send(socket, {
         jsonrpc: "2.0",
         method: "action",
         params: envelope,
       });
+
       return;
     }
+
     const record = this.store.lookup(input.channel);
+
     if (!record) {
       return;
     }
+
     let reason = rejection(record, input.channel, input.action, (turnId) =>
       this.store.hasTurn(record.chatUri, turnId),
     );
+
     if (
       input.action.type === "chat/turnStarted" &&
       this.turns.isRunning(record)
     ) {
       reason = "The previous agent turn is still stopping";
     }
-    const publication = this.store.dispatch({
+
+    const dispatch: Parameters<HostStore["dispatch"]>[0] = {
       ...input,
       record,
       origin,
       frame,
-      ...(reason === void 0 ? {} : { rejection: reason }),
-    });
+    };
+
+    if (reason !== void 0) {
+      dispatch.rejection = reason;
+    }
+
+    const publication = this.store.dispatch(dispatch);
+
     const [acknowledgement] = publication.actions;
+
     if (reason !== void 0) {
       this.clients.send(socket, {
         jsonrpc: "2.0",
         method: "action",
         params: acknowledgement,
       });
+
       return;
     }
+
     this.clients.broadcast(publication);
+
     if (!client.subscriptions.includes(input.channel)) {
       this.clients.send(socket, {
         jsonrpc: "2.0",
@@ -90,9 +110,11 @@ class ActionDispatch {
         params: acknowledgement,
       });
     }
+
     if (input.action.type === "chat/turnStarted") {
       this.turns.start(record, input.action.turnId);
     }
+
     if (input.action.type === "chat/turnCancelled") {
       this.turns.cancel(record);
     }
