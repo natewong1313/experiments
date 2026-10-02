@@ -7,6 +7,18 @@
       "skillPath": "skills/durable-objects/SKILL.md",
       "computedHash": "f4ce39a555f70e78c394cad5451a7d26c81874afb2fc2d16e20c909c5c3794ec"
     },
+    "install-anti-slop": {
+      "source": "dmmulroy/anti-slop",
+      "sourceType": "github",
+      "skillPath": "skills/install-anti-slop/SKILL.md",
+      "computedHash": "4031728fbe75bdcad6ee3208fd52b5d66e167b056fefee1fa9758e9a6cb9c0c8"
+    },
+    "kumo-design": {
+      "source": "cloudflare/kumo",
+      "sourceType": "github",
+      "skillPath": "skills/kumo-design/SKILL.md",
+      "computedHash": "43d7a6e2ed67d348c15365ce136630fb62e7a68ecad88eae6100d35cfa289814"
+    },
     "wrangler": {
       "source": "cloudflare/skills",
       "sourceType": "github",
