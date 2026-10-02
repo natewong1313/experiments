@@ -1,6 +1,10 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
+import {
+  InitializeResultSchema,
+  ReconnectResultSchema,
+} from "@experiments/protocol-schemas/ahp";
 import { expect, it, vi } from "vitest";
 import { ConnectionSchema } from "../src/ahp/protocol";
 import { HostStore } from "../src/state/store";
@@ -45,6 +49,149 @@ async function readyHost(): Promise<{
 
   return { stub, ...state };
 }
+
+it.each([true, false])(
+  "initializes with missing subscriptions and available channels: %s",
+  async (includeAvailable) => {
+    const { stub, chat } = await readyHost();
+    const peer = await openPeer(stub);
+    const available = includeAvailable ? [ROOT, SESSION, chat] : [];
+    const missing = "ahp-session:/not-created";
+
+    try {
+      const result = InitializeResultSchema.parse(
+        await peer.request("initialize", {
+          channel: ROOT,
+          clientId: "initial-client",
+          protocolVersions: [PROTOCOL_VERSION],
+          initialSubscriptions: [missing, ...available, `${missing}/chat`],
+        }),
+      );
+
+      expect(result.protocolVersion).toBe(PROTOCOL_VERSION);
+      expect(result.snapshots.map((snapshot) => snapshot.resource)).toEqual(
+        available,
+      );
+      await runInDurableObject(stub, (instance, ctx) => {
+        expect(instance).toBeDefined();
+        expect(ctx.getWebSockets()).toHaveLength(1);
+
+        for (const socket of ctx.getWebSockets()) {
+          const connection = ConnectionSchema.parse(
+            socket.deserializeAttachment(),
+          );
+
+          expect(connection).toEqual({
+            phase: "ready",
+            clientId: "initial-client",
+            subscriptions: available,
+          });
+        }
+      });
+      expect(
+        await peer.request("listSessions", { channel: ROOT }),
+      ).toMatchObject({
+        items: [{ resource: SESSION }],
+      });
+      await expect(
+        peer.request("subscribe", { channel: missing }),
+      ).rejects.toThrow("Session does not exist");
+    } finally {
+      peer.close();
+    }
+  },
+);
+
+it.each(["replay", "snapshot"])(
+  "reconnects an initialized connection through %s and replaces subscriptions",
+  async (recovery) => {
+    const { stub, chat, sequence } = await readyHost();
+    const peer = await openPeer(stub);
+    const missing = "ahp-session:/missing";
+
+    try {
+      await peer.request("initialize", {
+        channel: ROOT,
+        clientId: "resume-client",
+        protocolVersions: [PROTOCOL_VERSION],
+        initialSubscriptions: [ROOT, chat],
+      });
+      await runInDurableObject(stub, (instance, ctx) => {
+        expect(instance).toBeDefined();
+        new HostStore(ctx).apply(SESSION, {
+          type: "session/titleChanged",
+          title: "Before reconnect",
+        });
+      });
+
+      const result = ReconnectResultSchema.parse(
+        await peer.request("reconnect", {
+          channel: ROOT,
+          clientId: "resume-client",
+          lastSeenServerSeq:
+            recovery === "replay" ? sequence : sequence + SECOND_SEQUENCE,
+          subscriptions: [SESSION, missing],
+        }),
+      );
+
+      const expected =
+        recovery === "replay"
+          ? {
+              type: "replay",
+              missing: [missing],
+              actions: [
+                {
+                  channel: SESSION,
+                  action: {
+                    type: "session/titleChanged",
+                    title: "Before reconnect",
+                  },
+                },
+              ],
+            }
+          : {
+              type: "snapshot",
+              snapshots: [
+                { resource: SESSION, state: { title: "Before reconnect" } },
+              ],
+            };
+
+      expect(result).toMatchObject(expected);
+
+      await runInDurableObject(stub, (instance, ctx) => {
+        expect(instance).toBeDefined();
+
+        for (const socket of ctx.getWebSockets()) {
+          const connection = ConnectionSchema.parse(
+            socket.deserializeAttachment(),
+          );
+
+          expect(connection).toEqual({
+            phase: "ready",
+            clientId: "resume-client",
+            subscriptions: [SESSION],
+          });
+        }
+      });
+      peer.notify("dispatchAction", {
+        channel: SESSION,
+        clientSeq: 1,
+        action: { type: "session/titleChanged", title: "After reconnect" },
+      });
+      await vi.waitFor(() => {
+        expect(peer.actions).toMatchObject([
+          {
+            channel: SESSION,
+            action: { type: "session/titleChanged", title: "After reconnect" },
+            origin: { clientId: "resume-client", clientSeq: 1 },
+          },
+        ]);
+      });
+    } finally {
+      peer.close();
+    }
+  },
+);
 
 it("delivers duplicate acknowledgements only to their origin and removes disposed subscriptions", async () => {
   const { stub, chat } = await readyHost();

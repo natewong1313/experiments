@@ -1,0 +1,54 @@
+{
+  "name": "@experiments/agent-host-example-web",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "wrangler-dev-linux --vite --port 3000",
+    "build": "vite build",
+    "preview": "pnpm run build && vite preview",
+    "deploy": "pnpm run build && wrangler deploy",
+    "cf-typegen": "wrangler types --include-runtime=false --strict-vars=false",
+    "generate-routes": "tsr generate",
+    "check-types": "tsr generate && wrangler types --include-runtime=false --strict-vars=false && tsc --noEmit",
+    "lint": "oxlint --deny-warnings --type-aware src vite.config.ts"
+  },
+  "dependencies": {
+    "@cloudflare/kumo": "^2.14.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-devtools": "0.10.13",
+    "@tanstack/react-router": "1.170.41",
+    "@tanstack/react-router-devtools": "1.167.2",
+    "@tanstack/react-start": "1.168.60",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.18",
+    "@experiments/agent-host": "workspace:*",
+    "@experiments/harness-container": "workspace:*",
+    "@microsoft/agent-host-protocol": "0.9.0",
+    "@experiments/protocol-schemas": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.62.5",
+    "@experiments/oxlint-config": "workspace:*",
+    "@experiments/scripts": "workspace:*",
+    "@experiments/typescript-config": "workspace:*",
+    "@tailwindcss/typography": "^0.5.16",
+    "@tanstack/devtools-vite": "0.8.5",
+    "@tanstack/router-cli": "1.167.40",
+    "@types/node": "26.4.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "oxlint": "1.78.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2",
+    "vite": "^8.0.0",
+    "wrangler": "4.147.0",
+    "@cloudflare/workers-types": "5.20260819.1"
+  }
+}

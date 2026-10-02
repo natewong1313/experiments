@@ -154,6 +154,8 @@ class AgentConnections {
 
       socket.accept();
 
+      console.log("Initializing", record.acpSession);
+
       const initialized = InitializeResponseSchema.parse(
         await withDeadline(
           connection.initialize(
@@ -185,6 +187,8 @@ class AgentConnections {
       });
 
       if (sessionId === null) {
+        console.log("new session", record.acpSession);
+
         const session = NewSessionResponseSchema.parse(
           await withDeadline(
             connection.newSession(options),
@@ -200,6 +204,8 @@ class AgentConnections {
         if (initialized.agentCapabilities?.loadSession !== true) {
           throw new Error("Agent cannot reopen this conversation");
         }
+
+        console.log("loading session", record.acpSession);
 
         LoadSessionResponseSchema.parse(
           await withDeadline(

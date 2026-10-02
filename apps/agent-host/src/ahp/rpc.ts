@@ -188,7 +188,9 @@ class AhpRpc {
       );
     }
 
-    const subscriptions = input.initialSubscriptions ?? [];
+    const subscriptions = (input.initialSubscriptions ?? []).filter(
+      (channel) => channel === ROOT || this.store.lookup(channel) !== null,
+    );
 
     const snapshots = subscriptions.map((channel) =>
       this.store.snapshot(channel),
@@ -206,13 +208,6 @@ class AhpRpc {
   }
 
   private reconnect(socket: WebSocket, params: JsonValue): RpcResult {
-    if (this.clients.connection(socket).phase !== "new") {
-      throw new ProtocolError(
-        RpcCodes.request,
-        "Connection is already initialized",
-      );
-    }
-
     const input = parseHostParams(ReconnectParamsSchema, params);
 
     const available = input.subscriptions.filter(
