@@ -1,4 +1,5 @@
 import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
+import * as z from "zod";
 import {
   AcpMessageSchema,
   AcpOutboundMessageSchema,
@@ -11,20 +12,22 @@ import {
 
 function websocketStream(socket: WebSocket): Stream {
   let ended = false;
+
   const readable: ReadableStream<AnyMessage> = new ReadableStream({
     start(controller): void {
       socket.addEventListener("message", (event) => {
         if (ended) {
           return;
         }
+
         try {
-          if (
-            typeof event.data !== "string" ||
-            new TextEncoder().encode(event.data).byteLength > MAX_FRAME_BYTES
-          ) {
+          const text = z.string().parse(event.data);
+
+          if (new TextEncoder().encode(text).byteLength > MAX_FRAME_BYTES) {
             throw new Error("Invalid ACP WebSocket frame");
           }
-          const value: unknown = JSON.parse(event.data);
+
+          const value: unknown = JSON.parse(text);
           controller.enqueue(AcpMessageSchema.parse(value));
         } catch (error) {
           ended = true;
@@ -50,11 +53,13 @@ function websocketStream(socket: WebSocket): Stream {
       socket.close(NORMAL_CLOSE, "Host released agent");
     },
   });
+
   const writable: WritableStream<AnyMessage> = new WritableStream({
     write(message): void {
       if (socket.readyState !== WebSocket.OPEN) {
         throw new Error("Agent connection is closed");
       }
+
       const parsed = AcpOutboundMessageSchema.parse(message);
       socket.send(JSON.stringify(parsed));
     },
@@ -65,6 +70,7 @@ function websocketStream(socket: WebSocket): Stream {
       socket.close(FAILED_CONNECTION_CLOSE, "ACP stream aborted");
     },
   });
+
   return { readable, writable };
 }
 

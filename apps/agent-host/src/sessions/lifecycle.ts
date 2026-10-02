@@ -45,25 +45,30 @@ class SessionLifecycle {
   create(input: CreateSessionParams): void {
     const { provider } = this.config.agent;
     const directory = workingDirectory(this.config.cwd);
+
     if ((input.provider ?? provider) !== provider) {
       throw new ProtocolError(
         RpcCodes.providerMissing,
         "Provider does not exist",
       );
     }
+
     if (
       input.workingDirectories?.some((candidate) => candidate !== directory) ===
       true
     ) {
       throw new ProtocolError(RpcCodes.params, `This agent uses ${directory}`);
     }
+
     const sessionKey = `${this.hostId}/${crypto.randomUUID()}`;
+
     const publication = this.store.create({
       uri: input.channel,
       sessionKey,
       provider,
       workingDirectory: directory,
     });
+
     this.clients.broadcast({ actions: publication.actions });
     this.clients.notify(ROOT, "root/sessionAdded", {
       summary: publication.summary,
@@ -74,9 +79,11 @@ class SessionLifecycle {
 
   async dispose(channel: string): Promise<void> {
     const record = this.store.require(channel);
+
     if (channel !== record.uri) {
       throw new ProtocolError(RpcCodes.params, "Dispose the session channel");
     }
+
     this.clients.broadcast(this.store.remove(record.uri));
     this.clients.notify(ROOT, "root/sessionRemoved", { session: record.uri });
     this.clients.dropChannels([record.uri, record.chatUri]);
@@ -97,23 +104,31 @@ class SessionLifecycle {
 
   private async prepareSession(original: LiveSession): Promise<void> {
     const { uri } = original;
+
     try {
       const agent = await this.agents.get(original);
       const current = this.store.lookup(uri);
+
       if (!current) {
         await this.agents.release(original);
+
         return;
       }
+
       if (current.sessionKey !== original.sessionKey) {
         return;
       }
+
       this.store.bindAgent(uri, agent.sessionId);
       this.publish(uri, { type: "session/ready" });
     } catch (error) {
       if (this.store.lookup(uri)?.sessionKey === original.sessionKey) {
+        const failure =
+          error instanceof Error ? error : new Error("Agent operation failed");
+
         this.publish(uri, {
           type: "session/creationFailed",
-          error: { errorType: "agent", message: errorMessage(error) },
+          error: { errorType: "agent", message: errorMessage(failure) },
         });
       }
     }

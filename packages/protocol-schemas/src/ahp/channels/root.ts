@@ -81,9 +81,13 @@ const RootActionSchema = z.discriminatedUnion("type", [
 ]);
 
 type SessionModelInfo = z.output<typeof SessionModelInfoSchema>;
+
 type AgentInfo = z.output<typeof AgentInfoSchema>;
+
 type RootConfigState = z.output<typeof RootConfigStateSchema>;
+
 type RootState = z.output<typeof RootStateSchema>;
+
 type RootAction = z.output<typeof RootActionSchema>;
 
 export {

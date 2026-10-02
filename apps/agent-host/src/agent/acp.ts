@@ -52,27 +52,35 @@ class AgentConnections {
 
   async get(record: AgentBinding): Promise<AgentConversation> {
     const cached = this.sessions.get(record.sessionKey);
+
     if (cached) {
       const agent = await cached;
+
       if (!agent.closed) {
         return agent;
       }
+
       if (this.sessions.get(record.sessionKey) === cached) {
         this.sessions.delete(record.sessionKey);
       }
     }
+
     const pending = this.sessions.get(record.sessionKey) ?? this.open(record);
     this.sessions.set(record.sessionKey, pending);
+
     try {
       const agent = await pending;
+
       if (agent.closed) {
         throw new Error("Agent connection closed during setup");
       }
+
       return agent;
     } catch (error) {
       if (this.sessions.get(record.sessionKey) === pending) {
         this.sessions.delete(record.sessionKey);
       }
+
       throw error;
     }
   }
@@ -80,9 +88,11 @@ class AgentConnections {
   async release(record: SessionGeneration): Promise<void> {
     const pending = this.sessions.get(record.sessionKey);
     this.sessions.delete(record.sessionKey);
+
     if (!pending) {
       return;
     }
+
     try {
       const agent = await pending;
       agent.release();
@@ -93,16 +103,19 @@ class AgentConnections {
     options: AcpConnectionOptions,
   ): Promise<WebSocket> {
     const socket = await this.connect(options);
+
     if (options.signal.aborted) {
       socket.accept();
       socket.close(FAILED_CONNECTION_CLOSE, "Agent connection timed out");
       options.signal.throwIfAborted();
     }
+
     return socket;
   }
 
   private async open(record: AgentBinding): Promise<AgentConversation> {
     const controller = new AbortController();
+
     const socket = await withDeadline(
       this.connectSocket({
         sessionKey: record.sessionKey,
@@ -113,12 +126,15 @@ class AgentConnections {
         controller.abort();
       },
     );
+
     let loading = true;
     let sessionId = record.acpSession;
+
     const client: Client = {
       sessionUpdate: async (notification): Promise<void> => {
         if (!loading && notification.sessionId === sessionId) {
           const parsed = SessionNotificationSchema.safeParse(notification);
+
           if (parsed.success) {
             this.updates(record, parsed.data);
           }
@@ -129,12 +145,15 @@ class AgentConnections {
           outcome: { outcome: "cancelled" },
         }),
     };
+
     try {
       const connection = new ClientSideConnection(
         () => client,
         websocketStream(socket),
       );
+
       socket.accept();
+
       const initialized = InitializeResponseSchema.parse(
         await withDeadline(
           connection.initialize(
@@ -149,17 +168,22 @@ class AgentConnections {
           },
         ),
       );
+
       if (initialized.protocolVersion !== PROTOCOL_VERSION) {
         throw new Error("Unsupported agent protocol version");
       }
+
       const [directory] = record.session.workingDirectories ?? [];
+
       if (directory === void 0) {
         throw new Error("Session working directory is missing");
       }
+
       const options = NewSessionRequestSchema.parse({
         cwd: workingDirectoryPath(directory),
         mcpServers: [],
       });
+
       if (sessionId === null) {
         const session = NewSessionResponseSchema.parse(
           await withDeadline(
@@ -170,11 +194,13 @@ class AgentConnections {
             },
           ),
         );
+
         ({ sessionId } = session);
       } else {
         if (initialized.agentCapabilities?.loadSession !== true) {
           throw new Error("Agent cannot reopen this conversation");
         }
+
         LoadSessionResponseSchema.parse(
           await withDeadline(
             connection.loadSession(
@@ -187,7 +213,9 @@ class AgentConnections {
           ),
         );
       }
+
       loading = false;
+
       return new AgentConversation({ connection, socket, sessionId });
     } catch (error) {
       socket.close(FAILED_CONNECTION_CLOSE, "Agent setup failed");

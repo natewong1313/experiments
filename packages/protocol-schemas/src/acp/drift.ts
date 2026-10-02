@@ -38,6 +38,7 @@ type KnownFields<T> = {
     K in keyof T as string extends K ? never : number extends K ? never : K
   ]: T[K];
 };
+
 type MatchingVariant<T, U> = U extends { sessionUpdate: infer Kind }
   ? Extract<T, { sessionUpdate: Kind }>
   : U extends { type: infer Kind }
@@ -45,6 +46,7 @@ type MatchingVariant<T, U> = U extends { sessionUpdate: infer Kind }
     : U extends { outcome: infer Kind extends string }
       ? Extract<T, { outcome: Kind }>
       : T;
+
 type FieldDrift<T, U> = {
   [K in keyof KnownFields<U>]-?: K extends keyof T
     ? Equal<
@@ -55,6 +57,7 @@ type FieldDrift<T, U> = {
       : false
     : false;
 }[keyof KnownFields<U>];
+
 type ValueDrift<T, U> = U extends (infer Item)[]
   ? [T] extends [(infer UpstreamItem)[]]
     ? U extends []
@@ -66,6 +69,7 @@ type ValueDrift<T, U> = U extends (infer Item)[]
       ? FieldDrift<MatchingVariant<T, U>, U>
       : false
     : Equal<T, U>;
+
 type Drift<T, U> =
   Equal<T, U> extends true
     ? true
@@ -77,6 +81,7 @@ type Drift<T, U> =
         ? true
         : false
       : false;
+
 type Expect<T extends true> = T;
 
 type _AcpDrift = [

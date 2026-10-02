@@ -5,6 +5,7 @@ import type { drizzle } from "drizzle-orm/durable-sqlite";
 import type { ChatState, Turn } from "@experiments/protocol-schemas/ahp";
 
 const INITIAL_ORDINAL = -1;
+
 type Database = ReturnType<typeof drizzle>;
 
 class ChatStore {
@@ -22,23 +23,28 @@ class ChatStore {
 
   snapshot(uri: string): ChatState {
     const chat = this.live(uri);
+
     const rows = this.db
       .select({ turnId: turns.turnId })
       .from(turns)
       .where(eq(turns.chatUri, uri))
       .orderBy(asc(turns.ordinal))
       .all();
+
     const history = rows.map((row) => this.readTurn(uri, row.turnId));
+
     return { ...chat, turns: history };
   }
 
   hasTurn(uri: string, turnId: string): boolean {
     const match = and(eq(turns.chatUri, uri), eq(turns.turnId, turnId));
+
     const row = this.db
       .select({ turnId: turns.turnId })
       .from(turns)
       .where(match)
       .get();
+
     return row !== void 0;
   }
 
@@ -51,7 +57,9 @@ class ChatStore {
       .from(turns)
       .where(eq(turns.chatUri, uri))
       .get();
+
     let ordinal = highest?.ordinal ?? INITIAL_ORDINAL;
+
     for (const turn of chat.turns) {
       ordinal += 1;
       this.db
@@ -60,6 +68,7 @@ class ChatStore {
         .run();
       this.documents.write(uri, turn.id, turn);
     }
+
     this.documents.write("chat", uri, { ...chat, turns: [] });
   }
 

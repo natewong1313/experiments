@@ -90,9 +90,13 @@ const AutomationRunActionSchema = z.discriminatedUnion("type", [
 ]);
 
 type AutomationRunLifecycle = z.output<typeof AutomationRunLifecycleSchema>;
+
 type AutomationRunOrigin = z.output<typeof AutomationRunOriginSchema>;
+
 type AutomationRunState = z.output<typeof AutomationRunStateSchema>;
+
 type AutomationRunSummary = z.output<typeof AutomationRunSummarySchema>;
+
 type AutomationRunAction = z.output<typeof AutomationRunActionSchema>;
 
 export {

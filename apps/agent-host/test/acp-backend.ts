@@ -7,7 +7,9 @@ import type { Agent } from "@agentclientprotocol/sdk";
 import { websocketStream } from "../src/agent/websocket-stream";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
+
 const STATUS_UNAUTHORIZED = 401;
+
 type BackendEvent =
   | { kind: "connect"; sessionKey: string }
   | { kind: "new" | "load"; cwd: string; sessionId: string }
@@ -26,9 +28,11 @@ class AcpBackend extends DurableObject {
 
   async closeConnections(): Promise<void> {
     const connections = [...this.connections.values()];
+
     for (const socket of this.connections.keys()) {
       socket.close();
     }
+
     await Promise.all(connections.map((connection) => connection.closed));
   }
 
@@ -40,12 +44,16 @@ class AcpBackend extends DurableObject {
     if (request.headers.get("Authorization") !== "Bearer test-token") {
       return new Response("Unauthorized", { status: STATUS_UNAUTHORIZED });
     }
+
     const sessionKey = request.headers.get("X-Session-Key");
+
     if (sessionKey === null) {
       throw new Error("Missing session key");
     }
+
     await this.record({ kind: "connect", sessionKey });
     const { 0: client, 1: server } = new WebSocketPair();
+
     const connection = new AgentSideConnection(
       (): Agent => ({
         initialize: async () => ({
@@ -59,10 +67,12 @@ class AcpBackend extends DurableObject {
         newSession: async ({ cwd }) => {
           const sessionId = crypto.randomUUID();
           await this.record({ kind: "new", cwd, sessionId });
+
           return { sessionId };
         },
         loadSession: async ({ cwd, sessionId }) => {
           await this.record({ kind: "load", cwd, sessionId });
+
           return {};
         },
         prompt: async ({ sessionId }) => {
@@ -74,17 +84,20 @@ class AcpBackend extends DurableObject {
               content: { type: "text", text: "Custom reply" },
             },
           });
+
           return { stopReason: "end_turn" };
         },
         cancel: async (): Promise<void> => {},
       }),
       websocketStream(server),
     );
+
     server.accept();
     this.connections.set(server, connection);
     server.addEventListener("close", () => {
       this.connections.delete(server);
     });
+
     return new Response(null, {
       status: STATUS_SWITCHING_PROTOCOLS,
       webSocket: client,

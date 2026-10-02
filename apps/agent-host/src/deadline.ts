@@ -5,12 +5,14 @@ async function withDeadline<T>(
   abort: () => void,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+
   const timeout: Promise<never> = new Promise((_resolve, reject) => {
     timer = setTimeout(() => {
       abort();
       reject(new Error("Agent operation timed out"));
     }, timeoutMs);
   });
+
   try {
     return await Promise.race([operation, timeout]);
   } finally {

@@ -44,28 +44,36 @@ type UnionDrift<Upstream, Ours> = [Upstream] extends [Ours] ? true : false;
 type Expect<T extends true> = T;
 
 type MessageDrift = Drift<Message, z.output<typeof MessageSchema>>;
+
 type MessageAttachmentDrift = UnionDrift<
   MessageAttachment,
   z.output<typeof MessageAttachmentSchema>
 >;
+
 type ChatInputRequestDrift = Drift<
   ChatInputRequest,
   z.output<typeof ChatInputRequestSchema>
 >;
+
 type ToolCallStateDrift = UnionDrift<
   ToolCallState,
   z.output<typeof ToolCallStateSchema>
 >;
+
 type ToolResultContentDrift = UnionDrift<
   ToolResultContent,
   z.output<typeof ToolResultContentSchema>
 >;
+
 type ResponsePartDrift = UnionDrift<
   ResponsePart,
   z.output<typeof ResponsePartSchema>
 >;
+
 type ChatSummaryDrift = Drift<ChatSummary, z.output<typeof ChatSummarySchema>>;
+
 type TurnDrift = Drift<Turn, z.output<typeof TurnSchema>>;
+
 type ChatStateDrift = Drift<ChatState, z.output<typeof ChatStateSchema>>;
 
 type _Chat = [

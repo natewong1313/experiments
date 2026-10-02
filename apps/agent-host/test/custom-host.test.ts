@@ -6,9 +6,13 @@ import { HostStore } from "../src/state/store";
 import { Peer } from "./peer";
 
 const ROOT = "ahp-root://";
+
 const SESSION = "ahp-session:/custom";
+
 const DIRECTORY = "file:///custom%20workspace/%25project%231";
+
 const CWD = "/custom workspace/%project#1";
+
 const SECOND_SEQUENCE = 2;
 
 async function openHost(): Promise<{
@@ -16,19 +20,25 @@ async function openHost(): Promise<{
   peer: Peer;
 }> {
   const stub = env.CUSTOM_HOST.get(env.CUSTOM_HOST.newUniqueId());
+
   const response = await stub.fetch("https://host/ahp", {
     headers: { Upgrade: "websocket" },
   });
+
   if (!response.webSocket) {
     throw new Error("Missing host WebSocket");
   }
+
   const peer = new Peer(response.webSocket);
+
   const initialized = await peer.request("initialize", {
     channel: ROOT,
     clientId: "custom-client",
     protocolVersions: [PROTOCOL_VERSION],
   });
+
   expect(initialized).toMatchObject({ defaultDirectory: DIRECTORY });
+
   return { stub, peer };
 }
 
@@ -37,6 +47,7 @@ async function recordFor(
 ): Promise<ReturnType<HostStore["require"]>> {
   return await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
+
     return new HostStore(state).require(SESSION);
   });
 }
@@ -50,9 +61,11 @@ async function create(
     provider: "custom",
     workingDirectories: [DIRECTORY],
   });
+
   return await vi.waitFor(async () => {
     const record = await recordFor(stub);
     expect(record.session.lifecycle).toBe("ready");
+
     return record;
   });
 }
@@ -72,6 +85,7 @@ function prompt(peer: Peer, chat: string, clientSeq = 1): void {
 
 it("uses subclass metadata, credentials, session identity, and working directory with an ACP backend", async () => {
   const { stub, peer } = await openHost();
+
   try {
     expect(await peer.request("subscribe", { channel: ROOT })).toMatchObject({
       snapshot: {
@@ -124,13 +138,17 @@ it("uses subclass metadata, credentials, session identity, and working directory
 
 it("reopens the same ACP conversation and session key after host eviction", async () => {
   const { stub, peer } = await openHost();
+
   try {
     const original = await create(peer, stub);
     const backend = env.ACP_BACKEND.getByName(original.sessionKey);
+
     const sequence = await runInDurableObject(stub, (instance, state) => {
       expect(instance).toBeDefined();
+
       return new HostStore(state).sequence;
     });
+
     await backend.closeConnections();
     await evictDurableObject(stub);
     const reopened = await recordFor(stub);
@@ -143,12 +161,14 @@ it("reopens the same ACP conversation and session key after host eviction", asyn
       expect(store.snapshot(ROOT).state).toMatchObject({
         agents: [{ provider: "custom" }],
       });
+
       const row = state.storage.sql
         .exec<{ container: string }>(
           "SELECT container FROM sessions WHERE uri = ?",
           SESSION,
         )
         .one();
+
       expect(row.container).toBe(original.sessionKey);
     });
     await peer.request("subscribe", { channel: original.chatUri });
@@ -173,6 +193,7 @@ it("reopens the same ACP conversation and session key after host eviction", asyn
 
 it("reports failure without creating a replacement conversation when loading is unsupported", async () => {
   const { stub, peer } = await openHost();
+
   try {
     const original = await create(peer, stub);
     const backend = env.ACP_BACKEND.getByName(original.sessionKey);

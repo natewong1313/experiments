@@ -10,7 +10,9 @@ import {
 import type { LiveSession } from "../sessions/record";
 
 const ChatChangesSchema = ChatSummarySchema.omit({ resource: true });
+
 const SESSION_FLAGS = 96;
+
 const ACTIVITY_MASK = 31;
 
 function chatSummary(chat: ChatState): ChatSummary {
@@ -27,6 +29,7 @@ function sessionSummary(record: {
 }): SessionSummary {
   const { provider, title, status, workingDirectories } = record.session;
   const chatStatus = record.session.chats.at(0)?.status ?? 0;
+
   return {
     resource: record.uri,
     provider,
@@ -47,6 +50,7 @@ function projectChat(
   if (deepEqual(summary, record.session.chats[0])) {
     return;
   }
+
   return {
     type: "session/chatUpdated",
     chat: record.chatUri,

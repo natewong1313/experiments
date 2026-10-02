@@ -17,6 +17,7 @@ describe("jsonrpc frames", () => {
       id: 1,
       result: {},
     });
+
     expect(parsed.success).toBe(true);
   });
 
@@ -26,6 +27,7 @@ describe("jsonrpc frames", () => {
       id: 7,
       error: { code: -32_001, message: "Session not found" },
     });
+
     expect(parsed.success).toBe(true);
   });
 
@@ -36,6 +38,7 @@ describe("jsonrpc frames", () => {
       result: {},
       error: { code: -32_001, message: "Session not found" },
     });
+
     expect(parsed.success).toBe(false);
   });
 
@@ -45,6 +48,7 @@ describe("jsonrpc frames", () => {
       id: 1,
       result: {},
     });
+
     expect(parsed.success).toBe(false);
   });
 
@@ -54,13 +58,16 @@ describe("jsonrpc frames", () => {
       method: "action",
       params: {},
     });
+
     expect(notification.success).toBe(true);
+
     const reply = JsonRpcNotificationSchema.safeParse({
       jsonrpc: "2.0",
       id: 1,
       method: "action",
       params: {},
     });
+
     expect(reply.success).toBe(false);
   });
 });
@@ -87,6 +94,7 @@ describe("snapshot and envelope strictness", () => {
       ...rootSnapshot,
       state: { agents: [], undeclared: "value" },
     });
+
     expect(parsed.success).toBe(false);
   });
 
@@ -101,6 +109,7 @@ describe("snapshot and envelope strictness", () => {
       fromSeq: 0,
       state: { something: "else" },
     });
+
     expect(parsed.success).toBe(false);
   });
 
@@ -110,6 +119,7 @@ describe("snapshot and envelope strictness", () => {
       serverSeq: 5,
       action: { type: "session/titleChanged", title: "hello" },
     });
+
     expect(parsed.success).toBe(true);
   });
 
@@ -119,6 +129,7 @@ describe("snapshot and envelope strictness", () => {
       serverSeq: 5,
       action: { type: "session/notARealAction", title: "hello" },
     });
+
     expect(parsed.success).toBe(false);
   });
 
@@ -128,6 +139,7 @@ describe("snapshot and envelope strictness", () => {
       serverSeq: 5,
       action: { type: "session/titleChanged" },
     });
+
     expect(parsed.success).toBe(false);
   });
 
@@ -139,6 +151,7 @@ describe("snapshot and envelope strictness", () => {
       rejectionReason: "denied",
       unexpected: true,
     });
+
     expect(parsed.success).toBe(false);
   });
 });
@@ -161,6 +174,7 @@ describe("channel states", () => {
       lifecycle: { status: "running" },
       claim: { kind: "client", clientId: "cli" },
     });
+
     expect(parsed.success).toBe(true);
   });
 
@@ -176,6 +190,7 @@ describe("channel states", () => {
         },
       ],
     });
+
     expect(parsed.success).toBe(true);
   });
 
@@ -186,6 +201,7 @@ describe("channel states", () => {
       lifecycle: { status: "running" },
       claim: { kind: "robot", clientId: "cli" },
     });
+
     expect(parsed.success).toBe(false);
   });
 });
@@ -200,6 +216,7 @@ describe("command results", () => {
       ],
       telemetry: { logs: "ahp-otlp:/logs" },
     });
+
     expect(parsed.success).toBe(true);
   });
 
@@ -211,6 +228,7 @@ describe("command results", () => {
       mtime: "2026-01-15T12:34:56.789Z",
       etag: "W/5-abc123",
     });
+
     expect(parsed.success).toBe(true);
   });
 
@@ -222,6 +240,7 @@ describe("command results", () => {
       telemetry: { logs: "ahp-otlp:/logs/{level}" },
       createdAt: "not-a-date",
     });
+
     expect(parsed.success).toBe(false);
   });
 });

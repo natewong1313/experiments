@@ -21,7 +21,9 @@ const ResourceWatchActionSchema = z.discriminatedUnion("type", [
 ]);
 
 type ResourceWatchState = z.output<typeof ResourceWatchStateSchema>;
+
 type ResourceChange = z.output<typeof ResourceChangeSchema>;
+
 type ResourceWatchAction = z.output<typeof ResourceWatchActionSchema>;
 
 export {

@@ -22,14 +22,21 @@ import { host, sessions } from "../storage/schema";
 import type { InferSelectModel } from "drizzle-orm";
 
 const SEQUENCE_INCREMENT = 1;
+
 const HOST_ID = 1;
+
 type Database = ReturnType<typeof drizzle>;
+
 type HostRow = InferSelectModel<typeof host>;
+
 type SessionRow = InferSelectModel<typeof sessions>;
+
 type Publication = {
   actions: [ActionEnvelope, ...ActionEnvelope[]];
   summary?: SessionSummary;
 };
+
+type SessionPage = { items: SessionSummary[]; nextCursor?: string };
 
 class HostStore {
   private readonly storage: DurableObjectStorage;
@@ -64,20 +71,19 @@ class HostStore {
       .map((row) => sessionSummary(row));
   }
 
-  list(input: { cursor?: string; limit: number }): {
-    items: SessionSummary[];
-    nextCursor?: string;
-  } {
+  list(input: { cursor?: string; limit: number }): SessionPage {
     if (input.cursor !== void 0) {
       const cursor = this.db
         .select({ uri: sessions.uri })
         .from(sessions)
         .where(eq(sessions.uri, input.cursor))
         .get();
+
       if (!cursor) {
         throw new ProtocolError(RpcCodes.params, "Invalid session cursor");
       }
     }
+
     const rows = this.db
       .select()
       .from(sessions)
@@ -85,32 +91,41 @@ class HostStore {
       .orderBy(asc(sessions.uri))
       .limit(input.limit + SEQUENCE_INCREMENT)
       .all();
+
     const page = rows.slice(0, input.limit);
     const last = page.at(-SEQUENCE_INCREMENT);
-    return {
+
+    const result: SessionPage = {
       items: page.map((row) => sessionSummary(row)),
-      ...(last !== void 0 && rows.length > input.limit
-        ? { nextCursor: last.uri }
-        : {}),
     };
+
+    if (last !== void 0 && rows.length > input.limit) {
+      result.nextCursor = last.uri;
+    }
+
+    return result;
   }
 
   lookup(channel: string): LiveSession | null {
     const row = this.entry(channel);
+
     if (!row) {
       return null;
     }
+
     return { ...row, chat: this.chats.live(row.chatUri) };
   }
 
   require(channel: string): LiveSession {
     const record = this.lookup(channel);
+
     if (!record) {
       throw new ProtocolError(
         RpcCodes.sessionMissing,
         "Session does not exist",
       );
     }
+
     return record;
   }
 
@@ -120,18 +135,22 @@ class HostStore {
 
   snapshot(channel: string): Snapshot {
     let state: Snapshot["state"];
+
     if (channel === ROOT) {
       state = this.hostRow().root;
     } else {
       const row = this.entry(channel);
+
       if (!row) {
         throw new ProtocolError(
           RpcCodes.sessionMissing,
           "Session does not exist",
         );
       }
+
       state = row.uri === channel ? row.session : this.chats.snapshot(channel);
     }
+
     return { resource: channel, state, fromSeq: this.sequence };
   }
 
@@ -141,6 +160,7 @@ class HostStore {
     if (deepEqual(this.hostRow().root.agents, agents)) {
       return null;
     }
+
     return this.apply(ROOT, { type: "root/agentsChanged", agents });
   }
 
@@ -162,14 +182,17 @@ class HostStore {
           "Session already exists",
         );
       }
+
       const now = new Date().toISOString();
       const chatUri = `ahp-chat:/${crypto.randomUUID()}`;
+
       const summary = {
         resource: chatUri,
         title: "Chat",
         status: IDLE,
         modifiedAt: now,
       };
+
       const session = {
         provider,
         title: "New session",
@@ -180,6 +203,7 @@ class HostStore {
         chats: [summary],
         defaultChat: chatUri,
       };
+
       const record: LiveSession = {
         uri,
         chatUri,
@@ -190,6 +214,7 @@ class HostStore {
         session,
         chat: { ...summary, turns: [] },
       };
+
       this.db
         .insert(sessions)
         .values({
@@ -203,6 +228,7 @@ class HostStore {
         })
         .run();
       this.chats.save(chatUri, record.chat);
+
       return {
         actions: [this.activeSessionsChanged()],
         summary: sessionSummary(record),
@@ -217,12 +243,14 @@ class HostStore {
         .from(sessions)
         .where(eq(sessions.uri, uri))
         .get();
+
       if (!row) {
         throw new ProtocolError(
           RpcCodes.sessionMissing,
           "Session does not exist",
         );
       }
+
       this.db
         .update(sessions)
         .set({ acpSession })
@@ -238,14 +266,17 @@ class HostStore {
         .from(sessions)
         .where(eq(sessions.uri, uri))
         .get();
+
       if (!row) {
         throw new ProtocolError(
           RpcCodes.sessionMissing,
           "Session does not exist",
         );
       }
+
       this.db.delete(sessions).where(eq(sessions.uri, uri)).run();
       this.chats.remove(row.chatUri);
+
       return { actions: [this.activeSessionsChanged()] };
     });
   }
@@ -255,8 +286,10 @@ class HostStore {
       if (channel === ROOT) {
         const next = reduceRoot(this.hostRow().root, action);
         this.db.update(host).set({ root: next }).where(eq(host.id, 1)).run();
+
         return { actions: [this.journal.append(channel, action)] };
       }
+
       return this.transition(this.require(channel), channel, action);
     });
   }
@@ -281,6 +314,7 @@ class HostStore {
   }): Publication {
     return this.storage.transactionSync(() => {
       const { record, channel, action, origin, frame, rejection } = input;
+
       const publication: Publication =
         rejection === void 0
           ? this.transition(record, channel, action, origin)
@@ -295,8 +329,10 @@ class HostStore {
                 },
               ],
             };
+
       const [envelope] = publication.actions;
       this.journal.remember({ origin, frame, envelope });
+
       return publication;
     });
   }
@@ -310,7 +346,9 @@ class HostStore {
     const published: [ActionEnvelope, ...ActionEnvelope[]] = [
       this.journal.append(channel, action, origin),
     ];
+
     let next: LiveSession;
+
     if (channel === record.uri) {
       next = { ...record, session: reduceSession(record.session, action) };
     } else {
@@ -318,6 +356,7 @@ class HostStore {
       this.chats.save(record.chatUri, chat);
       next = { ...record, chat: { ...chat, turns: [] } };
       const projected = projectChat(record, chat);
+
       if (projected) {
         next = { ...next, session: reduceSession(record.session, projected) };
         published.push(this.journal.append(record.uri, projected));
@@ -333,33 +372,43 @@ class HostStore {
         .where(eq(sessions.uri, record.uri))
         .run();
     }
-    return {
-      actions: published,
-      ...(changed ? { summary: sessionSummary(next) } : {}),
-    };
+
+    const publication: Publication = { actions: published };
+
+    if (changed) {
+      publication.summary = sessionSummary(next);
+    }
+
+    return publication;
   }
 
   private activeSessionsChanged(): ActionEnvelope {
     const row = this.db.select({ value: count() }).from(sessions).get();
+
     const action: StateAction = {
       type: "root/activeSessionsChanged",
       activeSessions: row?.value ?? 0,
     };
+
     const next = reduceRoot(this.hostRow().root, action);
     this.db.update(host).set({ root: next }).where(eq(host.id, 1)).run();
+
     return this.journal.append(ROOT, action);
   }
 
   private entry(channel: string): SessionRow | undefined {
     const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
+
     return this.db.select().from(sessions).where(match).get();
   }
 
   private hostRow(): HostRow {
     const row = this.db.select().from(host).where(eq(host.id, HOST_ID)).get();
+
     if (!row) {
       throw new Error("Host storage is not initialized");
     }
+
     return row;
   }
 }

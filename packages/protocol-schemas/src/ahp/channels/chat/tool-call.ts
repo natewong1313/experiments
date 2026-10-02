@@ -162,22 +162,33 @@ const ToolCallStateSchema = z.discriminatedUnion("status", [
 ]);
 
 type ToolInput = z.output<typeof ToolInputSchema>;
+
 type ToolCallContributor = z.output<typeof ToolCallContributorSchema>;
+
 type ToolCallRiskAssessment = z.output<typeof ToolCallRiskAssessmentSchema>;
+
 type ConfirmationOption = z.output<typeof ConfirmationOptionSchema>;
+
 type ToolResultContent = z.output<typeof ToolResultContentSchema>;
+
 type ToolCallResult = z.output<typeof ToolCallResultSchema>;
+
 type ToolCallState = z.output<typeof ToolCallStateSchema>;
+
 type ToolCallRunningState = z.output<typeof ToolCallRunningStateSchema>;
+
 type ToolCallAuthRequiredState = z.output<
   typeof ToolCallAuthRequiredStateSchema
 >;
+
 type ToolCallPendingConfirmationState = z.output<
   typeof ToolCallPendingConfirmationStateSchema
 >;
+
 type ToolCallPendingResultConfirmationState = z.output<
   typeof ToolCallPendingResultConfirmationStateSchema
 >;
+
 type TerminalCommandResult = z.output<typeof TerminalCommandResultSchema>;
 
 export {

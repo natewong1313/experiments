@@ -26,24 +26,29 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
       await Promise.resolve();
       const config = AgentConfigSchema.parse(this.getAgentConfig());
       const publication = store.configureAgent(config.agent);
+
       if (publication) {
         this.clients.broadcast(publication);
       }
+
       const agents = new AgentConnections({
         connect: (options): Promise<WebSocket> => this.connectAcp(options),
         updates: (identity, notification): void => {
           turns.onAgentUpdate(identity, notification);
         },
       });
+
       function waitUntil(work: Promise<void>): void {
         ctx.waitUntil(work);
       }
+
       const turns = new TurnExecution({
         store,
         agents,
         clients: this.clients,
         waitUntil,
       });
+
       const sessions = new SessionLifecycle({
         store,
         agents,
@@ -52,11 +57,13 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
         config,
         waitUntil,
       });
+
       const dispatcher = new ActionDispatch({
         store,
         clients: this.clients,
         turns,
       });
+
       const rpc = new AhpRpc({
         store,
         clients: this.clients,
@@ -64,11 +71,13 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
         dispatcher,
         defaultDirectory: workingDirectory(config.cwd),
       });
+
       for (const summary of store.sessions()) {
         const record = store.require(summary.resource);
         turns.recover(record);
         sessions.recover(record);
       }
+
       return rpc;
     });
   }
@@ -80,6 +89,7 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     await this.rpc;
+
     return this.clients.upgrade(request);
   }
 

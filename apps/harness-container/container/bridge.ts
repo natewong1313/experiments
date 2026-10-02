@@ -13,10 +13,15 @@ import {
 } from "./messages.ts";
 
 const FORCE_STOP_MS = 2000;
+
 const CLOSE_INVALID_DATA = 1007;
+
 const CLOSE_BINARY = 1003;
+
 const CLOSE_AGENT_EXIT = 1011;
+
 const STATUS_CONFLICT = 409;
+
 const STATUS_UPGRADE_REQUIRED = 426;
 
 type BridgeOptions = {
@@ -30,10 +35,12 @@ function signalGroup(
   child: ChildProcessWithoutNullStreams,
   signal: NodeJS.Signals,
 ): void {
-  const { pid } = child;
-  if (typeof pid !== "number") {
+  const pid = child.pid ?? null;
+
+  if (pid === null) {
     return;
   }
+
   try {
     process.kill(-pid, signal);
   } catch (error) {
@@ -64,6 +71,7 @@ async function forwardOutput(
   socket: WebSocket,
 ): Promise<void> {
   const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+
   for await (const message of lines) {
     // eslint-disable-next-line no-await-in-loop
     await sendMessage(socket, message);
@@ -81,11 +89,14 @@ function connectAgent(
     stdio: "pipe",
     detached: true,
   });
+
   let stopping = false;
+
   function stop(): void {
     if (stopping) {
       return;
     }
+
     stopping = true;
     child.stdin.end();
     signalGroup(child, "SIGTERM");
@@ -93,6 +104,7 @@ function connectAgent(
       signalGroup(child, "SIGKILL");
     }, FORCE_STOP_MS).unref();
   }
+
   child.stderr.resume();
   child.stdin.on("error", () => {
     socket.close(CLOSE_AGENT_EXIT, "Agent input failed");
@@ -112,13 +124,17 @@ function connectAgent(
     if (stopping) {
       return;
     }
+
     if (isBinary) {
       socket.close(CLOSE_BINARY, "ACP requires text messages");
       stop();
+
       return;
     }
+
     try {
       const message = normalizeMessage(decodeFrame(data));
+
       if (!child.stdin.write(`${message}\n`)) {
         socket.pause();
       }
@@ -129,6 +145,7 @@ function connectAgent(
   });
   socket.once("close", stop);
   socket.once("error", stop);
+
   async function pumpOutput(): Promise<void> {
     try {
       await forwardOutput(child, socket);
@@ -137,15 +154,20 @@ function connectAgent(
       stop();
     }
   }
+
   void pumpOutput();
+
   return stop;
 }
 
-export function createBridge(options: BridgeOptions): {
+type Bridge = {
   server: ServerType;
   close(): Promise<void>;
-} {
+};
+
+export function createBridge(options: BridgeOptions): Bridge {
   let stopAgent: (() => void) | null = null;
+
   const sockets = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_MESSAGE_BYTES,
@@ -157,10 +179,12 @@ export function createBridge(options: BridgeOptions): {
       );
     },
   });
+
   sockets.on("connection", (socket) => {
     function release(): void {
       stopAgent = null;
     }
+
     stopAgent = connectAgent(options, socket, release);
   });
   const app = new Hono();
@@ -170,17 +194,21 @@ export function createBridge(options: BridgeOptions): {
     upgradeWebSocket(() => ({})),
     (c) => c.text("Expected a WebSocket upgrade", STATUS_UPGRADE_REQUIRED),
   );
+
   const server = createAdaptorServer({
     fetch: app.fetch,
     websocket: { server: sockets },
   });
+
   return {
     server,
     async close(): Promise<void> {
       stopAgent?.();
+
       for (const socket of sockets.clients) {
         socket.terminate();
       }
+
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {

@@ -13,6 +13,7 @@ import { AhpConnection } from "./raw";
 describe("connection lifecycle", () => {
   test("answers ping before initialize", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       const reply = await connection.request("ping", { channel: ROOT });
       expect("result" in reply).toBe(true);
@@ -25,11 +26,13 @@ describe("connection lifecycle", () => {
     "rejects %s before initialize",
     async (method) => {
       const connection = await AhpConnection.open(endpoint());
+
       try {
         const reply = await connection.request(method, {
           channel: ROOT,
           uri: "file:///nonexistent",
         });
+
         expect("error" in reply).toBe(true);
       } finally {
         await connection.close();
@@ -46,15 +49,18 @@ describe("connection lifecycle", () => {
 
   test("accepts a preferred version after an unsupported offer", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       const reply = await connection.request("initialize", {
         channel: ROOT,
         clientId: crypto.randomUUID(),
         protocolVersions: ["99.0.0", VERSION],
       });
+
       if (!("result" in reply)) {
         throw new Error("Expected a successful initialize");
       }
+
       expect(reply.result).toMatchObject({ protocolVersion: VERSION });
     } finally {
       await connection.close();
@@ -63,15 +69,18 @@ describe("connection lifecycle", () => {
 
   test("returns the unsupported version error", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       const reply = await connection.request("initialize", {
         channel: ROOT,
         clientId: crypto.randomUUID(),
         protocolVersions: ["99.0.0"],
       });
+
       if (!("error" in reply)) {
         throw new Error("Expected an unsupported-version error");
       }
+
       expect(reply.error.code).toBe(AhpErrorCodes.UnsupportedProtocolVersion);
     } finally {
       await connection.close();
@@ -80,15 +89,18 @@ describe("connection lifecycle", () => {
 
   test("advertises supportedVersions on version rejection", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       const reply = await connection.request("initialize", {
         channel: ROOT,
         clientId: crypto.randomUUID(),
         protocolVersions: ["99.0.0"],
       });
+
       if (!("error" in reply)) {
         throw new Error("Expected version rejection");
       }
+
       expect(reply.error.data).toMatchObject({
         supportedVersions: expect.any(Array),
       });
@@ -99,6 +111,7 @@ describe("connection lifecycle", () => {
 
   test("closes a connection after incompatible version negotiation", async () => {
     const connection = await AhpConnection.open(endpoint());
+
     try {
       await connection.request("initialize", {
         channel: ROOT,
@@ -137,9 +150,11 @@ describe("connection lifecycle", () => {
   }) => {
     const result = await initialized(client, [ROOT]);
     const [snapshot] = result.snapshots;
+
     if (!snapshot) {
       throw new Error("Expected a root snapshot");
     }
+
     expect(snapshot.fromSeq).toBeLessThanOrEqual(result.serverSeq);
   });
 

@@ -79,12 +79,19 @@ const ChatStateSchema = z.strictObject({
 });
 
 type ChatOrigin = z.output<typeof ChatOriginSchema>;
+
 type ChatInteractivity = z.output<typeof chatInteractivitySchema>;
+
 type SideChatSelection = z.output<typeof SideChatSelectionSchema>;
+
 type ChatSummary = z.output<typeof ChatSummarySchema>;
+
 type Turn = z.output<typeof TurnSchema>;
+
 type ActiveTurn = z.output<typeof ActiveTurnSchema>;
+
 type PendingMessage = z.output<typeof PendingMessageSchema>;
+
 type ChatState = z.output<typeof ChatStateSchema>;
 
 export {

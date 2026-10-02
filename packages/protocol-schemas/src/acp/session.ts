@@ -1,17 +1,22 @@
 import * as z from "zod";
 
 const SessionIdSchema = z.string();
+
 const NewSessionRequestSchema = z.strictObject({
   cwd: z.string(),
   mcpServers: z.tuple([]),
 });
+
 const LoadSessionRequestSchema = NewSessionRequestSchema.extend({
   sessionId: SessionIdSchema,
 });
+
 const NewSessionResponseSchema = z.looseObject({
   sessionId: SessionIdSchema,
 });
+
 const LoadSessionResponseSchema = z.looseObject({});
+
 const RequestPermissionResponseSchema = z.strictObject({
   outcome: z.strictObject({ outcome: z.literal("cancelled") }),
 });
@@ -20,6 +25,7 @@ const TextContentSchema = z.looseObject({
   type: z.literal("text"),
   text: z.string(),
 });
+
 // Non-text payloads are preserved but ignored by the host's text-only mapping.
 const ContentBlockSchema = z.discriminatedUnion("type", [
   TextContentSchema,
@@ -27,6 +33,7 @@ const ContentBlockSchema = z.discriminatedUnion("type", [
     type: z.enum(["image", "audio", "resource", "resource_link"]),
   }),
 ]);
+
 const ToolCallContentSchema = z.discriminatedUnion("type", [
   z.looseObject({
     type: z.literal("content"),
@@ -34,6 +41,7 @@ const ToolCallContentSchema = z.discriminatedUnion("type", [
   }),
   z.looseObject({ type: z.enum(["diff", "terminal"]) }),
 ]);
+
 const ToolKindSchema = z.enum([
   "read",
   "edit",
@@ -46,19 +54,23 @@ const ToolKindSchema = z.enum([
   "switch_mode",
   "other",
 ]);
+
 const ToolCallStatusSchema = z.enum([
   "pending",
   "in_progress",
   "completed",
   "failed",
 ]);
+
 const AgentMessageChunkSchema = z.looseObject({
   sessionUpdate: z.literal("agent_message_chunk"),
   content: ContentBlockSchema,
 });
+
 const AgentThoughtChunkSchema = AgentMessageChunkSchema.extend({
   sessionUpdate: z.literal("agent_thought_chunk"),
 });
+
 const ToolCallSchema = z.looseObject({
   sessionUpdate: z.literal("tool_call"),
   toolCallId: z.string(),
@@ -68,6 +80,7 @@ const ToolCallSchema = z.looseObject({
   content: z.array(ToolCallContentSchema).optional(),
   rawInput: z.unknown().optional(),
 });
+
 const ToolCallUpdateSchema = z.looseObject({
   sessionUpdate: z.literal("tool_call_update"),
   toolCallId: z.string(),
@@ -77,31 +90,45 @@ const ToolCallUpdateSchema = z.looseObject({
   content: z.array(ToolCallContentSchema).nullish(),
   rawInput: z.unknown().optional(),
 });
+
 const SessionUpdateSchema = z.discriminatedUnion("sessionUpdate", [
   AgentMessageChunkSchema,
   AgentThoughtChunkSchema,
   ToolCallSchema,
   ToolCallUpdateSchema,
 ]);
+
 const SessionNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   update: SessionUpdateSchema,
 });
 
 type SessionId = z.output<typeof SessionIdSchema>;
+
 type NewSessionRequest = z.output<typeof NewSessionRequestSchema>;
+
 type LoadSessionRequest = z.output<typeof LoadSessionRequestSchema>;
+
 type NewSessionResponse = z.output<typeof NewSessionResponseSchema>;
+
 type LoadSessionResponse = z.output<typeof LoadSessionResponseSchema>;
+
 type RequestPermissionResponse = z.output<
   typeof RequestPermissionResponseSchema
 >;
+
 type TextContent = z.output<typeof TextContentSchema>;
+
 type ContentBlock = z.output<typeof ContentBlockSchema>;
+
 type ToolCallContent = z.output<typeof ToolCallContentSchema>;
+
 type ToolKind = z.output<typeof ToolKindSchema>;
+
 type ToolCallStatus = z.output<typeof ToolCallStatusSchema>;
+
 type SessionUpdate = z.output<typeof SessionUpdateSchema>;
+
 type SessionNotification = z.output<typeof SessionNotificationSchema>;
 
 export {

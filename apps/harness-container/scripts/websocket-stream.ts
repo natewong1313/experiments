@@ -10,6 +10,7 @@ export async function connectWebSocket(
   const socket = new WebSocket(url);
   await once(socket, "open");
   const send = promisify(socket.send.bind(socket));
+
   const readable: ReadableStream<AnyMessage> = new ReadableStream({
     start(controller): void {
       let ended = false;
@@ -17,10 +18,12 @@ export async function connectWebSocket(
         if (ended) {
           return;
         }
+
         try {
           if (binary) {
             throw new Error("ACP requires WebSocket text messages");
           }
+
           const text = decodeFrame(data);
           const message = parseMessage(text);
           controller.enqueue(message);
@@ -47,6 +50,7 @@ export async function connectWebSocket(
       socket.close();
     },
   });
+
   const writable: WritableStream<AnyMessage> = new WritableStream({
     async write(message): Promise<void> {
       await send(JSON.stringify(message));
@@ -58,5 +62,6 @@ export async function connectWebSocket(
       socket.terminate();
     },
   });
+
   return { socket, stream: { readable, writable } };
 }

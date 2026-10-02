@@ -43,11 +43,17 @@ const JsonRpcReplySchema = z.union([
 ]);
 
 type JsonRpcError = z.output<typeof JsonRpcErrorSchema>;
+
 type JsonRpcRequest = z.output<typeof JsonRpcRequestSchema>;
+
 type JsonRpcCall = z.output<typeof JsonRpcCallSchema>;
+
 type JsonRpcNotification = z.output<typeof JsonRpcNotificationSchema>;
+
 type JsonRpcSuccess = z.output<typeof JsonRpcSuccessSchema>;
+
 type JsonRpcFailure = z.output<typeof JsonRpcFailureSchema>;
+
 type JsonRpcReply = z.output<typeof JsonRpcReplySchema>;
 
 export {

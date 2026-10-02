@@ -15,7 +15,9 @@ type LiveSession = {
   session: SessionState;
   chat: ChatState;
 };
+
 type SessionGeneration = Pick<LiveSession, "uri" | "sessionKey">;
+
 type AgentBinding = Pick<
   LiveSession,
   "uri" | "sessionKey" | "acpSession" | "session"

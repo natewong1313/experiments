@@ -6,11 +6,13 @@ import type { Message } from "../ahp/channels/chat/message";
 import type { PromptRequest, StopReason } from "./prompt";
 
 const NO_ATTACHMENTS = 0;
+
 const LAST_PART_INDEX = -1;
 
 type AcpPromptMapping =
   | { ok: true; blocks: PromptRequest["prompt"] }
   | { ok: false; reason: "unsupported-content" };
+
 type AcpTurnOutcome =
   | { outcome: "done"; message: string; stopReason: "end_turn" }
   | { outcome: "cancelled"; message: string; stopReason: "cancelled" }
@@ -25,6 +27,7 @@ function acpStopReasonToOutcome(stopReason: StopReason): AcpTurnOutcome {
     case "end_turn": {
       return { outcome: "done", message: "", stopReason };
     }
+
     case "cancelled": {
       return {
         outcome: "cancelled",
@@ -32,6 +35,7 @@ function acpStopReasonToOutcome(stopReason: StopReason): AcpTurnOutcome {
         stopReason,
       };
     }
+
     default: {
       return {
         outcome: "failed",
@@ -48,6 +52,7 @@ function ahpMessageToAcpPrompt(
   if ((message.attachments?.length ?? NO_ATTACHMENTS) > NO_ATTACHMENTS) {
     return { ok: false, reason: "unsupported-content" };
   }
+
   return { ok: true, blocks: [{ type: "text", text: message.text }] };
 }
 
@@ -71,19 +76,24 @@ function acpUpdateToChatActions(
   if (!turn) {
     return [];
   }
+
   const { update } = notification;
+
   switch (update.sessionUpdate) {
     case "agent_message_chunk":
     case "agent_thought_chunk": {
       if (update.content.type !== "text") {
         return [];
       }
+
       const kind =
         update.sessionUpdate === "agent_message_chunk"
           ? "markdown"
           : "reasoning";
+
       const last = turn.responseParts.at(LAST_PART_INDEX);
       const existing = last?.kind === kind ? last : null;
+
       const partId =
         existing?.id ??
         chatResponsePartId({
@@ -91,6 +101,7 @@ function acpUpdateToChatActions(
           kind,
           index: turn.responseParts.length,
         });
+
       const actions: ChatAction[] = existing
         ? []
         : [
@@ -100,16 +111,20 @@ function acpUpdateToChatActions(
               part: { kind, id: partId, content: "" },
             },
           ];
+
       actions.push({
         type: kind === "reasoning" ? "chat/reasoning" : "chat/delta",
         turnId: turn.id,
         partId,
         content: update.content.text,
       });
+
       return actions;
     }
+
     case "tool_call": {
       const { toolCallId, title } = update;
+
       return [
         {
           type: "chat/toolCallStart",
@@ -129,15 +144,18 @@ function acpUpdateToChatActions(
         ...toolProgress(turn.id, update),
       ];
     }
+
     case "tool_call_update": {
       const tool = turn.responseParts.find(
         (part) =>
           part.kind === "toolCall" &&
           part.toolCall.toolCallId === update.toolCallId,
       );
+
       if (!tool) {
         return [];
       }
+
       return toolProgress(turn.id, update);
     }
   }
@@ -148,12 +166,13 @@ type ToolUpdate = Extract<
   { sessionUpdate: "tool_call" | "tool_call_update" }
 >;
 
-function toolInputFields(
-  value: unknown,
+function toolInputFields<T>(
+  value: T,
 ): Pick<Extract<ChatAction, { type: "chat/toolCallReady" }>, "toolInput"> {
   try {
     const toolInput = JSON.stringify(value);
-    return typeof toolInput === "string" ? { toolInput } : {};
+
+    return toolInput ? { toolInput } : {};
   } catch {
     return {};
   }
@@ -165,21 +184,24 @@ function toolProgress(turnId: string, update: ToolUpdate): ChatAction[] {
       ? [{ type: "text", text: item.content.text }]
       : [],
   );
+
   if (update.status === "completed" || update.status === "failed") {
+    const result = {
+      success: update.status === "completed",
+      pastTenseMessage:
+        update.status === "completed" ? "Tool completed" : "Tool failed",
+    };
+
     return [
       {
         type: "chat/toolCallComplete",
         turnId,
         toolCallId: update.toolCallId,
-        result: {
-          success: update.status === "completed",
-          pastTenseMessage:
-            update.status === "completed" ? "Tool completed" : "Tool failed",
-          ...(content ? { content } : {}),
-        },
+        result: content ? { ...result, content } : result,
       },
     ];
   }
+
   return content
     ? [
         {

@@ -68,10 +68,15 @@ const AnnotationsActionSchema = z.discriminatedUnion("type", [
 ]);
 
 type AnnotationsSummary = z.output<typeof AnnotationsSummarySchema>;
+
 type AnnotationOrigin = z.output<typeof AnnotationOriginSchema>;
+
 type AnnotationEntry = z.output<typeof AnnotationEntrySchema>;
+
 type Annotation = z.output<typeof AnnotationSchema>;
+
 type AnnotationsState = z.output<typeof AnnotationsStateSchema>;
+
 type AnnotationsAction = z.output<typeof AnnotationsActionSchema>;
 
 export {

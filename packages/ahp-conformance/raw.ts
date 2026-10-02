@@ -12,19 +12,31 @@ import {
   JsonRpcErrorCodes,
   PROTOCOL_VERSION,
 } from "@microsoft/agent-host-protocol";
+import { isWireRecord, isWireValue, type WireValue } from "./guards";
 
 const ROOT = "ahp-root://";
+
 const LATEST_VERSION = PROTOCOL_VERSION;
+
 const FIRST_REQUEST_ID = 1;
+
 const CONNECT_TIMEOUT_MS = 10_000;
+
 const REQUEST_TIMEOUT_MS = 30_000;
+
 const ACTION_TIMEOUT_MS = 10_000;
+
 const CLOSE_TIMEOUT_MS = 2000;
+
 const RECONNECT_CHECK_MS = 5000;
 
 const MAX_RECEIVED_MESSAGES = 10_000;
+
 const INITIAL_RECEIVE_INDEX = 0;
+
 const LAST_EVENT_OFFSET = -1;
+
+type WireParams = Record<string, WireValue>;
 
 type ActionWaitOptions = {
   after: number;
@@ -56,6 +68,7 @@ type ActionWait = Pending<ActionEnvelope> &
 
 function decodeMessage(raw: string, index: number): ReceivedMessage {
   let value: unknown;
+
   try {
     value = JSON.parse(raw);
   } catch (error) {
@@ -64,18 +77,24 @@ function decodeMessage(raw: string, index: number): ReceivedMessage {
       { cause: error },
     );
   }
+
   const notification = JsonRpcNotificationSchema.safeParse(value);
+
   if (notification.success) {
     if (notification.data.method !== "action") {
       return { index, raw, kind: "notification", message: notification.data };
     }
+
     const parsed = ActionEnvelopeSchema.safeParse(notification.data.params);
+
     if (!parsed.success) {
       throw new Error(
         `Malformed AHP action at receive index ${index}: ${parsed.error.message}`,
       );
     }
+
     const action = parsed.data;
+
     return {
       index,
       raw,
@@ -84,27 +103,64 @@ function decodeMessage(raw: string, index: number): ReceivedMessage {
       action,
     };
   }
+
   const request = JsonRpcRequestSchema.safeParse(value);
+
   if (request.success) {
     return { index, raw, kind: "request", message: request.data };
   }
+
   const reply = JsonRpcReplySchema.safeParse(value);
+
   if (!reply.success) {
     throw new Error(
       `Malformed JSON-RPC message at receive index ${index}: ${reply.error.message}`,
     );
   }
+
   return { index, raw, kind: "reply", message: reply.data };
 }
 
-function freezeMessage(value: unknown): void {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
+function isText(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isReplyId(value: string | number): value is number {
+  return typeof value === "number";
+}
+
+function freezeWireValue(value: WireValue): void {
+  if (Array.isArray(value)) {
+    if (!Object.isFrozen(value)) {
+      for (const item of value) {
+        freezeWireValue(item);
+      }
+
+      Object.freeze(value);
+    }
+
     return;
   }
-  for (const key of Reflect.ownKeys(value)) {
-    freezeMessage(Reflect.get(value, key));
+
+  if (!isWireRecord(value) || Object.isFrozen(value)) {
+    return;
   }
+
+  for (const item of Object.values(value)) {
+    freezeWireValue(item);
+  }
+
   Object.freeze(value);
+}
+
+function freezeMessage(event: ReceivedMessage): void {
+  for (const value of Object.values(event)) {
+    if (isWireValue(value)) {
+      freezeWireValue(value);
+    }
+  }
+
+  Object.freeze(event);
 }
 
 class AhpConnection {
@@ -149,11 +205,13 @@ class AhpConnection {
         once: true,
       });
     });
+
     return connection;
   }
 
   private readonly onOpen = (): void => {
     const { opening } = this;
+
     if (opening) {
       clearTimeout(opening.timer);
       delete this.opening;
@@ -187,6 +245,7 @@ class AhpConnection {
       clearTimeout(timer);
       resolve(closed);
     }
+
     this.closeWaits.clear();
   }
 
@@ -194,24 +253,31 @@ class AhpConnection {
     if (this.failure) {
       return;
     }
+
     this.failure = error;
     this.socket.removeEventListener("message", this.onMessage);
     this.socket.removeEventListener("open", this.onOpen);
+
     if (this.opening) {
       clearTimeout(this.opening.timer);
       this.opening.reject(error);
       delete this.opening;
     }
+
     for (const pending of this.requests.values()) {
       clearTimeout(pending.timer);
       pending.reject(error);
     }
+
     this.requests.clear();
+
     for (const wait of this.actionWaits) {
       clearTimeout(wait.timer);
       wait.reject(error);
     }
+
     this.actionWaits.clear();
+
     if (
       this.socket.readyState !== WebSocket.CLOSED &&
       this.socket.readyState !== WebSocket.CLOSING
@@ -224,6 +290,7 @@ class AhpConnection {
     if (this.failure) {
       throw this.failure;
     }
+
     if (this.socket.readyState !== WebSocket.OPEN) {
       throw new Error("WebSocket connection is not open");
     }
@@ -237,27 +304,35 @@ class AhpConnection {
   private readonly onMessage = (event: MessageEvent): void => {
     this.receiveIndex += 1;
     const index = this.receiveIndex;
-    const raw =
-      typeof event.data === "string" ? event.data : "[non-text frame]";
+
+    const text = isText(event.data) ? event.data : null;
+
+    const raw = text ?? "[non-text frame]";
+
     if (this.transcript.length === MAX_RECEIVED_MESSAGES) {
       this.fail(
         new Error(
           `AHP recorder overflow at receive index ${index}; limit is ${MAX_RECEIVED_MESSAGES} messages`,
         ),
       );
+
       return;
     }
+
     try {
-      if (typeof event.data !== "string") {
+      if (text === null) {
         throw new Error(
           `AHP WebSocket message at receive index ${index} was not a text frame`,
         );
       }
-      const received = decodeMessage(raw, index);
+
+      const received = decodeMessage(text, index);
       this.record(received);
+
       if (received.kind === "action") {
         this.resolveActionWaits(received);
       }
+
       if (received.kind === "request") {
         this.socket.send(
           JSON.stringify({
@@ -270,12 +345,16 @@ class AhpConnection {
           }),
         );
       }
+
       if (received.kind === "reply") {
         const { id } = received.message;
-        if (typeof id !== "number") {
+
+        if (!isReplyId(id)) {
           return;
         }
+
         const pending = this.requests.get(id);
+
         if (pending) {
           this.requests.delete(id);
           clearTimeout(pending.timer);
@@ -287,9 +366,11 @@ class AhpConnection {
         error instanceof Error
           ? error
           : new Error("AHP message processing failed", { cause: error });
+
       if (this.transcript.at(LAST_EVENT_OFFSET)?.index !== index) {
         this.record({ index, raw, kind: "invalid", error: failure });
       }
+
       this.fail(failure);
     }
   };
@@ -300,6 +381,7 @@ class AhpConnection {
         if (!this.matches(event, wait.channel, wait.actionType, wait)) {
           continue;
         }
+
         this.actionWaits.delete(wait);
         clearTimeout(wait.timer);
         wait.resolve(event.action);
@@ -315,13 +397,11 @@ class AhpConnection {
     }
   }
 
-  async request(
-    method: string,
-    params: Record<string, unknown>,
-  ): Promise<JsonRpcReply> {
+  async request(method: string, params: WireParams): Promise<JsonRpcReply> {
     this.requireOpen();
     const id = this.nextId++;
     const frame = JSON.stringify({ jsonrpc: "2.0", id, method, params });
+
     return await new Promise<JsonRpcReply>((resolve, reject) => {
       const pending = {
         resolve,
@@ -331,7 +411,9 @@ class AhpConnection {
           reject(new Error(`Timed out waiting for ${method}`));
         }, REQUEST_TIMEOUT_MS),
       };
+
       this.requests.set(id, pending);
+
       try {
         this.socket.send(frame);
       } catch (error) {
@@ -344,14 +426,16 @@ class AhpConnection {
     });
   }
 
-  notify(method: string, params: Record<string, unknown>): void {
+  notify(method: string, params: WireParams): void {
     this.requireOpen();
     const frame = JSON.stringify({ jsonrpc: "2.0", method, params });
+
     try {
       this.socket.send(frame);
     } catch (error) {
       const failure =
         error instanceof Error ? error : new Error(`Failed to send ${method}`);
+
       this.fail(failure);
       throw failure;
     }
@@ -378,6 +462,7 @@ class AhpConnection {
     options: ActionWaitOptions,
   ): Promise<ActionEnvelope> {
     this.requireOpen();
+
     if (
       !Number.isSafeInteger(options.after) ||
       options.after < INITIAL_RECEIVE_INDEX ||
@@ -387,11 +472,13 @@ class AhpConnection {
         `Invalid receive checkpoint ${options.after}; current checkpoint is ${this.receiveIndex}`,
       );
     }
+
     for (const event of this.transcript) {
       if (this.matches(event, channel, actionType, options)) {
         return event.action;
       }
     }
+
     return await new Promise<ActionEnvelope>((resolve, reject) => {
       const wait: ActionWait = {
         ...options,
@@ -408,6 +495,7 @@ class AhpConnection {
           );
         }, options.timeoutMs ?? ACTION_TIMEOUT_MS),
       };
+
       this.actionWaits.add(wait);
     });
   }
@@ -416,11 +504,13 @@ class AhpConnection {
     if (this.socket.readyState === WebSocket.CLOSED) {
       return true;
     }
+
     return await new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => {
         this.closeWaits.delete(resolve);
         resolve(false);
       }, timeoutMs);
+
       this.closeWaits.set(resolve, timer);
     });
   }
@@ -428,6 +518,7 @@ class AhpConnection {
   private async finishClosing(): Promise<void> {
     this.fail(new Error("Connection closed by client"));
     const closed = await this.waitForClose(CLOSE_TIMEOUT_MS);
+
     if (!closed) {
       this.removeSocketListeners();
       this.settleCloseWaits(false);
@@ -436,6 +527,7 @@ class AhpConnection {
 
   close(): Promise<void> {
     this.closing ??= this.finishClosing();
+
     return this.closing;
   }
 }

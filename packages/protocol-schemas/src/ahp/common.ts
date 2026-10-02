@@ -1,12 +1,17 @@
 import * as z from "zod";
 
 type JsonPrimitive = string | number | boolean | null;
+
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 const uriSchema = z.string();
+
 const metaSchema = z.record(z.string(), z.unknown());
+
 const MIN_SEQUENCE = 0;
+
 const MIN_CLIENT_ID_LENGTH = 1;
+
 const clientIdSchema = z.string().min(MIN_CLIENT_ID_LENGTH);
 
 const seqSchema = z
@@ -14,6 +19,7 @@ const seqSchema = z
   .refine((value) => Number.isSafeInteger(value) && value >= MIN_SEQUENCE, {
     error: "Expected a nonnegative safe integer sequence number",
   });
+
 const isoTimestampSchema = z.iso.datetime({
   offset: true,
   message: "Expected an ISO 8601 timestamp",
@@ -25,6 +31,7 @@ const jsonPrimitiveSchema: z.ZodType<JsonPrimitive> = z.union([
   z.boolean(),
   z.null(),
 ]);
+
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => {
   return z.union([
     jsonPrimitiveSchema,
@@ -161,20 +168,33 @@ type ConfigProperty = {
 };
 
 type Uri = z.output<typeof uriSchema>;
+
 type Meta = z.output<typeof metaSchema>;
+
 type Seq = z.output<typeof seqSchema>;
+
 type StringOrMarkdown = z.output<typeof StringOrMarkdownSchema>;
+
 type Icon = z.output<typeof IconSchema>;
+
 type ProtectedResourceMetadata = z.output<
   typeof ProtectedResourceMetadataSchema
 >;
+
 type TextPosition = z.output<typeof TextPositionSchema>;
+
 type TextRange = z.output<typeof TextRangeSchema>;
+
 type TextSelection = z.output<typeof TextSelectionSchema>;
+
 type ContentRef = z.output<typeof ContentRefSchema>;
+
 type FileEdit = z.output<typeof FileEditSchema>;
+
 type UsageInfo = z.output<typeof UsageInfoSchema>;
+
 type ErrorInfo = z.output<typeof ErrorInfoSchema>;
+
 type ConfigSchema = z.output<typeof ConfigSchemaSchema>;
 
 export {

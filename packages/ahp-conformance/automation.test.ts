@@ -12,11 +12,13 @@ describe("automation catalogue", () => {
     const init = await initialized(client);
     skip(!init.automations, "Automations unadvertised");
     const subscribed = await client.subscribe(AUTOMATIONS);
+
     const state = expectState(
       subscribed.result.snapshot,
       AUTOMATIONS,
       AutomationStateSchema,
     );
+
     expect(Array.isArray(state.entries)).toBe(true);
   });
 
@@ -24,11 +26,13 @@ describe("automation catalogue", () => {
     const init = await initialized(client);
     skip(!init.automations, "Automations unadvertised");
     const subscribed = await client.subscribe(AUTOMATIONS);
+
     const state = expectState(
       subscribed.result.snapshot,
       AUTOMATIONS,
       AutomationStateSchema,
     );
+
     for (const entry of state.entries) {
       expect(entry.resource.startsWith("ahp-automation:/")).toBe(true);
       expect(entry.operations.length).toBeGreaterThan(0);
@@ -42,11 +46,13 @@ describe("automation catalogue", () => {
     const init = await initialized(client);
     skip(!init.automations, "Automations unadvertised");
     const subscribed = await client.subscribe(AUTOMATIONS);
+
     const state = expectState(
       subscribed.result.snapshot,
       AUTOMATIONS,
       AutomationStateSchema,
     );
+
     for (const entry of state.entries) {
       expect(Number.isNaN(Date.parse(entry.createdAt))).toBe(false);
       expect(Number.isNaN(Date.parse(entry.modifiedAt))).toBe(false);

@@ -23,7 +23,9 @@ import { createSession } from "./config";
 import { connectAcp } from "./worker";
 
 const SESSION = "ahp-session:/host-test";
+
 const SWITCHING_PROTOCOLS = 101;
+
 const CREATION_LIMIT = 2;
 
 async function withAcpAgent(options: {
@@ -37,10 +39,12 @@ async function withAcpAgent(options: {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   const sockets: WebSocket[] = [];
   const servers: AgentSideConnection[] = [];
+
   const fetchSpy = vi
     .spyOn(globalThis, "fetch")
     .mockImplementation(async () => {
       const { 0: client, 1: server } = new WebSocketPair();
+
       const connection = new AgentSideConnection(
         (): Agent => ({
           initialize: async () => ({
@@ -61,6 +65,7 @@ async function withAcpAgent(options: {
                 content: { type: "text", text: "Old history" },
               },
             });
+
             return {};
           },
           authenticate: async () => ({}),
@@ -71,37 +76,49 @@ async function withAcpAgent(options: {
         }),
         websocketStream(server),
       );
+
       server.accept();
       sockets.push(server);
       servers.push(connection);
+
       return new Response(null, {
         status: SWITCHING_PROTOCOLS,
         webSocket: client,
       });
     });
+
   async function disconnect(): Promise<void> {
     await runInDurableObject(stub, async (instance) => {
       expect(instance).toBeDefined();
+
       for (const socket of sockets) {
         socket.close();
       }
+
       await Promise.all(servers.map((server) => server.closed));
     });
   }
+
   const peer = await connectPeer(stub);
+
   try {
     await peer.request("createSession", { channel: SESSION });
+
     const session = await vi.waitFor(async () => {
       const result = SubscribeResultSchema.parse(
         await peer.request("subscribe", { channel: SESSION }),
       );
+
       const state = SessionStateSchema.parse(result.snapshot?.state);
       expect(state.lifecycle).toBe("ready");
+
       return state;
     });
+
     if (session.defaultChat === void 0) {
       throw new Error("Ready session has no default chat");
     }
+
     await peer.request("subscribe", { channel: session.defaultChat });
     await options.run(peer, session.defaultChat, disconnect);
   } finally {
@@ -146,6 +163,7 @@ async function chatSnapshot({
   const result = SubscribeResultSchema.parse(
     await peer.request("subscribe", { channel: chat }),
   );
+
   return ChatStateSchema.parse(result.snapshot?.state);
 }
 
@@ -154,11 +172,13 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
     prompt: async (connection, request) => {
       expect(request.prompt).toEqual([{ type: "text", text: "Read the file" }]);
       const { sessionId } = request;
+
       const firstMessage = {
         type: "text",
         text: "Hel",
         futureField: true,
       } satisfies TextContent;
+
       await connection.sessionUpdate({
         sessionId,
         update: {
@@ -220,6 +240,7 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
           content: { type: "text", text: " Done" },
         },
       });
+
       return { stopReason: "end_turn" };
     },
     run: async (peer, chat) => {
@@ -355,7 +376,9 @@ it("declines ACP permission requests and publishes agent cancellation", async ()
           { optionId: "allow-read", name: "Allow reading", kind: "allow_once" },
         ],
       });
+
       expect(permission.outcome).toEqual({ outcome: "cancelled" });
+
       return { stopReason: "cancelled" };
     },
     run: async (peer, chat) => {
@@ -383,10 +406,12 @@ it("sends client cancellation to the ACP agent", async () => {
   const response = Promise.withResolvers<PromptResponse>();
   let prompted = false;
   let cancelled = false;
+
   try {
     await withAcpAgent({
       prompt: async () => {
         prompted = true;
+
         return await response.promise;
       },
       cancel: async (): Promise<void> => {
@@ -415,6 +440,7 @@ it("sends client cancellation to the ACP agent", async () => {
           const acknowledgement = peer.actions.find(
             ({ origin }) => origin?.clientSeq === CREATION_LIMIT,
           );
+
           expect(acknowledgement).toMatchObject({
             action: { type: "chat/turnCancelled", turnId: "mapped-turn" },
           });
@@ -436,6 +462,7 @@ it("rejects attachments through the prompt mapper before invoking ACP", async ()
   const prompt = vi.fn<() => Promise<PromptResponse>>(
     async (): Promise<PromptResponse> => ({ stopReason: "end_turn" }),
   );
+
   await withAcpAgent({
     prompt,
     run: async (peer, chat) => {
@@ -483,6 +510,7 @@ it("ignores unsupported updates and chunks for another ACP session", async () =>
           content: { type: "text", text: "Wrong session" },
         },
       });
+
       return { stopReason: "end_turn" };
     },
     run: async (peer, chat) => {
@@ -516,6 +544,7 @@ it("loads the bound ACP session without publishing its historical updates", asyn
           content: { type: "text", text: "Current reply" },
         },
       });
+
       return { stopReason: "end_turn" };
     },
     run: async (peer, chat, disconnect) => {
@@ -565,15 +594,19 @@ it("loads the bound ACP session without publishing its historical updates", asyn
 
 it("acknowledges a non-ISO timestamp rejection without invoking the agent", async () => {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
+
   const chat = await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
     const store = new HostStore(state);
     createSession(store, SESSION, "timestamp-generation");
     store.apply(SESSION, { type: "session/ready" });
+
     return store.require(SESSION).chatUri;
   });
+
   const fetchSpy = vi.spyOn(globalThis, "fetch");
   const peer = await connectPeer(stub);
+
   try {
     const params = {
       channel: chat,
@@ -585,6 +618,7 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
         message: { text: "Hello", origin: { kind: "user" } },
       },
     };
+
     peer.notify("dispatchAction", params);
     await vi.waitFor(() => {
       expect(peer.actions).toHaveLength(1);
@@ -615,11 +649,13 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
 it("releasing an old generation keeps a replacement ACP connection usable", async () => {
   const sockets: WebSocket[] = [];
   const servers: AgentSideConnection[] = [];
+
   const fetchSpy = vi
     .spyOn(globalThis, "fetch")
     .mockImplementation(async (): Promise<Response> => {
       const { 0: client, 1: server } = new WebSocketPair();
       const sessionId = crypto.randomUUID();
+
       const agent: Agent = {
         initialize: async () => ({
           protocolVersion: PROTOCOL_VERSION,
@@ -631,29 +667,36 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
         prompt: async () => ({ stopReason: "end_turn" }),
         cancel: async (): Promise<void> => {},
       };
+
       const connection = new AgentSideConnection(
         () => agent,
         websocketStream(server),
       );
+
       server.accept();
       sockets.push(server);
       servers.push(connection);
+
       return new Response(null, {
         status: SWITCHING_PROTOCOLS,
         webSocket: client,
       });
     });
+
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
+
   try {
     await runInDurableObject(stub, async (instance, state) => {
       expect(instance).toBeDefined();
       const store = new HostStore(state);
       createSession(store, SESSION, "old-generation");
       const original = store.require(SESSION);
+
       const agents = new AgentConnections({
         connect: connectAcp,
         updates: (): void => {},
       });
+
       try {
         const old = await agents.get(original);
         store.remove(SESSION);
@@ -670,6 +713,7 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
         for (const socket of sockets) {
           socket.close();
         }
+
         await Promise.all(servers.map((server) => server.closed));
       }
     });

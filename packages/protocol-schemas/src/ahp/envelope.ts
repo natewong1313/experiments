@@ -71,9 +71,13 @@ const ActionEnvelopeSchema = z.strictObject({
 });
 
 type ChannelState = z.output<typeof ChannelStateSchema>;
+
 type StateAction = z.output<typeof StateActionSchema>;
+
 type Snapshot = z.output<typeof SnapshotSchema>;
+
 type ActionOrigin = z.output<typeof ActionOriginSchema>;
+
 type ActionEnvelope = z.output<typeof ActionEnvelopeSchema>;
 
 export {

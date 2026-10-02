@@ -9,10 +9,13 @@ import {
 import { describe, expect, test } from "vitest";
 import { WebSocket } from "ws";
 import { chatSnapshot, initialized, VERSION, withClient } from "./client";
+import { isWireRecord } from "./guards";
 import { withPeer } from "./test-peer";
 
 const SESSION_URI = "ahp-session:/typed-fixture";
+
 const FIRST_CHAT = "ahp-chat:/typed-fixture/first";
+
 const DEFAULT_CHAT = "ahp-chat:/typed-fixture/default";
 
 function serveCatalogue(socket: WebSocket, defaultChat?: string): void {
@@ -30,25 +33,32 @@ function serveCatalogue(socket: WebSocket, defaultChat?: string): void {
       modifiedAt: "2026-09-30T00:00:00Z",
     },
   ];
-  const session = SessionStateSchema.parse({
+
+  const input = {
     provider: "fixture",
     title: "Fixture session",
     status: 0,
     lifecycle: "ready",
     activeClients: [],
     chats,
-    ...(typeof defaultChat === "string" ? { defaultChat } : {}),
-  });
+  };
+
+  const session = SessionStateSchema.parse(
+    defaultChat ? { ...input, defaultChat } : input,
+  );
+
   const states: Record<string, ChatState | SessionState> = Object.fromEntries(
     chats.map((chat) => [
       chat.resource,
       ChatStateSchema.parse({ ...chat, turns: [] }),
     ]),
   );
+
   states[SESSION_URI] = session;
 
   socket.on("message", (data) => {
     const request = JsonRpcRequestSchema.parse(JSON.parse(data.toString()));
+
     if (request.method === "initialize") {
       socket.send(
         JSON.stringify({
@@ -57,14 +67,16 @@ function serveCatalogue(socket: WebSocket, defaultChat?: string): void {
           result: { protocolVersion: VERSION, serverSeq: 0, snapshots: [] },
         }),
       );
+
       return;
     }
+
     const { params } = request;
-    const channel =
-      params && typeof params === "object" && "channel" in params
-        ? params.channel
-        : null;
-    const state = typeof channel === "string" ? states[channel] : null;
+
+    const channel = isWireRecord(params) ? `${params.channel}` : null;
+
+    const state = channel === null ? null : states[channel];
+
     if (request.method === "subscribe" && state) {
       socket.send(
         JSON.stringify({
@@ -73,8 +85,10 @@ function serveCatalogue(socket: WebSocket, defaultChat?: string): void {
           result: { snapshot: { resource: channel, fromSeq: 0, state } },
         }),
       );
+
       return;
     }
+
     socket.send(
       JSON.stringify({
         jsonrpc: "2.0",
@@ -143,9 +157,11 @@ describe("typed client harness", () => {
             throw failure;
           }, url),
         ).rejects.toBe(failure);
+
         if (!closed) {
           throw new Error("Fixture peer was never connected");
         }
+
         expect(await closed).toBe(WebSocket.CLOSED);
       },
     );

@@ -17,6 +17,7 @@ export default defineConfig({
             moduleType: "js",
           };
         }
+
         return null;
       },
     },

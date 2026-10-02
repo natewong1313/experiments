@@ -12,6 +12,7 @@ describe("resource watch channel", () => {
       await initialized(client);
       const watch = await client.createResourceWatch({ uri: watched });
       expect(watch.channel.startsWith("ahp-resource-watch:/")).toBe(true);
+
       try {
         const subscribed = await client.subscribe(watch.channel);
         expectState(
@@ -30,17 +31,21 @@ describe("resource watch channel", () => {
     async ({ client }) => {
       const watched = directory!;
       await initialized(client);
+
       const watch = await client.createResourceWatch({
         uri: watched,
         recursive: true,
       });
+
       try {
         const subscribed = await client.subscribe(watch.channel);
+
         const state = expectState(
           subscribed.result.snapshot,
           watch.channel,
           ResourceWatchStateSchema,
         );
+
         expect(state.root).toBe(watched);
         expect(state.recursive).toBe(true);
       } finally {

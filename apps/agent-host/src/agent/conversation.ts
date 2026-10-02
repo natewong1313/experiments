@@ -12,6 +12,7 @@ import { ProtocolError, RpcCodes, NORMAL_CLOSE } from "../ahp/protocol";
 import { withDeadline } from "../deadline";
 
 const TURN_TIMEOUT_MS = 600_000;
+
 const CANCEL_TIMEOUT_MS = 10_000;
 
 class AgentConversation {
@@ -41,16 +42,19 @@ class AgentConversation {
     message: Pick<Message, "text" | "attachments">,
   ): Promise<AcpTurnOutcome> {
     const mapped = ahpMessageToAcpPrompt(message);
+
     if (!mapped.ok) {
       throw new ProtocolError(
         RpcCodes.params,
         "This host supports text prompts only",
       );
     }
+
     const request = PromptRequestSchema.parse({
       sessionId: this.sessionId,
       prompt: mapped.blocks,
     });
+
     const response = await withDeadline(
       this.connection.prompt(request),
       TURN_TIMEOUT_MS,
@@ -58,7 +62,9 @@ class AgentConversation {
         this.abort();
       },
     );
+
     const result = PromptResponseSchema.parse(response);
+
     return acpStopReasonToOutcome(result.stopReason);
   }
 
@@ -66,6 +72,7 @@ class AgentConversation {
     const request = CancelNotificationSchema.parse({
       sessionId: this.sessionId,
     });
+
     await withDeadline(
       this.connection.cancel(request),
       CANCEL_TIMEOUT_MS,

@@ -7,6 +7,7 @@ import {
 } from "../jsonrpc";
 
 const RequestIdSchema = JsonRpcSuccessSchema.shape.id.nullable();
+
 const ErrorSchema = JsonRpcErrorSchema.extend({ code: z.int32() }).loose();
 
 const AcpCallSchema = JsonRpcCallSchema.extend({
@@ -14,6 +15,7 @@ const AcpCallSchema = JsonRpcCallSchema.extend({
   result: z.never().optional(),
   error: z.never().optional(),
 });
+
 const AcpSuccessSchema = JsonRpcSuccessSchema.extend({
   id: RequestIdSchema,
   method: z.never().optional(),
@@ -21,12 +23,14 @@ const AcpSuccessSchema = JsonRpcSuccessSchema.extend({
 }).refine((value) => Object.hasOwn(value, "result"), {
   error: "ACP response requires a result",
 });
+
 const AcpFailureSchema = JsonRpcFailureSchema.extend({
   id: RequestIdSchema,
   error: ErrorSchema.strict(),
   method: z.never().optional(),
   result: z.never().optional(),
 });
+
 const AcpMessageSchema = z.union([
   AcpCallSchema.loose(),
   AcpSuccessSchema.loose().transform((value) => ({
@@ -35,6 +39,7 @@ const AcpMessageSchema = z.union([
   })),
   AcpFailureSchema.extend({ error: ErrorSchema }).loose(),
 ]);
+
 const AcpOutboundMessageSchema = z.union([
   AcpCallSchema,
   AcpSuccessSchema.transform((value) => ({ ...value, result: value.result })),
@@ -42,11 +47,15 @@ const AcpOutboundMessageSchema = z.union([
 ]);
 
 type RequestId = z.output<typeof RequestIdSchema>;
+
 type AcpError = z.output<typeof ErrorSchema>;
+
 type AcpMessage = z.output<typeof AcpMessageSchema>;
+
 type AcpOutboundMessage = z.output<typeof AcpOutboundMessageSchema>;
 
 export * from "../jsonrpc";
+
 export {
   AcpMessageSchema,
   AcpOutboundMessageSchema,

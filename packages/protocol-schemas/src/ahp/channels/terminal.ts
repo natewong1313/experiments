@@ -101,12 +101,19 @@ const TerminalActionSchema = z.discriminatedUnion("type", [
 ]);
 
 type TerminalLifecycleState = z.output<typeof TerminalLifecycleStateSchema>;
+
 type TerminalClaim = z.output<typeof TerminalClaimSchema>;
+
 type TerminalUnclassifiedPart = z.output<typeof TerminalUnclassifiedPartSchema>;
+
 type TerminalCommandPart = z.output<typeof TerminalCommandPartSchema>;
+
 type TerminalContentPart = z.output<typeof TerminalContentPartSchema>;
+
 type TerminalInfo = z.output<typeof TerminalInfoSchema>;
+
 type TerminalState = z.output<typeof TerminalStateSchema>;
+
 type TerminalAction = z.output<typeof TerminalActionSchema>;
 
 export {

@@ -8,8 +8,11 @@ import type {
 import { host, actions, dispatches } from "./schema";
 
 const HOST_ID = 1;
+
 const SEQUENCE_INCREMENT = 1;
+
 const REPLAY_LIMIT = 1000;
+
 type Database = ReturnType<typeof drizzle>;
 
 class ActionJournal {
@@ -29,12 +32,13 @@ class ActionJournal {
     origin?: ActionOrigin,
   ): ActionEnvelope {
     const serverSeq = this.sequence + SEQUENCE_INCREMENT;
-    const envelope: ActionEnvelope = {
-      channel,
-      action,
-      serverSeq,
-      ...(origin ? { origin } : {}),
-    };
+
+    const envelope: ActionEnvelope = { channel, action, serverSeq };
+
+    if (origin) {
+      envelope.origin = origin;
+    }
+
     this.db
       .update(host)
       .set({ seq: serverSeq })
@@ -45,16 +49,19 @@ class ActionJournal {
       .delete(actions)
       .where(lte(actions.seq, serverSeq - REPLAY_LIMIT))
       .run();
+
     return envelope;
   }
 
   replay(since: number, channels: string[]): ActionEnvelope[] | null {
     const floor = this.checkpoint();
+
     const oldest =
       this.db
         .select({ seq: min(actions.seq) })
         .from(actions)
         .get()?.seq ?? null;
+
     if (
       since < floor.replayFloor ||
       since > floor.seq ||
@@ -62,6 +69,7 @@ class ActionJournal {
     ) {
       return null;
     }
+
     return this.db
       .select({ envelope: actions.envelope })
       .from(actions)
@@ -79,6 +87,7 @@ class ActionJournal {
       eq(dispatches.clientId, origin.clientId),
       eq(dispatches.clientSeq, origin.clientSeq),
     );
+
     return (
       this.db
         .select({ frame: dispatches.frame, envelope: dispatches.envelope })
@@ -114,9 +123,11 @@ class ActionJournal {
       .from(host)
       .where(eq(host.id, HOST_ID))
       .get();
+
     if (!row) {
       throw new Error("Host storage is not initialized");
     }
+
     return row;
   }
 }

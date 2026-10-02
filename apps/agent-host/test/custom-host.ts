@@ -36,11 +36,13 @@ class CustomHost extends AgentHost<CustomEnv> {
         signal,
       },
     );
+
     if (response.status !== STATUS_SWITCHING_PROTOCOLS || !response.webSocket) {
       throw new Error(
         `Custom agent connection failed with HTTP ${response.status}`,
       );
     }
+
     return response.webSocket;
   }
 }

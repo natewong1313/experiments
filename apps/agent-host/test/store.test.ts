@@ -12,19 +12,29 @@ import { reduceChat, reduceSession } from "../src/state/reducers";
 import { createSession } from "./config";
 
 const SESSION = "ahp-session:/test";
+
 const START_TIME = "2026-10-01T00:00:00.000Z";
+
 const RESPONSE_BYTES = 1_200_000;
+
 const DELTA_BYTES = 300_000;
+
 const CHUNK_BYTES = 65_536;
+
 const PAGE_SIZE = 10;
+
 const ERROR_STATUS = 2;
+
 const IN_PROGRESS = 8;
+
 const READ = 32;
+
 const MAX_DELTA_CHUNKS = 2;
 
 function ready(store: HostStore): string {
   createSession(store, SESSION, "generation-1");
   store.apply(SESSION, { type: "session/ready" });
+
   return store.require(SESSION).chatUri;
 }
 
@@ -44,6 +54,7 @@ function completeTurn(store: HostStore, chat: string, turnId: string): void {
     turnId,
     part: { kind: "markdown", id: turnId, content: "" },
   });
+
   for (let written = 0; written < RESPONSE_BYTES; written += DELTA_BYTES) {
     store.apply(chat, {
       type: "chat/delta",
@@ -52,6 +63,7 @@ function completeTurn(store: HostStore, chat: string, turnId: string): void {
       content: "x".repeat(DELTA_BYTES),
     });
   }
+
   store.apply(chat, { type: "chat/turnComplete", turnId, duration: 1 });
 }
 
@@ -72,6 +84,7 @@ it("keeps session and chat snapshots equal to reduced live and replayed actions"
     let sessionMirror = SessionStateSchema.parse(store.snapshot(SESSION).state);
     let chatMirror = ChatStateSchema.parse(store.snapshot(chat).state);
     const cut = store.sequence;
+
     const publications = [
       store.apply(chat, turnStarted("turn")),
       store.apply(chat, {
@@ -96,11 +109,13 @@ it("keeps session and chat snapshots equal to reduced live and replayed actions"
         },
       }),
     ];
+
     const actions = publications.flatMap((publication) => publication.actions);
     const sequences = actions.map((envelope) => envelope.serverSeq);
     expect(sequences).toEqual(
       sequences.toSorted((left, right) => left - right),
     );
+
     for (const envelope of actions) {
       if (envelope.channel === SESSION) {
         sessionMirror = reduceSession(sessionMirror, envelope.action);
@@ -108,6 +123,7 @@ it("keeps session and chat snapshots equal to reduced live and replayed actions"
         chatMirror = reduceChat(chatMirror, envelope.action);
       }
     }
+
     expect(store.snapshot(SESSION).state).toEqual(sessionMirror);
     expect(store.snapshot(chat).state).toEqual(chatMirror);
     expect(store.replay(cut, [SESSION, chat])).toEqual(actions);
@@ -132,23 +148,28 @@ it("writes only bounded live chunks and emits no unchanged summary for a delta",
       CREATE TRIGGER record_insert AFTER INSERT ON document_chunks BEGIN INSERT INTO chunk_writes VALUES (NEW.scope, NEW.id, LENGTH(NEW.data)); END;
       CREATE TRIGGER record_update AFTER UPDATE ON document_chunks BEGIN INSERT INTO chunk_writes VALUES (NEW.scope, NEW.id, LENGTH(NEW.data)); END;
     `);
+
     const publication = store.apply(chat, {
       type: "chat/delta",
       turnId: "turn",
       partId: "part",
       content: "x",
     });
+
     const writes = sql
       .exec<{ scope: string; bytes: number }>(
         "SELECT scope, bytes FROM chunk_writes",
       )
       .toArray();
+
     expect(writes.length).toBeGreaterThan(0);
     expect(writes.length).toBeLessThanOrEqual(MAX_DELTA_CHUNKS);
+
     for (const write of writes) {
       expect(write.scope).toBe("chat");
       expect(write.bytes).toBeLessThanOrEqual(CHUNK_BYTES);
     }
+
     expect(publication.actions).toHaveLength(1);
     expect(publication.summary).toBeUndefined();
     expect(store.list({ limit: PAGE_SIZE }).items[0]?.status).toBe(IN_PROGRESS);
@@ -165,11 +186,13 @@ it("retains history larger than a SQL row across eviction without loading it int
     completeTurn(store, chat, "second");
     expect(store.require(chat).chat.turns).toEqual([]);
     expect(store.hasTurn(chat, "first")).toBe(true);
+
     const { maximum } = state.storage.sql
       .exec<{ maximum: number }>(
         "SELECT MAX(LENGTH(data)) AS maximum FROM document_chunks",
       )
       .one();
+
     expect(maximum).toBeLessThanOrEqual(CHUNK_BYTES);
   });
   await evictDurableObject(stub);
@@ -179,12 +202,14 @@ it("retains history larger than a SQL row across eviction without loading it int
     const chat = store.require(SESSION).chatUri;
     const snapshot = ChatStateSchema.parse(store.snapshot(chat).state);
     expect(snapshot.turns.map((turn) => turn.id)).toEqual(["first", "second"]);
+
     for (const turn of snapshot.turns) {
       expect(turn.state).toBe("complete");
       expect(turn.responseParts).toEqual([
         { kind: "markdown", id: turn.id, content: "x".repeat(RESPONSE_BYTES) },
       ]);
     }
+
     expect(store.hasTurn(chat, "first")).toBe(true);
   });
 });
@@ -216,6 +241,7 @@ it("rolls back a dispatch if its acknowledgement cannot be persisted and permits
   await withStore((store, state) => {
     ready(store);
     const before = store.snapshot(SESSION);
+
     const input = {
       record: store.require(SESSION),
       channel: SESSION,
@@ -223,6 +249,7 @@ it("rolls back a dispatch if its acknowledgement cannot be persisted and permits
       origin: { clientId: "client", clientSeq: 1 },
       frame: "title-dispatch",
     };
+
     state.storage.sql.exec(
       "CREATE TRIGGER fail_ack BEFORE INSERT ON dispatches BEGIN SELECT RAISE(ABORT, 'ack write failed'); END",
     );

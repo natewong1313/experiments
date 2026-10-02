@@ -2,23 +2,47 @@ import * as z from "zod";
 import { clientIdSchema, uriSchema } from "@experiments/protocol-schemas/ahp";
 
 const ROOT = "ahp-root://";
+
 const MAX_SUBSCRIPTIONS = 64;
+
 const MAX_FRAME_BYTES = 1_048_576;
+
 const MAX_ATTACHMENT_BYTES = 2048;
+
 const MAX_CLIENT_ID_LENGTH = 256;
+
 const MAX_CHANNEL_LENGTH = 512;
+
 const MIN_LENGTH = 1;
+
 const DEFAULT_PAGE_SIZE = 100;
+
 const MAX_PAGE_SIZE = 1000;
+
 const NORMAL_CLOSE = 1000;
+
 const INVALID_FRAME_CLOSE = 1003;
+
 const FAILED_CONNECTION_CLOSE = 1011;
+
 const VERSION_REJECT_CLOSE = 1002;
+
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
+
+type JsonObject = { [key: string]: JsonValue };
+
+type RpcResult = object | null;
+
 const STATUS_UPGRADE_REQUIRED = 426;
+
 const STATUS_NOT_FOUND = 404;
+
 const channelSchema = uriSchema.min(MIN_LENGTH).max(MAX_CHANNEL_LENGTH);
+
 const boundedClientIdSchema = clientIdSchema.max(MAX_CLIENT_ID_LENGTH);
+
 const subscriptionsSchema = z.array(channelSchema).max(MAX_SUBSCRIPTIONS);
+
 const ConnectionSchema = z.discriminatedUnion("phase", [
   z.object({ phase: z.literal("new") }),
   z.object({
@@ -27,6 +51,7 @@ const ConnectionSchema = z.discriminatedUnion("phase", [
     subscriptions: subscriptionsSchema,
   }),
 ]);
+
 const HostRequestLimitsSchema = z.object({
   channel: channelSchema,
   clientId: boundedClientIdSchema.optional(),
@@ -34,6 +59,7 @@ const HostRequestLimitsSchema = z.object({
   subscriptions: subscriptionsSchema.optional(),
   limit: z.int().positive().max(MAX_PAGE_SIZE).optional(),
 });
+
 const RpcCodes = {
   parse: -32_700,
   request: -32_600,
@@ -49,9 +75,9 @@ const RpcCodes = {
 class ProtocolError extends Error {
   override readonly name = "ProtocolError";
   readonly code: number;
-  readonly data: unknown;
+  readonly data: JsonValue | undefined;
 
-  constructor(code: number, message: string, data?: unknown) {
+  constructor(code: number, message: string, data?: JsonValue) {
     super(message);
     this.code = code;
     this.data = data;
@@ -60,14 +86,15 @@ class ProtocolError extends Error {
 
 type Connection = z.output<typeof ConnectionSchema>;
 
-function parseHostParams<T>(schema: z.ZodType<T>, params: unknown): T {
+function parseHostParams<T>(schema: z.ZodType<T>, params: JsonValue): T {
   const input = schema.parse(params);
   HostRequestLimitsSchema.parse(input);
+
   return input;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Agent operation failed";
+function errorMessage(error: Error): string {
+  return error.message;
 }
 
 export {
@@ -88,4 +115,7 @@ export {
   parseHostParams,
   errorMessage,
   type Connection,
+  type JsonValue,
+  type JsonObject,
+  type RpcResult,
 };

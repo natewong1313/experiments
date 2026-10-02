@@ -9,9 +9,11 @@ import { expectRootState, initialized, ROOT, test } from "./client";
 async function rootState(client: AhpClient): Promise<RootState> {
   const result = await initialized(client, [ROOT]);
   const [snapshot] = result.snapshots;
+
   if (!snapshot) {
     throw new Error("Expected a root snapshot");
   }
+
   return expectRootState(snapshot);
 }
 
@@ -25,8 +27,9 @@ describe("root state and session catalogue", () => {
     client,
   }) => {
     const state = await rootState(client);
+
     for (const agent of state.agents) {
-      expect(typeof agent.provider).toBe("string");
+      expect(agent.provider).toEqual(expect.any(String));
       expect(agent.displayName.length).toBeGreaterThan(0);
     }
   });
@@ -42,9 +45,11 @@ describe("root state and session catalogue", () => {
   }) => {
     const state = await rootState(client);
     const count = state.activeSessions;
+
     if (!count && count !== 0) {
       return;
     }
+
     expect(Number.isSafeInteger(count)).toBe(true);
     expect(count).toBeGreaterThanOrEqual(0);
   });
@@ -54,17 +59,21 @@ describe("root state and session catalogue", () => {
   }) => {
     const state = await rootState(client);
     const { terminals } = state;
+
     if (!terminals) {
       return;
     }
+
     expect(Array.isArray(terminals)).toBe(true);
   });
 
   test("returns a session catalogue array", async ({ client }) => {
     await initialized(client);
+
     const page = ListSessionsResultSchema.parse(
       await client.request("listSessions", { channel: ROOT }),
     );
+
     expect(Array.isArray(page.items)).toBe(true);
   });
 
@@ -72,15 +81,19 @@ describe("root state and session catalogue", () => {
     "accepts listSessions limit %i",
     async (limit, { client }) => {
       await initialized(client);
+
       const page = ListSessionsResultSchema.parse(
         await client.request("listSessions", { channel: ROOT, limit }),
       );
+
       expect(Array.isArray(page.items)).toBe(true);
       const { nextCursor } = page;
+
       if (!nextCursor) {
         return;
       }
-      expect(typeof nextCursor).toBe("string");
+
+      expect(nextCursor).toEqual(expect.any(String));
     },
   );
 
@@ -88,9 +101,11 @@ describe("root state and session catalogue", () => {
     client,
   }) => {
     await initialized(client);
+
     const page = ListSessionsResultSchema.parse(
       await client.request("listSessions", { channel: ROOT, limit: 10 }),
     );
+
     for (const item of page.items) {
       expect(item.resource.startsWith("ahp-session:/")).toBe(true);
       expect(item.provider.length).toBeGreaterThan(0);
@@ -100,12 +115,15 @@ describe("root state and session catalogue", () => {
 
   test("follows an advertised catalogue cursor", async ({ client }) => {
     await initialized(client);
+
     const first = ListSessionsResultSchema.parse(
       await client.request("listSessions", { channel: ROOT, limit: 1 }),
     );
+
     if (!first.nextCursor) {
       return;
     }
+
     const second = ListSessionsResultSchema.parse(
       await client.request("listSessions", {
         channel: ROOT,
@@ -113,6 +131,7 @@ describe("root state and session catalogue", () => {
         cursor: first.nextCursor,
       }),
     );
+
     expect(Array.isArray(second.items)).toBe(true);
   });
 });

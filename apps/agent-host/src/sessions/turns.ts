@@ -11,6 +11,7 @@ import type { AgentConnections } from "../agent/acp";
 import type { LiveSession, SessionGeneration } from "./record";
 
 const CANCEL_TIMEOUT_MS = 10_000;
+
 type WaitUntil = (work: Promise<void>) => void;
 
 function turnDuration(startedAt: string): number {
@@ -70,6 +71,7 @@ class TurnExecution {
     notification: SessionNotification,
   ): void {
     const record = this.store.lookup(identity.uri);
+
     if (
       !record ||
       record.sessionKey !== identity.sessionKey ||
@@ -77,6 +79,7 @@ class TurnExecution {
     ) {
       return;
     }
+
     for (const action of acpUpdateToChatActions(
       record.chat.activeTurn,
       notification,
@@ -91,9 +94,11 @@ class TurnExecution {
     errorType = "agent",
   ): void {
     const turn = record.chat.activeTurn;
+
     if (!turn) {
       return;
     }
+
     this.publish(record.chatUri, {
       type: "chat/error",
       turnId: turn.id,
@@ -108,10 +113,12 @@ class TurnExecution {
 
   private async runTurn(original: LiveSession, turnId: string): Promise<void> {
     const { uri } = original;
+
     try {
       const agent = await this.agents.get(original);
       const current = this.store.lookup(uri);
       const turn = current?.chat.activeTurn;
+
       if (
         !turn ||
         turn.id !== turnId ||
@@ -119,18 +126,23 @@ class TurnExecution {
       ) {
         return;
       }
+
       const outcome = await agent.prompt(turn.message);
       const latest = this.store.lookup(uri);
+
       if (
         latest?.chat.activeTurn?.id !== turnId ||
         latest.sessionKey !== original.sessionKey
       ) {
         return;
       }
+
       if (outcome.outcome === "failed") {
         this.failTurn(latest, outcome.message);
+
         return;
       }
+
       const action: StateAction =
         outcome.outcome === "cancelled"
           ? {
@@ -143,15 +155,21 @@ class TurnExecution {
               turnId,
               duration: turnDuration(turn.startedAt),
             };
+
       this.publish(latest.chatUri, action);
     } catch (error) {
+      const failure =
+        error instanceof Error ? error : new Error("Agent operation failed");
+
       const record = this.store.lookup(uri);
+
       if (
         record?.chat.activeTurn?.id === turnId &&
         record.sessionKey === original.sessionKey
       ) {
-        this.failTurn(record, errorMessage(error));
+        this.failTurn(record, errorMessage(failure));
       }
+
       await this.agents.release(original);
     } finally {
       this.running.delete(original.sessionKey);
@@ -163,16 +181,20 @@ class TurnExecution {
       const agent = await this.agents.get(record);
       await agent.cancel();
       const running = this.running.get(record.sessionKey);
+
       if (running) {
         await withDeadline(running, CANCEL_TIMEOUT_MS, () => {
           agent.abort();
         });
       }
     } catch (error) {
+      const failure =
+        error instanceof Error ? error : new Error("Agent operation failed");
+
       console.error({
         event: "agent_cancel_failed",
         session: record.uri,
-        error: errorMessage(error),
+        error: errorMessage(failure),
       });
       await this.agents.release(record);
     }

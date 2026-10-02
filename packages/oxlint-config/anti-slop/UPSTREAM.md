@@ -61,6 +61,13 @@ All 18 `anti-slop/*` rules are enabled at `error` in `base.json`'s `rules`
 (`oxc/no-accumulating-spread` was already enabled there). Individual
 workspaces keep their own workspace-specific rules and overrides.
 
+`no-runtime-typeof` runs with its official `allowInTypeGuards` option enabled:
+`["error", { "allowInTypeGuards": true }]`. Named type guards are the
+ruleset's sanctioned idiom for decoding genuinely dynamic values
+(`no-unknown-parameters` exempts type-predicate subjects for the same
+reason); without it, boundary code cannot discriminate values typed
+`unknown`/`any` at all. Ordinary (non-guard) code still cannot use `typeof`.
+
 Dependency: `@oxlint/plugins` pinned to `1.78.0` in
 `packages/oxlint-config/package.json`, matching the repo-wide `oxlint@1.78.0`.
 
