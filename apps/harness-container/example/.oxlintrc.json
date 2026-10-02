@@ -1,0 +1,5 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./node_modules/@experiments/oxlint-config/base.json"],
+  "ignorePatterns": ["worker-configuration.d.ts"]
+}

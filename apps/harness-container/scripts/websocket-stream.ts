@@ -1,3 +1,5 @@
+import { once } from "node:events";
+import { promisify } from "node:util";
 import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
 import { WebSocket } from "ws";
 import { decodeFrame, parseMessage } from "../container/messages.ts";
@@ -6,10 +8,8 @@ export async function connectWebSocket(
   url: string,
 ): Promise<{ socket: WebSocket; stream: Stream }> {
   const socket = new WebSocket(url);
-  await new Promise<void>((resolve, reject) => {
-    socket.once("open", resolve);
-    socket.once("error", reject);
-  });
+  await once(socket, "open");
+  const send = promisify(socket.send.bind(socket));
   const readable: ReadableStream<AnyMessage> = new ReadableStream({
     start(controller): void {
       let ended = false;
@@ -49,15 +49,7 @@ export async function connectWebSocket(
   });
   const writable: WritableStream<AnyMessage> = new WritableStream({
     async write(message): Promise<void> {
-      await new Promise<void>((resolve, reject) => {
-        socket.send(JSON.stringify(message), { binary: false }, (error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
-      });
+      await send(JSON.stringify(message));
     },
     close(): void {
       socket.close();
