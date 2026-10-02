@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import { createAdaptorServer, upgradeWebSocket } from "@hono/node-server";
@@ -6,11 +7,8 @@ import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
-import {
-  MAX_MESSAGE_BYTES,
-  decodeFrame,
-  normalizeMessage,
-} from "./messages.ts";
+import { MAX_MESSAGE_BYTES, decodeFrame, parseMessage } from "./messages.ts";
+import { logEvent, logMessage } from "./logging.ts";
 
 const FORCE_STOP_MS = 2000;
 
@@ -69,10 +67,20 @@ async function sendMessage(socket: WebSocket, message: string): Promise<void> {
 async function forwardOutput(
   child: ChildProcessWithoutNullStreams,
   socket: WebSocket,
+  connectionId: string,
 ): Promise<void> {
   const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 
   for await (const message of lines) {
+    try {
+      logMessage(parseMessage(message), connectionId, "agent_to_client");
+    } catch (error) {
+      logEvent("agent_output_invalid", {
+        connectionId,
+        errorType: error instanceof Error ? error.name : "Unknown",
+      });
+    }
+
     // eslint-disable-next-line no-await-in-loop
     await sendMessage(socket, message);
   }
@@ -83,6 +91,14 @@ function connectAgent(
   socket: WebSocket,
   release: () => void,
 ): () => void {
+  const connectionId = randomUUID();
+  const startedAt = Date.now();
+  logEvent("agent_starting", {
+    connectionId,
+    command: options.command,
+    workspace: options.workspace,
+  });
+
   const child = spawn(options.command, options.args, {
     cwd: options.workspace,
     env: options.env,
@@ -98,6 +114,7 @@ function connectAgent(
     }
 
     stopping = true;
+    logEvent("agent_stopping", { connectionId, pid: child.pid });
     child.stdin.end();
     signalGroup(child, "SIGTERM");
     setTimeout(() => {
@@ -105,17 +122,32 @@ function connectAgent(
     }, FORCE_STOP_MS).unref();
   }
 
-  child.stderr.resume();
-  child.stdin.on("error", () => {
+  const stderr = createInterface({ input: child.stderr, crlfDelay: Infinity });
+  stderr.on("line", (message) => {
+    logEvent("agent_stderr", { connectionId, pid: child.pid, message });
+  });
+  child.once("spawn", () => {
+    logEvent("agent_started", { connectionId, pid: child.pid });
+  });
+  child.stdin.on("error", (error) => {
+    logEvent("agent_input_failed", { connectionId, error: error.message });
     socket.close(CLOSE_AGENT_EXIT, "Agent input failed");
   });
   child.stdin.on("drain", () => {
     socket.resume();
   });
-  child.once("error", () => {
+  child.once("error", (error) => {
+    logEvent("agent_start_failed", { connectionId, error: error.message });
     socket.close(CLOSE_AGENT_EXIT, "Could not launch pi-acp");
   });
-  child.once("close", () => {
+  child.once("close", (code, signal) => {
+    logEvent("agent_exited", {
+      connectionId,
+      pid: child.pid,
+      code,
+      signal,
+      elapsedMs: Date.now() - startedAt,
+    });
     stop();
     release();
     socket.close(CLOSE_AGENT_EXIT, "Agent exited");
@@ -126,6 +158,10 @@ function connectAgent(
     }
 
     if (isBinary) {
+      logEvent("acp_message_rejected", {
+        connectionId,
+        reason: "binary_frame",
+      });
       socket.close(CLOSE_BINARY, "ACP requires text messages");
       stop();
 
@@ -133,23 +169,42 @@ function connectAgent(
     }
 
     try {
-      const message = normalizeMessage(decodeFrame(data));
+      const message = parseMessage(decodeFrame(data));
+      logMessage(message, connectionId, "client_to_agent");
 
-      if (!child.stdin.write(`${message}\n`)) {
+      if (!child.stdin.write(`${JSON.stringify(message)}\n`)) {
         socket.pause();
       }
-    } catch {
+    } catch (error) {
+      logEvent("acp_message_rejected", {
+        connectionId,
+        errorType: error instanceof Error ? error.name : "Unknown",
+      });
       socket.close(CLOSE_INVALID_DATA, "Invalid ACP message");
       stop();
     }
   });
-  socket.once("close", stop);
-  socket.once("error", stop);
+  socket.once("close", (code, reason) => {
+    logEvent("controller_disconnected", {
+      connectionId,
+      code,
+      reason: reason.toString(),
+    });
+    stop();
+  });
+  socket.once("error", (error) => {
+    logEvent("controller_failed", { connectionId, error: error.message });
+    stop();
+  });
 
   async function pumpOutput(): Promise<void> {
     try {
-      await forwardOutput(child, socket);
-    } catch {
+      await forwardOutput(child, socket, connectionId);
+    } catch (error) {
+      logEvent("agent_output_failed", {
+        connectionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       socket.close(CLOSE_AGENT_EXIT, "Agent output failed");
       stop();
     }
@@ -172,6 +227,10 @@ export function createBridge(options: BridgeOptions): Bridge {
     noServer: true,
     maxPayload: MAX_MESSAGE_BYTES,
     verifyClient(_info, done): void {
+      if (stopAgent !== null) {
+        logEvent("controller_rejected", { reason: "agent_already_controlled" });
+      }
+
       done(
         stopAgent === null,
         STATUS_CONFLICT,
@@ -203,6 +262,7 @@ export function createBridge(options: BridgeOptions): Bridge {
   return {
     server,
     async close(): Promise<void> {
+      logEvent("bridge_closing", { controllers: sockets.clients.size });
       stopAgent?.();
 
       for (const socket of sockets.clients) {

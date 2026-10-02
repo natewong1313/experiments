@@ -34,8 +34,18 @@ export class HarnessContainer<
 
   async fetch(request: Request): Promise<Response> {
     const { container } = this.ctx;
+    const containerId = this.ctx.id.toString();
+    const startedAt = Date.now();
+    console.info({
+      event: "container_request",
+      containerId,
+      method: request.method,
+      websocket: request.headers.get("Upgrade")?.toLowerCase() === "websocket",
+    });
 
     if (!container) {
+      console.error({ event: "container_binding_missing", containerId });
+
       return new Response("Container binding is missing", { status: 503 });
     }
 
@@ -51,8 +61,22 @@ export class HarnessContainer<
       const forwarded = new Request(url, request);
       forwarded.headers.delete("host");
 
-      return await container.getTcpPort(this.port).fetch(forwarded);
-    } catch {
+      const response = await container.getTcpPort(this.port).fetch(forwarded);
+      console.info({
+        event: "container_request_forwarded",
+        containerId,
+        status: response.status,
+        elapsedMs: Date.now() - startedAt,
+      });
+
+      return response;
+    } catch (error) {
+      console.error({
+        event: "container_request_failed",
+        containerId,
+        error: error instanceof Error ? error.message : String(error),
+        elapsedMs: Date.now() - startedAt,
+      });
       this.ready = null;
 
       return new Response("Agent container is unavailable", { status: 503 });
@@ -61,12 +85,15 @@ export class HarnessContainer<
 
   private async startAndWait(): Promise<void> {
     const { container } = this.ctx;
+    const containerId = this.ctx.id.toString();
+    const startedAt = Date.now();
 
     if (!container) {
       throw new Error("Container binding is missing");
     }
 
     if (!container.running) {
+      console.info({ event: "container_starting", containerId });
       container.start({
         enableInternet: true,
         env: this.getContainerEnv(),
@@ -74,7 +101,18 @@ export class HarnessContainer<
     }
 
     await container.setInactivityTimeout(this.inactivityTimeoutMs);
+    console.info({
+      event: "container_waiting_for_health",
+      containerId,
+      port: this.port,
+      timeoutMs: this.readinessTimeoutMs,
+    });
     await this.waitForHealth(Date.now() + this.readinessTimeoutMs);
+    console.info({
+      event: "container_ready",
+      containerId,
+      elapsedMs: Date.now() - startedAt,
+    });
   }
 
   private async waitForHealth(deadline: number): Promise<void> {
@@ -84,6 +122,8 @@ export class HarnessContainer<
       throw new Error("Container binding is missing");
     }
 
+    let failure: string;
+
     try {
       const response = await container
         .getTcpPort(this.port)
@@ -92,9 +132,19 @@ export class HarnessContainer<
       if (response.ok) {
         return;
       }
-    } catch {}
+
+      failure = `HTTP ${response.status}`;
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error);
+    }
 
     if (Date.now() >= deadline) {
+      console.error({
+        event: "container_readiness_timeout",
+        containerId: this.ctx.id.toString(),
+        port: this.port,
+        error: failure,
+      });
       throw new Error("Agent container did not become ready");
     }
 

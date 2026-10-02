@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import * as z from "zod";
 import { createBridge } from "./bridge.ts";
+import { logEvent } from "./logging.ts";
 
 const MIN_CREDENTIAL_LENGTH = 1;
 
@@ -18,12 +19,18 @@ const ConfigSchema = z.object({
 const parsed = ConfigSchema.safeParse(process.env);
 
 if (!parsed.success) {
+  logEvent("bridge_config_invalid");
   throw new Error(
     "Missing Workers AI credentials or invalid bridge configuration",
   );
 }
 
 const config = parsed.data;
+
+logEvent("bridge_starting", {
+  port: config.PORT,
+  workspace: config.WORKSPACE_DIR,
+});
 
 await mkdir(config.WORKSPACE_DIR, { recursive: true });
 
@@ -40,23 +47,27 @@ const bridge = createBridge({
 });
 
 bridge.server.listen(config.PORT, "0.0.0.0", () => {
-  process.stderr.write(
-    `${JSON.stringify({ event: "bridge_listening", port: config.PORT })}\n`,
-  );
+  logEvent("bridge_listening", { port: config.PORT });
 });
 
-async function shutdown(): Promise<void> {
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  logEvent("bridge_shutdown", { signal });
+
   try {
     await bridge.close();
-  } catch {
+    logEvent("bridge_closed");
+  } catch (error) {
+    logEvent("bridge_shutdown_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     process.exitCode = 1;
   }
 }
 
 process.once("SIGTERM", () => {
-  void shutdown();
+  void shutdown("SIGTERM");
 });
 
 process.once("SIGINT", () => {
-  void shutdown();
+  void shutdown("SIGINT");
 });

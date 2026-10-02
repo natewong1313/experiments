@@ -115,7 +115,11 @@ const directory = await mkdtemp(join(tmpdir(), "harness-docker-"));
 try {
   server.listen(join(directory, "docker.sock"));
   await once(server, "listening");
-  const child = spawn("wrangler", ["dev", ...process.argv.slice(2)], {
+  const args = process.argv.slice(2);
+  const [mode] = args;
+  const useVite = mode === "--vite";
+  if (useVite) args.shift();
+  const child = spawn(useVite ? "vite" : "wrangler", ["dev", ...args], {
     stdio: "inherit",
     env: {
       ...process.env,

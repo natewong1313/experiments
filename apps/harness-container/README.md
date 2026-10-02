@@ -124,6 +124,18 @@ Container disk and conversations are disposable across restarts. The adapter
 does not delegate filesystem or terminal operations to clients, and its ACP
 MCP server configuration is not connected to pi. This remains a prototype.
 
+## Logs
+
+The Worker logs container startup, readiness, forwarded response statuses, and
+failures with a `containerId`. The bridge writes JSON lines to stderr with a
+timestamp and a `connectionId` for each controlling WebSocket. It logs agent
+process startup and exit, disconnects, protocol errors, and ACP methods and
+response IDs. ACP payloads and streaming `session/update` notifications are
+omitted. Pi's stderr appears as `agent_stderr` events.
+
+During local development, Worker logs appear in the Wrangler terminal and bridge
+logs appear in the container output or the `dev:bridge` terminal.
+
 ## Checks
 
 ```sh

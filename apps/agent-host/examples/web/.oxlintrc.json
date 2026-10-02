@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "./node_modules/@experiments/oxlint-config/react-internal.json"
+  ],
+  "jsPlugins": [
+    {
+      "name": "anti-slop",
+      "specifier": "./node_modules/@experiments/oxlint-config/anti-slop/index.ts"
+    }
+  ],
+  "ignorePatterns": [
+    "src/routeTree.gen.ts",
+    "worker-configuration.d.ts"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "src/router.tsx"
+      ],
+      "rules": {
+        "typescript/consistent-type-definitions": "off"
+      }
+    },
+    {
+      "files": [
+        "src/routes/__root.tsx"
+      ],
+      "rules": {
+        "import/extensions": "off"
+      }
+    },
+    {
+      "files": [
+        "src/ahp/state.ts",
+        "src/ahp/dispatch.ts"
+      ],
+      "rules": {
+        "typescript/consistent-type-assertions": "off",
+        "typescript/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
+      "files": [
+        "src/ahp/dispatch.ts"
+      ],
+      "rules": {
+        "promise/avoid-new": "off"
+      }
+    }
+  ]
+}

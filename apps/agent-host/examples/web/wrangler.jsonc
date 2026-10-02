@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "agent-host-web",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-09-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "upload_source_maps": true,
+  "vars": { "WORKSPACE_DIR": "/workspace" },
+  "containers": [
+    {
+      "class_name": "HarnessContainer",
+      "image": "../../../harness-container/Dockerfile",
+      "image_build_context": "../../../harness-container",
+      "instance_type": "basic",
+      "max_instances": 5
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "AGENT_HOST", "class_name": "AgentHost" },
+      { "name": "HARNESS_CONTAINER", "class_name": "HarnessContainer" }
+    ]
+  },
+  "exports": {
+    "AgentHost": { "type": "durable-object", "storage": "sqlite" },
+    "HarnessContainer": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "secrets": {
+    "required": ["CLOUDFLARE_API_KEY", "CLOUDFLARE_ACCOUNT_ID"]
+  }
+}
