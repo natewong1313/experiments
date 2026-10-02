@@ -1,0 +1,21 @@
+{
+  "name": "@experiments/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "bin": {
+    "wrangler-dev-linux": "./dev.sh"
+  },
+  "scripts": {
+    "lint": "oxlint --deny-warnings --type-aware .",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@experiments/oxlint-config": "workspace:*",
+    "@experiments/typescript-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "oxlint": "1.78.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2"
+  }
+}

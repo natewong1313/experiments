@@ -1,0 +1,34 @@
+{
+  "name": "@experiments/agent-host",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "check-types": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
+    "lint": "oxlint --deny-warnings --type-aware src test vitest.config.ts drizzle.config.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "0.26.0",
+    "@experiments/protocol-schemas": "workspace:*",
+    "@microsoft/agent-host-protocol": "0.9.0",
+    "drizzle-orm": "^0.45.3",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.3.4",
+    "@cloudflare/workers-types": "5.20260819.1",
+    "@experiments/oxlint-config": "workspace:*",
+    "@experiments/typescript-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "drizzle-kit": "^0.31.11",
+    "oxlint": "1.78.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2",
+    "vitest": "4.1.9"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

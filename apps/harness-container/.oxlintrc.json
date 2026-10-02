@@ -10,21 +10,9 @@
       }
     },
     {
-      "files": [
-        "container/bridge.ts",
-        "scripts/websocket-stream.ts",
-        "test/bridge.test.ts"
-      ],
+      "files": ["container/bridge.ts"],
       "rules": {
         "promise/avoid-new": "off"
-      }
-    },
-    {
-      "files": ["test/*.ts"],
-      "rules": {
-        "eslint/no-magic-numbers": "off",
-        "eslint/max-nested-callbacks": "off",
-        "unicorn/max-nested-calls": "off"
       }
     }
   ]

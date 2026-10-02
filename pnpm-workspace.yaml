@@ -1,5 +1,7 @@
 packages:
   - "apps/*"
+  - "apps/harness-container/example"
+  - "apps/agent-host/examples/*"
   - "packages/*"
 allowBuilds:
   esbuild: true

@@ -5,15 +5,26 @@ const INACTIVITY_TIMEOUT_MS = 600_000;
 const READINESS_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 200;
 
-class HarnessContainer extends DurableObject<Env> {
+export type HarnessContainerEnv = {
+  CLOUDFLARE_API_KEY: string;
+  CLOUDFLARE_ACCOUNT_ID: string;
+};
+
+export class HarnessContainer<
+  Environment extends HarnessContainerEnv = HarnessContainerEnv,
+> extends DurableObject<Environment> {
+  protected port = PORT;
+  protected inactivityTimeoutMs = INACTIVITY_TIMEOUT_MS;
+  protected readinessTimeoutMs = READINESS_TIMEOUT_MS;
+  protected pollIntervalMs = POLL_INTERVAL_MS;
   private ready: Promise<void> | null = null;
 
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    const { container } = ctx;
-    if (container?.running === true) {
-      void ctx.blockConcurrencyWhile(() => container.setInactivityTimeout(INACTIVITY_TIMEOUT_MS));
+  protected getContainerEnv(): Record<string, string> {
+    const { CLOUDFLARE_API_KEY, CLOUDFLARE_ACCOUNT_ID } = this.env;
+    if (!CLOUDFLARE_API_KEY || !CLOUDFLARE_ACCOUNT_ID) {
+      throw new Error("Cloudflare Workers AI credentials are missing");
     }
+    return { CLOUDFLARE_API_KEY, CLOUDFLARE_ACCOUNT_ID };
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -30,7 +41,7 @@ class HarnessContainer extends DurableObject<Env> {
       const url = new URL("http://container/acp");
       const forwarded = new Request(url, request);
       forwarded.headers.delete("host");
-      return await container.getTcpPort(PORT).fetch(forwarded);
+      return await container.getTcpPort(this.port).fetch(forwarded);
     } catch {
       this.ready = null;
       return new Response("Agent container is unavailable", { status: 503 });
@@ -42,25 +53,14 @@ class HarnessContainer extends DurableObject<Env> {
     if (!container) {
       throw new Error("Container binding is missing");
     }
-    if (!this.env.CLOUDFLARE_API_KEY || !this.env.CLOUDFLARE_ACCOUNT_ID) {
-      throw new Error("Cloudflare Workers AI credentials are missing");
-    }
     if (!container.running) {
       container.start({
         enableInternet: true,
-        env: {
-          CLOUDFLARE_API_KEY: this.env.CLOUDFLARE_API_KEY,
-          CLOUDFLARE_ACCOUNT_ID: this.env.CLOUDFLARE_ACCOUNT_ID,
-        },
+        env: this.getContainerEnv(),
       });
     }
-    try {
-      await container.setInactivityTimeout(INACTIVITY_TIMEOUT_MS);
-      await this.waitForHealth(Date.now() + READINESS_TIMEOUT_MS);
-    } catch (error) {
-      this.ready = null;
-      throw error;
-    }
+    await container.setInactivityTimeout(this.inactivityTimeoutMs);
+    await this.waitForHealth(Date.now() + this.readinessTimeoutMs);
   }
 
   private async waitForHealth(deadline: number): Promise<void> {
@@ -69,7 +69,9 @@ class HarnessContainer extends DurableObject<Env> {
       throw new Error("Container binding is missing");
     }
     try {
-      const response = await container.getTcpPort(PORT).fetch("http://container/health");
+      const response = await container
+        .getTcpPort(this.port)
+        .fetch("http://container/health");
       if (response.ok) {
         return;
       }
@@ -77,9 +79,7 @@ class HarnessContainer extends DurableObject<Env> {
     if (Date.now() >= deadline) {
       throw new Error("Agent container did not become ready");
     }
-    await scheduler.wait(POLL_INTERVAL_MS);
+    await scheduler.wait(this.pollIntervalMs);
     await this.waitForHealth(deadline);
   }
 }
-
-export { HarnessContainer };

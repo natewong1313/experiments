@@ -7,8 +7,11 @@ import { connectWebSocket } from "./websocket-stream.ts";
 
 const SMOKE_TIMEOUT_MS = 120_000;
 const POSITIONAL_ARGUMENT_OFFSET = 2;
-const [endpoint, prompt] = process.argv.slice(POSITIONAL_ARGUMENT_OFFSET);
-const url = endpoint ?? "ws://localhost:8787/agents/smoke/acp";
+const PROMPT_ARGUMENT_INDEX = 3;
+const prompt = process.argv.at(PROMPT_ARGUMENT_INDEX);
+const url =
+  process.argv.at(POSITIONAL_ARGUMENT_OFFSET) ??
+  "ws://localhost:8787/agents/smoke/acp";
 const { socket, stream } = await connectWebSocket(url);
 const timeout = setTimeout(() => {
   socket.terminate();

@@ -1,0 +1,31 @@
+{
+  "name": "@experiments/agent-host-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler-dev-linux",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types --include-runtime=false --strict-vars=false",
+    "check-types": "wrangler types --include-runtime=false --strict-vars=false && tsc --noEmit && tsc --noEmit -p client/tsconfig.json",
+    "lint": "oxlint --deny-warnings --type-aware src client",
+    "prompt": "node --experimental-strip-types client/prompt.ts"
+  },
+  "dependencies": {
+    "@experiments/agent-host": "workspace:*",
+    "@experiments/harness-container": "workspace:*",
+    "@microsoft/agent-host-protocol": "0.9.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260819.1",
+    "@experiments/oxlint-config": "workspace:*",
+    "@experiments/scripts": "workspace:*",
+    "@experiments/typescript-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "oxlint": "1.78.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2",
+    "wrangler": "4.137.0"
+  }
+}
