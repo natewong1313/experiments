@@ -14,6 +14,7 @@
     "@experiments/protocol-schemas": "workspace:*",
     "@microsoft/agent-host-protocol": "0.9.0",
     "drizzle-orm": "^0.45.3",
+    "fast-equals": "^6.0.4",
     "zod": "4.6.5"
   },
   "devDependencies": {

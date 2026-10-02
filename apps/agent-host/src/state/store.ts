@@ -1,6 +1,7 @@
 import { asc, count, eq, gt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
+import { deepEqual } from "fast-equals";
 import type {
   ActionEnvelope,
   ActionOrigin,
@@ -136,7 +137,8 @@ class HostStore {
 
   configureAgent(agent: AgentInfo): Publication | null {
     const agents = [agent];
-    if (JSON.stringify(this.hostRow().root.agents) === JSON.stringify(agents)) {
+
+    if (deepEqual(this.hostRow().root.agents, agents)) {
       return null;
     }
     return this.apply(ROOT, { type: "root/agentsChanged", agents });
@@ -321,8 +323,9 @@ class HostStore {
         published.push(this.journal.append(record.uri, projected));
       }
     }
-    const changed =
-      JSON.stringify(next.session) !== JSON.stringify(record.session);
+
+    const changed = !deepEqual(next.session, record.session);
+
     if (changed) {
       this.db
         .update(sessions)
