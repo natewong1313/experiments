@@ -1,3 +1,4 @@
+import { deepEqual } from "fast-equals";
 import {
   ChatSummarySchema,
   type ChatState,
@@ -42,7 +43,8 @@ function projectChat(
   chat: ChatState,
 ): SessionAction | undefined {
   const summary = chatSummary(chat);
-  if (JSON.stringify(summary) === JSON.stringify(record.session.chats[0])) {
+
+  if (deepEqual(summary, record.session.chats[0])) {
     return;
   }
   return {
