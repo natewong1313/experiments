@@ -116,6 +116,14 @@
         ],
         "ignoreArrayIndexes": true
       }
+    ],
+    "eslint/no-underscore-dangle": [
+      "error",
+      {
+        "allow": [
+          "_meta"
+        ]
+      }
     ]
   }
 }

@@ -160,6 +160,26 @@ does not support attachments, queued prompts, or additional chats.
 The consumer Worker controls client authentication. The self-hosting example
 exposes shared state selected by a host ID without authentication.
 
+## ACP support
+
+The workspace catalog supplies ACP TypeScript SDK `1.7.0`. The host uses its fluent
+client API and the shared package's complete ACP v1 validators.
+
+All 19 session-update variants are handled. Text, reasoning, tool progress, rich
+content, and usage map to AHP chat actions. Plans, notices, compactions, subagent
+activity, and session messages retain their original payloads in system notification
+metadata. Commands, modes, configuration, session information, and other ACP state
+persist under `session._meta.acp[acpSessionId]`. Root session information can update
+the AHP title. Updates outside turns publish session metadata.
+
+Setup updates are buffered until the ACP session ID is bound. Announced subagents
+can publish output on the same connection; unrelated session IDs are ignored.
+The host advertises plan, notice, compaction, subagent, and boolean configuration
+update support. File access, terminal controls, authentication, elicitation, and
+configuration commands remain outside the host's implemented capabilities.
+Permission requests receive a cancelled response. Terminal references in tool output
+do not create AHP terminal channels.
+
 ## Storage and restart behavior
 
 SQLite stores session and chat state, backend session keys, ACP conversation IDs, accepted client
@@ -183,6 +203,9 @@ room left for parsed objects, serialization, connections, and runtime overhead:
 | Snapshot response or session catalogue page | 4 MiB, less response overhead                             |
 | Replayed action envelopes                   | 2 MiB                                                     |
 | Older history page                          | 3 MiB and at most 100 turns                               |
+| Stored session metadata                     | 64 KiB                                                    |
+| Buffered ACP setup updates per connection   | 1 MiB                                                     |
+| Announced subagents per connection          | 256                                                       |
 | Open or connecting ACP sessions per host    | 8                                                         |
 | Reloadable ACP connection idle time         | 60 seconds                                                |
 
@@ -231,7 +254,7 @@ reply. It never resends that prompt automatically. An unfinished session creatio
 becomes failed.
 
 The next prompt reopens the stored ACP conversation with `session/load`.
-Historical updates from loading that conversation are ignored. This assumes the
+Historical transcript updates from loading that conversation are ignored; metadata updates are retained. This assumes the
 backend retains its conversation and files and supports `session/load`. If it
 cannot load the recorded conversation, the host reports an error and keeps the
 recorded ACP session ID. It never creates a replacement conversation silently.

@@ -21,3 +21,8 @@ An example Turborepo monorepo using pnpm, applying the conventions documented in
 | `pnpm format`      | Format the repo with oxfmt                          |
 
 Add `--filter=<workspace>` to scope any task, e.g. `pnpm build --filter=agent-host`.
+
+Commits run oxfmt and oxlint on the staged files via [lefthook](https://lefthook.dev)
+(`lefthook.yml`), installed automatically by `pnpm install` through the
+`prepare` script. Staged files are formatted in place and re-staged; lint
+failures block the commit.

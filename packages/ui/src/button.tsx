@@ -1,6 +1,7 @@
 "use client";
 
 import type { JSX, ReactNode } from "react";
+import { useCallback } from "react";
 
 type ButtonProps = {
   children: ReactNode;
@@ -9,13 +10,12 @@ type ButtonProps = {
 };
 
 export function Button({ children, className, appName }: ButtonProps): JSX.Element {
+  const handleClick = useCallback((): void => {
+    alert(`Hello from your ${appName} app!`);
+  }, [appName]);
+
   return (
-    <button
-      className={className}
-      onClick={() => {
-        alert(`Hello from your ${appName} app!`);
-      }}
-    >
+    <button className={className} onClick={handleClick}>
       {children}
     </button>
   );

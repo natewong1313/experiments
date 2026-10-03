@@ -1,0 +1,50 @@
+# Format and lint staged files on commit.
+# Each oxlint command lists its workspace's staged files via `files` and runs
+# with the same flags as that workspace's own `lint` script. Docs:
+# https://lefthook.dev
+pre-commit:
+  commands:
+    oxfmt:
+      glob: "*.{ts,tsx,md}"
+      run: oxfmt --write {staged_files}
+      stage_fixed: true
+
+    oxlint-agent-host:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/src apps/agent-host/test apps/agent-host/vitest.config.ts apps/agent-host/drizzle.config.ts
+      run: oxlint --deny-warnings --type-aware {files}
+
+    oxlint-agent-host-basic:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/basic/src apps/agent-host/examples/basic/client
+      run: oxlint --deny-warnings --type-aware {files}
+
+    oxlint-agent-host-web:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/web/src apps/agent-host/examples/web/vite.config.ts
+      run: oxlint --deny-warnings --type-aware {files}
+
+    oxlint-pi-agent:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- apps/pi-agent/src apps/pi-agent/test apps/pi-agent/vitest.config.ts
+      run: oxlint --deny-warnings --type-aware {files}
+
+    oxlint-protocol-schemas:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- packages/protocol-schemas
+      run: oxlint --deny-warnings {files}
+
+    oxlint-scripts:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- packages/scripts
+      run: oxlint --deny-warnings --type-aware {files}
+
+    oxlint-ui:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- packages/ui
+      run: oxlint --deny-warnings --type-aware {files}
+
+    oxlint-ahp-conformance:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- packages/ahp-conformance
+      run: oxlint --deny-warnings {files}
