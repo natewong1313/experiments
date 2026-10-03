@@ -13,8 +13,6 @@
     "@oxlint/plugins": "1.78.0",
     "@typescript-eslint/utils": "^8.71.0",
     "eslint-plugin-drizzle": "0.2.3",
-    "eslint-plugin-zod": "4.12.0",
-    "oxlint": "1.78.0",
-    "oxlint-tsgolint": "7.0.2003"
+    "eslint-plugin-zod": "4.12.0"
   }
 }
