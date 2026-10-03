@@ -5,20 +5,18 @@ import type { HostStore } from "../state/store";
 import type { AhpClients } from "./clients";
 import type { TurnExecution } from "../sessions/turns";
 
+type ActionDispatchParams = {
+  store: HostStore;
+  clients: AhpClients;
+  turns: TurnExecution;
+};
+
 class ActionDispatch {
   private readonly store: HostStore;
   private readonly clients: AhpClients;
   private readonly turns: TurnExecution;
 
-  constructor({
-    store,
-    clients,
-    turns,
-  }: {
-    store: HostStore;
-    clients: AhpClients;
-    turns: TurnExecution;
-  }) {
+  constructor({ store, clients, turns }: ActionDispatchParams) {
     this.store = store;
     this.clients = clients;
     this.turns = turns;

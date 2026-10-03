@@ -11,6 +11,15 @@ import type { LiveSession } from "./record";
 
 type WaitUntil = (work: Promise<void>) => void;
 
+type SessionLifecycleParams = {
+  store: HostStore;
+  agents: AgentConnections;
+  clients: AhpClients;
+  hostId: string;
+  config: AgentConfig;
+  waitUntil: WaitUntil;
+};
+
 class SessionLifecycle {
   private readonly store: HostStore;
   private readonly agents: AgentConnections;
@@ -26,14 +35,7 @@ class SessionLifecycle {
     hostId,
     config,
     waitUntil,
-  }: {
-    store: HostStore;
-    agents: AgentConnections;
-    clients: AhpClients;
-    hostId: string;
-    config: AgentConfig;
-    waitUntil: WaitUntil;
-  }) {
+  }: SessionLifecycleParams) {
     this.store = store;
     this.agents = agents;
     this.clients = clients;
@@ -78,7 +80,7 @@ class SessionLifecycle {
   }
 
   async dispose(channel: string): Promise<void> {
-    const record = this.store.require(channel);
+    const record = this.store.requireMetadata(channel);
 
     if (channel !== record.uri) {
       throw new ProtocolError(RpcCodes.params, "Dispose the session channel");
@@ -121,6 +123,7 @@ class SessionLifecycle {
 
       this.store.bindAgent(uri, agent.sessionId);
       this.publish(uri, { type: "session/ready" });
+      await this.agents.idle(original);
     } catch (error) {
       if (this.store.lookup(uri)?.sessionKey === original.sessionKey) {
         const failure =

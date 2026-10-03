@@ -3,56 +3,39 @@ import {
   rootReducer,
   sessionReducer,
 } from "@microsoft/agent-host-protocol";
-import {
-  ChatActionSchema,
-  ChatStateSchema,
-  RootActionSchema,
-  RootStateSchema,
-  SessionActionSchema,
-  SessionStateSchema,
-  type ChatState,
-  type RootState,
-  type SessionState,
-  type StateAction,
+import type {
+  ChatState,
+  RootState,
+  SessionState,
+  StateAction,
 } from "@experiments/protocol-schemas/ahp";
 
-// The SDK uses nominal enums. The wire schemas validate their literal values.
+// External input is validated by the wire schemas before reaching these reducers.
 function reduceRoot(state: RootState, action: StateAction): RootState {
-  // SAFETY: RootStateSchema validates the wire-compatible fields before the SDK reducer reads them.
-  const validatedState = state as Parameters<typeof rootReducer>[0];
+  // SAFETY: Persisted state and validated actions use the SDK's wire values for nominal enums.
+  const sdkState = state as Parameters<typeof rootReducer>[0];
+  // SAFETY: Callers route validated root actions to this reducer.
+  const sdkAction = action as Parameters<typeof rootReducer>[1];
 
-  // SAFETY: RootActionSchema validates every root action variant before the SDK reducer reads it.
-  const validatedAction = RootActionSchema.parse(action) as Parameters<
-    typeof rootReducer
-  >[1];
-
-  return RootStateSchema.parse(rootReducer(validatedState, validatedAction));
+  return rootReducer(sdkState, sdkAction);
 }
 
 function reduceSession(state: SessionState, action: StateAction): SessionState {
-  // SAFETY: SessionStateSchema validates the wire-compatible fields before the SDK reducer reads them.
-  const validatedState = state as Parameters<typeof sessionReducer>[0];
+  // SAFETY: Persisted state and validated actions use the SDK's wire values for nominal enums.
+  const sdkState = state as Parameters<typeof sessionReducer>[0];
+  // SAFETY: Callers route validated session actions to this reducer.
+  const sdkAction = action as Parameters<typeof sessionReducer>[1];
 
-  // SAFETY: SessionActionSchema validates every session action variant before the SDK reducer reads it.
-  const validatedAction = SessionActionSchema.parse(action) as Parameters<
-    typeof sessionReducer
-  >[1];
-
-  return SessionStateSchema.parse(
-    sessionReducer(validatedState, validatedAction),
-  );
+  return sessionReducer(sdkState, sdkAction);
 }
 
 function reduceChat(state: ChatState, action: StateAction): ChatState {
-  // SAFETY: ChatStateSchema validates the wire-compatible fields before the SDK reducer reads them.
-  const validatedState = state as Parameters<typeof chatReducer>[0];
+  // SAFETY: Persisted state and validated actions use the SDK's wire values for nominal enums.
+  const sdkState = state as Parameters<typeof chatReducer>[0];
+  // SAFETY: Callers route validated chat actions to this reducer.
+  const sdkAction = action as Parameters<typeof chatReducer>[1];
 
-  // SAFETY: ChatActionSchema validates every chat action variant before the SDK reducer reads it.
-  const validatedAction = ChatActionSchema.parse(action) as Parameters<
-    typeof chatReducer
-  >[1];
-
-  return ChatStateSchema.parse(chatReducer(validatedState, validatedAction));
+  return chatReducer(sdkState, sdkAction);
 }
 
 export { reduceRoot, reduceSession, reduceChat };

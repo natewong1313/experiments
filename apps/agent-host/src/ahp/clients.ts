@@ -16,6 +16,11 @@ import type {
   SessionSummary,
 } from "@experiments/protocol-schemas/ahp";
 import type { Publication } from "../state/store";
+import {
+  MAX_SNAPSHOT_BYTES,
+  RESPONSE_RESERVE_BYTES,
+  checkBytes,
+} from "../memory";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
@@ -52,17 +57,17 @@ type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 
 type JsonObject = { [key: string]: JsonValue };
 
+type AhpClientsParams = {
+  ctx: Pick<DurableObjectState, "acceptWebSocket" | "getWebSockets">;
+};
+
 class AhpClients {
   private readonly ctx: Pick<
     DurableObjectState,
     "acceptWebSocket" | "getWebSockets"
   >;
 
-  constructor({
-    ctx,
-  }: {
-    ctx: Pick<DurableObjectState, "acceptWebSocket" | "getWebSockets">;
-  }) {
+  constructor({ ctx }: AhpClientsParams) {
     this.ctx = ctx;
   }
 
@@ -99,27 +104,53 @@ class AhpClients {
   }
 
   send(socket: WebSocket, message: ServerFrame): void {
+    if (socket.readyState === WebSocket.OPEN) {
+      this.sendText(socket, this.serialize(message));
+    }
+  }
+
+  private serialize(message: ServerFrame): string {
+    const text = JSON.stringify(message);
+    const limit = MAX_SNAPSHOT_BYTES + RESPONSE_RESERVE_BYTES;
+    checkBytes(text.length, limit, "Response exceeds the memory budget");
+    checkBytes(
+      new TextEncoder().encode(text).byteLength,
+      limit,
+      "Response exceeds the memory budget",
+    );
+
+    return text;
+  }
+
+  private sendText(socket: WebSocket, text: string): void {
     if (socket.readyState !== WebSocket.OPEN) {
       return;
     }
 
     try {
-      socket.send(JSON.stringify(message));
+      socket.send(text);
     } catch {
       socket.close(FAILED_CONNECTION_CLOSE, "Client delivery failed");
     }
   }
 
   notify(channel: string, method: string, params: NotificationParams): void {
+    let text: string | undefined;
+
     for (const socket of this.ctx.getWebSockets()) {
+      if (socket.readyState !== WebSocket.OPEN) {
+        continue;
+      }
+
       const client = this.connection(socket);
 
       if (client.phase === "ready" && client.subscriptions.includes(channel)) {
-        this.send(socket, {
+        text ??= this.serialize({
           jsonrpc: "2.0",
           method,
           params: { channel, ...params },
         });
+        this.sendText(socket, text);
       }
     }
   }
@@ -139,7 +170,7 @@ class AhpClients {
     }
   }
 
-  attach(socket: WebSocket, clientId: string, subscriptions: string[]): void {
+  validateSubscriptions(clientId: string, subscriptions: string[]): string[] {
     const unique = AttachmentLimitSchema.parse([...new Set(subscriptions)]);
     const attachment = { phase: "ready", clientId, subscriptions: unique };
 
@@ -153,6 +184,12 @@ class AhpClients {
       );
     }
 
+    return unique;
+  }
+
+  attach(socket: WebSocket, clientId: string, subscriptions: string[]): void {
+    const unique = this.validateSubscriptions(clientId, subscriptions);
+
     for (const existing of this.ctx.getWebSockets()) {
       const client = this.connection(existing);
 
@@ -165,7 +202,11 @@ class AhpClients {
       }
     }
 
-    socket.serializeAttachment(attachment);
+    socket.serializeAttachment({
+      phase: "ready",
+      clientId,
+      subscriptions: unique,
+    });
   }
 
   unsubscribe(socket: WebSocket, channel: string): void {

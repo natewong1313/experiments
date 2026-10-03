@@ -9,6 +9,7 @@ import type { AhpClients } from "../ahp/clients";
 import type { HostStore } from "../state/store";
 import type { AgentConnections } from "../agent/acp";
 import type { LiveSession, SessionGeneration } from "./record";
+import { MemoryLimitError } from "../memory";
 
 const CANCEL_TIMEOUT_MS = 10_000;
 
@@ -18,6 +19,13 @@ function turnDuration(startedAt: string): number {
   return Math.max(0, Date.now() - Date.parse(startedAt));
 }
 
+type TurnExecutionParams = {
+  store: HostStore;
+  agents: AgentConnections;
+  clients: AhpClients;
+  waitUntil: WaitUntil;
+};
+
 class TurnExecution {
   private readonly running: Map<string, Promise<void>> = new Map();
   private readonly store: HostStore;
@@ -25,17 +33,7 @@ class TurnExecution {
   private readonly clients: AhpClients;
   private readonly waitUntil: WaitUntil;
 
-  constructor({
-    store,
-    agents,
-    clients,
-    waitUntil,
-  }: {
-    store: HostStore;
-    agents: AgentConnections;
-    clients: AhpClients;
-    waitUntil: WaitUntil;
-  }) {
+  constructor({ store, agents, clients, waitUntil }: TurnExecutionParams) {
     this.store = store;
     this.agents = agents;
     this.clients = clients;
@@ -80,11 +78,22 @@ class TurnExecution {
       return;
     }
 
-    for (const action of acpUpdateToChatActions(
-      record.chat.activeTurn,
-      notification,
-    )) {
-      this.publish(record.chatUri, action);
+    try {
+      const actions = acpUpdateToChatActions(
+        record.chat.activeTurn,
+        notification,
+      );
+
+      for (const publication of this.store.updateChat(record, actions)) {
+        this.clients.broadcast(publication);
+      }
+    } catch (error) {
+      if (!(error instanceof MemoryLimitError)) {
+        throw error;
+      }
+
+      this.failTurn(record, error.message, "resource-limit");
+      this.waitUntil(this.agents.release(identity));
     }
   }
 
@@ -173,6 +182,7 @@ class TurnExecution {
       await this.agents.release(original);
     } finally {
       this.running.delete(original.sessionKey);
+      await this.agents.idle(original);
     }
   }
 

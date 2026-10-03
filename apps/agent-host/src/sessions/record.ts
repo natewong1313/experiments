@@ -18,9 +18,8 @@ type LiveSession = {
 
 type SessionGeneration = Pick<LiveSession, "uri" | "sessionKey">;
 
-type AgentBinding = Pick<
-  LiveSession,
-  "uri" | "sessionKey" | "acpSession" | "session"
->;
+type AgentBinding = Pick<LiveSession, "uri" | "sessionKey" | "acpSession"> & {
+  session: Pick<SessionState, "workingDirectories">;
+};
 
 export { IDLE, type LiveSession, type SessionGeneration, type AgentBinding };

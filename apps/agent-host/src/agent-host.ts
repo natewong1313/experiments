@@ -72,8 +72,7 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
         defaultDirectory: workingDirectory(config.cwd),
       });
 
-      for (const summary of store.sessions()) {
-        const record = store.require(summary.resource);
+      for (const record of store.recoverableSessions()) {
         turns.recover(record);
         sessions.recover(record);
       }

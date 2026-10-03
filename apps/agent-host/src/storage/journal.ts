@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, lte, min } from "drizzle-orm";
+import { and, asc, eq, gt, lte, min, sql, inArray } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
 import type {
   ActionEnvelope,
@@ -6,6 +6,8 @@ import type {
   StateAction,
 } from "@experiments/protocol-schemas/ahp";
 import { host, actions, dispatches } from "./schema";
+import { MAX_REPLAY_BYTES, jsonSize } from "../memory";
+import { MAX_FRAME_BYTES } from "../ahp/protocol";
 
 const HOST_ID = 1;
 
@@ -44,7 +46,17 @@ class ActionJournal {
       .set({ seq: serverSeq })
       .where(eq(host.id, HOST_ID))
       .run();
-    this.db.insert(actions).values({ seq: serverSeq, envelope }).run();
+
+    if (jsonSize(envelope) > MAX_FRAME_BYTES) {
+      this.db
+        .update(host)
+        .set({ replayFloor: serverSeq })
+        .where(eq(host.id, HOST_ID))
+        .run();
+    } else {
+      this.db.insert(actions).values({ seq: serverSeq, envelope }).run();
+    }
+
     this.db
       .delete(actions)
       .where(lte(actions.seq, serverSeq - REPLAY_LIMIT))
@@ -70,14 +82,38 @@ class ActionJournal {
       return null;
     }
 
+    if (channels.length === 0) {
+      return [];
+    }
+
+    const match = and(
+      gt(actions.seq, since),
+      inArray(
+        sql<string>`json_extract(${actions.envelope}, '$.channel')`,
+        channels,
+      ),
+    );
+
+    const bytes =
+      this.db
+        .select({
+          value: sql<number>`COALESCE(SUM(LENGTH(CAST(${actions.envelope} AS BLOB))), 0)`,
+        })
+        .from(actions)
+        .where(match)
+        .get()?.value ?? 0;
+
+    if (bytes > MAX_REPLAY_BYTES) {
+      return null;
+    }
+
     return this.db
       .select({ envelope: actions.envelope })
       .from(actions)
-      .where(gt(actions.seq, since))
+      .where(match)
       .orderBy(asc(actions.seq))
       .all()
-      .map((row) => row.envelope)
-      .filter((envelope) => channels.includes(envelope.channel));
+      .map((row) => row.envelope);
   }
 
   previous(

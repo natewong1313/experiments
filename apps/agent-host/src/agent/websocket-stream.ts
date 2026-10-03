@@ -23,7 +23,10 @@ function websocketStream(socket: WebSocket): Stream {
         try {
           const text = z.string().parse(event.data);
 
-          if (new TextEncoder().encode(text).byteLength > MAX_FRAME_BYTES) {
+          if (
+            text.length > MAX_FRAME_BYTES ||
+            new TextEncoder().encode(text).byteLength > MAX_FRAME_BYTES
+          ) {
             throw new Error("Invalid ACP WebSocket frame");
           }
 

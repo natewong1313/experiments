@@ -31,7 +31,17 @@ import type { ActionDispatch } from "./dispatch";
 import type { HostStore } from "../state/store";
 import type { SessionLifecycle } from "../sessions/lifecycle";
 
+import { MemoryLimitError } from "../memory";
+
 type RpcErrorResponse = { code: number; message: string; data?: JsonValue };
+
+type AhpRpcParams = {
+  store: HostStore;
+  clients: AhpClients;
+  sessions: SessionLifecycle;
+  dispatcher: ActionDispatch;
+  defaultDirectory: string;
+};
 
 class AhpRpc {
   private readonly store: HostStore;
@@ -46,13 +56,7 @@ class AhpRpc {
     sessions,
     dispatcher,
     defaultDirectory,
-  }: {
-    store: HostStore;
-    clients: AhpClients;
-    sessions: SessionLifecycle;
-    dispatcher: ActionDispatch;
-    defaultDirectory: string;
-  }) {
+  }: AhpRpcParams) {
     this.store = store;
     this.clients = clients;
     this.sessions = sessions;
@@ -68,6 +72,7 @@ class AhpRpc {
 
     if (
       !text.success ||
+      text.data.length > MAX_FRAME_BYTES ||
       new TextEncoder().encode(text.data).byteLength > MAX_FRAME_BYTES
     ) {
       socket.close(INVALID_FRAME_CLOSE, "AHP requires bounded text frames");
@@ -78,7 +83,7 @@ class AhpRpc {
     let value: unknown;
 
     try {
-      value = z.json().parse(JSON.parse(text.data));
+      value = JSON.parse(text.data);
     } catch {
       this.clients.send(socket, {
         jsonrpc: "2.0",
@@ -126,7 +131,10 @@ class AhpRpc {
 
     if (error instanceof ProtocolError) {
       ({ code } = error);
-    } else if (error instanceof z.ZodError) {
+    } else if (
+      error instanceof z.ZodError ||
+      error instanceof MemoryLimitError
+    ) {
       code = RpcCodes.params;
     }
 
@@ -170,7 +178,10 @@ class AhpRpc {
     return response;
   }
 
-  private initialize(socket: WebSocket, params: JsonValue): RpcResult {
+  private initialize(
+    socket: WebSocket,
+    params: JsonRpcCall["params"],
+  ): RpcResult {
     if (this.clients.connection(socket).phase !== "new") {
       throw new ProtocolError(
         RpcCodes.request,
@@ -188,13 +199,14 @@ class AhpRpc {
       );
     }
 
-    const subscriptions = (input.initialSubscriptions ?? []).filter(
-      (channel) => channel === ROOT || this.store.lookup(channel) !== null,
+    const subscriptions = this.clients.validateSubscriptions(
+      input.clientId,
+      (input.initialSubscriptions ?? []).filter(
+        (channel) => channel === ROOT || this.store.exists(channel),
+      ),
     );
 
-    const snapshots = subscriptions.map((channel) =>
-      this.store.snapshot(channel),
-    );
+    const snapshots = this.store.snapshots(subscriptions);
 
     this.clients.attach(socket, input.clientId, subscriptions);
 
@@ -207,28 +219,38 @@ class AhpRpc {
     };
   }
 
-  private reconnect(socket: WebSocket, params: JsonValue): RpcResult {
+  private reconnect(
+    socket: WebSocket,
+    params: JsonRpcCall["params"],
+  ): RpcResult {
     const input = parseHostParams(ReconnectParamsSchema, params);
 
-    const available = input.subscriptions.filter(
-      (channel) => channel === ROOT || this.store.lookup(channel) !== null,
+    const available = this.clients.validateSubscriptions(
+      input.clientId,
+      input.subscriptions.filter(
+        (channel) => channel === ROOT || this.store.exists(channel),
+      ),
     );
 
     const actions = this.store.replay(input.lastSeenServerSeq, available);
+
+    const result =
+      actions === null
+        ? {
+            type: "snapshot",
+            snapshots: this.store.snapshots(available),
+          }
+        : {
+            type: "replay",
+            actions,
+            missing: input.subscriptions.filter(
+              (channel) => !available.includes(channel),
+            ),
+          };
+
     this.clients.attach(socket, input.clientId, available);
 
-    return actions === null
-      ? {
-          type: "snapshot",
-          snapshots: available.map((channel) => this.store.snapshot(channel)),
-        }
-      : {
-          type: "replay",
-          actions,
-          missing: input.subscriptions.filter(
-            (channel) => !available.includes(channel),
-          ),
-        };
+    return result;
   }
 
   private async command(
@@ -236,20 +258,19 @@ class AhpRpc {
     frame: JsonRpcCall,
   ): Promise<RpcResult> {
     const { method, params } = frame;
-    const parsedParams = z.json().parse(params);
 
     if (method === "ping") {
-      parseHostParams(RootChannelParamsSchema, parsedParams);
+      parseHostParams(RootChannelParamsSchema, params);
 
       return null;
     }
 
     if (method === "initialize") {
-      return this.initialize(socket, parsedParams);
+      return this.initialize(socket, params);
     }
 
     if (method === "reconnect") {
-      return this.reconnect(socket, parsedParams);
+      return this.reconnect(socket, params);
     }
 
     const client = this.clients.connection(socket);
@@ -263,55 +284,62 @@ class AhpRpc {
 
     switch (method) {
       case "subscribe": {
-        const { channel } = parseHostParams(
+        const { channel, view } = parseHostParams(
           SubscribeParamsSchema,
-          parsedParams,
+          params,
         );
 
-        const snapshot = this.store.snapshot(channel);
-        this.clients.attach(socket, client.clientId, [
-          ...client.subscriptions,
-          channel,
-        ]);
+        const subscriptions = this.clients.validateSubscriptions(
+          client.clientId,
+          [...client.subscriptions, channel],
+        );
+
+        const snapshot = this.store.snapshot(channel, view?.turns);
+        this.clients.attach(socket, client.clientId, subscriptions);
 
         return { snapshot };
       }
 
       case "unsubscribe": {
-        const { channel } = parseHostParams(ChannelParamsSchema, parsedParams);
+        const { channel } = parseHostParams(ChannelParamsSchema, params);
         this.clients.unsubscribe(socket, channel);
 
         return null;
       }
 
       case "listSessions": {
-        return this.listSessions(parsedParams);
+        return this.listSessions(params);
       }
 
       case "createSession": {
         this.sessions.create(
-          parseHostParams(CreateSessionParamsSchema, parsedParams),
+          parseHostParams(CreateSessionParamsSchema, params),
         );
 
         return null;
       }
 
       case "disposeSession": {
-        const { channel } = parseHostParams(ChannelParamsSchema, parsedParams);
+        const { channel } = parseHostParams(ChannelParamsSchema, params);
         await this.sessions.dispose(channel);
 
         return null;
       }
 
       case "fetchTurns": {
-        const input = parseHostParams(FetchTurnsParamsSchema, parsedParams);
-        const record = this.store.require(input.channel);
+        const input = parseHostParams(FetchTurnsParamsSchema, params);
+        const publication = this.store.fetchTurns(input.channel, input.cursor);
 
-        if (input.channel !== record.chatUri || input.cursor !== void 0) {
-          throw new ProtocolError(
-            RpcCodes.params,
-            "Invalid turn-history cursor",
-          );
+        if (publication) {
+          this.clients.broadcast(publication);
+
+          if (!client.subscriptions.includes(input.channel)) {
+            this.clients.send(socket, {
+              jsonrpc: "2.0",
+              method: "action",
+              params: publication.actions[0],
+            });
+          }
         }
 
         return {};
@@ -321,7 +349,7 @@ class AhpRpc {
         this.dispatcher.dispatch(
           socket,
           client,
-          parseHostParams(DispatchActionParamsSchema, parsedParams),
+          parseHostParams(DispatchActionParamsSchema, params),
         );
 
         return null;
@@ -333,7 +361,7 @@ class AhpRpc {
     }
   }
 
-  private listSessions(params: JsonValue): RpcResult {
+  private listSessions(params: JsonRpcCall["params"]): RpcResult {
     const input = parseHostParams(ListSessionsParamsSchema, params);
 
     return this.store.list({

@@ -15,8 +15,16 @@ const TURN_TIMEOUT_MS = 600_000;
 
 const CANCEL_TIMEOUT_MS = 10_000;
 
+type AgentConversationParams = {
+  connection: ClientSideConnection;
+  socket: WebSocket;
+  sessionId: string;
+  canReload: boolean;
+};
+
 class AgentConversation {
   readonly sessionId: string;
+  readonly canReload: boolean;
   private readonly connection: ClientSideConnection;
   private readonly socket: WebSocket;
 
@@ -24,14 +32,12 @@ class AgentConversation {
     connection,
     socket,
     sessionId,
-  }: {
-    connection: ClientSideConnection;
-    socket: WebSocket;
-    sessionId: string;
-  }) {
+    canReload,
+  }: AgentConversationParams) {
     this.connection = connection;
     this.socket = socket;
     this.sessionId = sessionId;
+    this.canReload = canReload;
   }
 
   get closed(): boolean {

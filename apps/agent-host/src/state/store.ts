@@ -1,4 +1,4 @@
-import { asc, count, eq, gt, or } from "drizzle-orm";
+import { asc, count, eq, gt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { deepEqual } from "fast-equals";
@@ -9,6 +9,8 @@ import type {
   SessionSummary,
   Snapshot,
   StateAction,
+  ChatState,
+  ChatAction,
 } from "@experiments/protocol-schemas/ahp";
 import { reduceChat, reduceRoot, reduceSession } from "./reducers";
 import { ROOT, RpcCodes, ProtocolError } from "../ahp/protocol";
@@ -20,10 +22,19 @@ import { IDLE, type LiveSession } from "../sessions/record";
 import { projectChat, sessionSummary } from "./projections";
 import { host, sessions } from "../storage/schema";
 import type { InferSelectModel } from "drizzle-orm";
+import {
+  MAX_SNAPSHOT_BYTES,
+  RESPONSE_RESERVE_BYTES,
+  MAX_DOCUMENT_BYTES,
+  COMPLETION_RESERVE_BYTES,
+  checkBytes,
+} from "../memory";
 
 const SEQUENCE_INCREMENT = 1;
 
 const HOST_ID = 1;
+
+const ACTIVE_TURN_STATUS = 8;
 
 type Database = ReturnType<typeof drizzle>;
 
@@ -35,6 +46,8 @@ type Publication = {
   actions: [ActionEnvelope, ...ActionEnvelope[]];
   summary?: SessionSummary;
 };
+
+type Transition = { record: LiveSession; publication: Publication };
 
 type SessionPage = { items: SessionSummary[]; nextCursor?: string };
 
@@ -48,7 +61,7 @@ class HostStore {
     this.storage = state.storage;
     this.db = drizzle(state.storage);
     const documents = new JsonDocuments(state.storage.sql);
-    this.chats = new ChatStore(this.db, documents);
+    this.chats = new ChatStore(this.db, documents, state.storage.sql);
     this.journal = new ActionJournal(this.db);
     // The durable-sqlite migrator executes synchronously on the sync driver.
     // Tables exist before this constructor returns and before recover() runs.
@@ -62,13 +75,38 @@ class HostStore {
     return this.journal.sequence;
   }
 
-  sessions(): SessionSummary[] {
-    return this.db
-      .select()
-      .from(sessions)
-      .orderBy(asc(sessions.uri))
-      .all()
-      .map((row) => sessionSummary(row));
+  *recoverableSessions(): Generator<LiveSession> {
+    const rows = this.storage.sql.exec<{ uri: string; chat_uri: string }>(
+      "SELECT uri, chat_uri FROM sessions WHERE json_extract(session, '$.lifecycle') = 'creating' OR (json_extract(session, '$.chats[0].status') & ?) != 0 ORDER BY uri",
+      ACTIVE_TURN_STATUS,
+    );
+
+    for (const row of rows) {
+      const bytes = this.chats.liveSize(row.chat_uri);
+
+      if (bytes > MAX_DOCUMENT_BYTES - COMPLETION_RESERVE_BYTES) {
+        console.error({
+          event: "host_recovery_document_too_large",
+          session: row.uri,
+          bytes,
+        });
+        continue;
+      }
+
+      yield this.require(row.uri);
+    }
+  }
+
+  exists(channel: string): boolean {
+    const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
+
+    return (
+      this.db
+        .select({ uri: sessions.uri })
+        .from(sessions)
+        .where(match)
+        .get() !== void 0
+    );
   }
 
   list(input: { cursor?: string; limit: number }): SessionPage {
@@ -85,21 +123,39 @@ class HostStore {
     }
 
     const rows = this.db
-      .select()
+      .select({
+        uri: sessions.uri,
+        bytes: sql<number>`LENGTH(CAST(${sessions.session} AS BLOB))`,
+      })
       .from(sessions)
       .where(input.cursor === void 0 ? void 0 : gt(sessions.uri, input.cursor))
       .orderBy(asc(sessions.uri))
       .limit(input.limit + SEQUENCE_INCREMENT)
       .all();
 
-    const page = rows.slice(0, input.limit);
+    const page: SessionRow[] = [];
+    let remaining = MAX_SNAPSHOT_BYTES - RESPONSE_RESERVE_BYTES;
+
+    for (const row of rows) {
+      if (page.length >= input.limit || row.bytes > remaining) {
+        break;
+      }
+
+      const session = this.entry(row.uri);
+
+      if (session) {
+        page.push(session);
+        remaining -= row.bytes;
+      }
+    }
+
     const last = page.at(-SEQUENCE_INCREMENT);
 
     const result: SessionPage = {
       items: page.map((row) => sessionSummary(row)),
     };
 
-    if (last !== void 0 && rows.length > input.limit) {
+    if (last !== void 0 && rows.length > page.length) {
       result.nextCursor = last.uri;
     }
 
@@ -129,11 +185,72 @@ class HostStore {
     return record;
   }
 
+  requireMetadata(channel: string): SessionRow {
+    const row = this.entry(channel);
+
+    if (!row) {
+      throw new ProtocolError(
+        RpcCodes.sessionMissing,
+        "Session does not exist",
+      );
+    }
+
+    return row;
+  }
+
   hasTurn(chatUri: string, turnId: string): boolean {
     return this.chats.hasTurn(chatUri, turnId);
   }
 
-  snapshot(channel: string): Snapshot {
+  snapshots(channels: string[]): Snapshot[] {
+    let bytes = RESPONSE_RESERVE_BYTES;
+
+    for (const channel of channels) {
+      bytes += this.snapshotSize(channel);
+      checkBytes(
+        bytes,
+        MAX_SNAPSHOT_BYTES,
+        "Snapshots exceed the memory budget; initialize without chat subscriptions and subscribe with view.turns",
+      );
+    }
+
+    return channels.map((channel) => this.snapshot(channel));
+  }
+
+  private snapshotSize(channel: string): number {
+    if (channel === ROOT) {
+      return (
+        this.db
+          .select({ bytes: sql<number>`LENGTH(CAST(${host.root} AS BLOB))` })
+          .from(host)
+          .where(eq(host.id, HOST_ID))
+          .get()?.bytes ?? 0
+      );
+    }
+
+    const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
+
+    const row = this.db
+      .select({
+        uri: sessions.uri,
+        chatUri: sessions.chatUri,
+        bytes: sql<number>`LENGTH(CAST(${sessions.session} AS BLOB))`,
+      })
+      .from(sessions)
+      .where(match)
+      .get();
+
+    if (!row) {
+      throw new ProtocolError(
+        RpcCodes.sessionMissing,
+        "Session does not exist",
+      );
+    }
+
+    return channel === row.uri ? row.bytes : this.chats.size(channel);
+  }
+
+  snapshot(channel: string, turns?: number): Snapshot {
     let state: Snapshot["state"];
 
     if (channel === ROOT) {
@@ -148,7 +265,8 @@ class HostStore {
         );
       }
 
-      state = row.uri === channel ? row.session : this.chats.snapshot(channel);
+      state =
+        row.uri === channel ? row.session : this.chats.snapshot(channel, turns);
     }
 
     return { resource: channel, state, fromSeq: this.sequence };
@@ -290,7 +408,50 @@ class HostStore {
         return { actions: [this.journal.append(channel, action)] };
       }
 
-      return this.transition(this.require(channel), channel, action);
+      return this.transition(this.require(channel), channel, action)
+        .publication;
+    });
+  }
+
+  updateChat(record: LiveSession, actions: ChatAction[]): Publication[] {
+    return this.storage.transactionSync(() => {
+      let current = record;
+      const publications: Publication[] = [];
+
+      for (const action of actions) {
+        const result = this.transition(current, current.chatUri, action);
+        current = result.record;
+        publications.push(result.publication);
+      }
+
+      return publications;
+    });
+  }
+
+  fetchTurns(channel: string, cursor?: string): Publication | null {
+    if (
+      !this.db
+        .select({ uri: sessions.uri })
+        .from(sessions)
+        .where(eq(sessions.chatUri, channel))
+        .get()
+    ) {
+      throw new ProtocolError(RpcCodes.params, "Invalid turn-history channel");
+    }
+
+    if (cursor === void 0) {
+      return null;
+    }
+
+    return this.storage.transactionSync(() => {
+      const page: Pick<ChatState, "turns" | "turnsNextCursor"> =
+        this.chats.fetchTurns(channel, cursor);
+
+      return {
+        actions: [
+          this.journal.append(channel, { type: "chat/turnsLoaded", ...page }),
+        ],
+      };
     });
   }
 
@@ -317,7 +478,7 @@ class HostStore {
 
       const publication: Publication =
         rejection === void 0
-          ? this.transition(record, channel, action, origin)
+          ? this.transition(record, channel, action, origin).publication
           : {
               actions: [
                 {
@@ -342,7 +503,7 @@ class HostStore {
     channel: string,
     action: StateAction,
     origin?: ActionOrigin,
-  ): Publication {
+  ): Transition {
     const published: [ActionEnvelope, ...ActionEnvelope[]] = [
       this.journal.append(channel, action, origin),
     ];
@@ -379,7 +540,7 @@ class HostStore {
       publication.summary = sessionSummary(next);
     }
 
-    return publication;
+    return { record: next, publication };
   }
 
   private activeSessionsChanged(): ActionEnvelope {

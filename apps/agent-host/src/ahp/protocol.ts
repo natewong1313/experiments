@@ -1,5 +1,9 @@
 import * as z from "zod";
-import { clientIdSchema, uriSchema } from "@experiments/protocol-schemas/ahp";
+import {
+  clientIdSchema,
+  uriSchema,
+  type JsonRpcCall,
+} from "@experiments/protocol-schemas/ahp";
 
 const ROOT = "ahp-root://";
 
@@ -86,7 +90,10 @@ class ProtocolError extends Error {
 
 type Connection = z.output<typeof ConnectionSchema>;
 
-function parseHostParams<T>(schema: z.ZodType<T>, params: JsonValue): T {
+function parseHostParams<T>(
+  schema: z.ZodType<T>,
+  params: JsonRpcCall["params"],
+): T {
   const input = schema.parse(params);
   HostRequestLimitsSchema.parse(input);
 
