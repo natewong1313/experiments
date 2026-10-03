@@ -30,6 +30,11 @@ function rejection(
   }
 
   switch (action.type) {
+    case "chat/draftChanged":
+    case "chat/activityChanged": {
+      return;
+    }
+
     case "chat/turnStarted": {
       if (!action.turnId) {
         return "Turn requires an ID";

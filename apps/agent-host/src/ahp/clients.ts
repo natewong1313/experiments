@@ -96,6 +96,14 @@ class AhpClients {
     }
   }
 
+  sendAction(socket: WebSocket, envelope: ActionEnvelope): void {
+    const client = this.connection(socket);
+
+    if (client.phase === "ready" && client.subscriptions.includes(envelope.channel)) {
+      this.send(socket, { jsonrpc: "2.0", method: "action", params: envelope });
+    }
+  }
+
   private serialize(message: ServerFrame): string {
     const text = JSON.stringify(message);
     const limit = MAX_SNAPSHOT_BYTES + RESPONSE_RESERVE_BYTES;

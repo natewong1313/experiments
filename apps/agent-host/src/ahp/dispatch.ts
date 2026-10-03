@@ -46,11 +46,7 @@ class ActionDispatch {
               rejectionReason: "Client sequence was reused for another action",
             };
 
-      this.clients.send(socket, {
-        jsonrpc: "2.0",
-        method: "action",
-        params: envelope,
-      });
+      this.clients.sendAction(socket, envelope);
 
       return;
     }
@@ -85,24 +81,12 @@ class ActionDispatch {
     const [acknowledgement] = publication.actions;
 
     if (reason !== void 0) {
-      this.clients.send(socket, {
-        jsonrpc: "2.0",
-        method: "action",
-        params: acknowledgement,
-      });
+      this.clients.sendAction(socket, acknowledgement);
 
       return;
     }
 
     this.clients.broadcast(publication);
-
-    if (!client.subscriptions.includes(input.channel)) {
-      this.clients.send(socket, {
-        jsonrpc: "2.0",
-        method: "action",
-        params: acknowledgement,
-      });
-    }
 
     if (input.action.type === "chat/turnStarted") {
       this.turns.start(record, input.action.turnId);

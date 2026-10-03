@@ -144,6 +144,30 @@ it("pages history over AHP in order without reinserting persisted turns", async 
   }
 });
 
+it("stops delivering fetched history after unsubscribing and resumes on subscription", async () => {
+  const { stub, chat } = await populatedHost();
+  const peer = await connectPeer(stub);
+
+  try {
+    const response = SubscribeResultSchema.parse(
+      await peer.request("subscribe", { channel: chat, view: { turns: 0 } }),
+    );
+
+    const { turnsNextCursor } = ChatStateSchema.parse(response.snapshot?.state);
+    expect(turnsNextCursor).toBeDefined();
+    peer.notify("unsubscribe", { channel: chat });
+    await peer.request("fetchTurns", { channel: chat, cursor: turnsNextCursor });
+    await peer.request("ping", { channel: "ahp-root://" });
+    expect(peer.actions).toEqual([]);
+
+    await peer.request("subscribe", { channel: chat, view: { turns: 0 } });
+    await peer.request("fetchTurns", { channel: chat, cursor: turnsNextCursor });
+    expect(peer.actions).toMatchObject([{ channel: chat, action: { type: "chat/turnsLoaded" } }]);
+  } finally {
+    peer.close();
+  }
+});
+
 it("deduplicates initialization subscriptions before loading snapshots", async () => {
   const { stub, chat } = await populatedHost();
   await runInDurableObject(stub, (instance, state) => {

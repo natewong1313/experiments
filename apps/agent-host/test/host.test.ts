@@ -349,9 +349,11 @@ it("sends client cancellation to the ACP agent", async () => {
 });
 
 it("rejects attachments through the prompt mapper before invoking ACP", async () => {
-  const prompt = vi.fn<() => Promise<PromptResponse>>(async (): Promise<PromptResponse> => ({
-    stopReason: "end_turn",
-  }));
+  const prompt = vi.fn<() => Promise<PromptResponse>>(
+    async (): Promise<PromptResponse> => ({
+      stopReason: "end_turn",
+    }),
+  );
 
   await withAcpAgent({
     prompt,
@@ -494,6 +496,8 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
   const peer = await connectPeer(stub);
 
   try {
+    await peer.request("subscribe", { channel: chat });
+
     const params = {
       channel: chat,
       clientSeq: 1,

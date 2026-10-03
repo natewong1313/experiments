@@ -288,14 +288,6 @@ class AhpRpc {
 
         if (publication) {
           this.clients.broadcast(publication);
-
-          if (!client.subscriptions.includes(input.channel)) {
-            this.clients.send(socket, {
-              jsonrpc: "2.0",
-              method: "action",
-              params: publication.actions[0],
-            });
-          }
         }
 
         return {};
