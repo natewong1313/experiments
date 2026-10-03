@@ -12,7 +12,7 @@ class AgentHost extends BaseAgentHost<Env> {
       agent: {
         provider: "pi",
         displayName: "Pi",
-        description: "Pi through the harness container",
+        description: "Pi in a Durable Object",
         models: [],
       },
       cwd: this.env.WORKSPACE_DIR,
@@ -23,9 +23,10 @@ class AgentHost extends BaseAgentHost<Env> {
     sessionKey,
     signal,
   }: AcpConnectionOptions): Promise<WebSocket> {
-    const response = await this.env.HARNESS_CONTAINER.getByName(
-      sessionKey,
-    ).fetch("https://agent/acp", { headers: { Upgrade: "websocket" }, signal });
+    const response = await this.env.PI_AGENT.getByName(sessionKey).fetch(
+      "https://agent/acp",
+      { headers: { Upgrade: "websocket" }, signal },
+    );
 
     const socket = response.webSocket;
 

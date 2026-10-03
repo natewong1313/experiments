@@ -32,4 +32,4 @@ export default worker;
 
 export { AgentHost } from "./agent-host";
 
-export { HarnessContainer } from "./harness-container";
+export { PiAgent } from "./pi-agent";

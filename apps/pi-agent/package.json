@@ -1,28 +1,27 @@
 {
-  "name": "@experiments/agent-host",
+  "name": "@experiments/pi-agent",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "db:generate": "drizzle-kit generate",
     "check-types": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
-    "lint": "oxlint --deny-warnings --type-aware src test vitest.config.ts drizzle.config.ts",
+    "lint": "oxlint --deny-warnings --type-aware src test vitest.config.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "catalog:",
+    "@cloudflare/computer": "0.4.0",
+    "@earendil-works/pi-ai": "0.99.2",
+    "@earendil-works/pi-durable": "0.99.2",
     "@experiments/protocol-schemas": "workspace:*",
-    "@microsoft/agent-host-protocol": "catalog:",
-    "drizzle-orm": "^0.45.3",
-    "fast-equals": "^6.0.4",
-    "zod": "catalog:",
-    "agents": "catalog:"
+    "@platformatic/vfs": "0.4.0",
+    "agents": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@experiments/oxlint-config": "workspace:*",
-    "@experiments/typescript-config": "workspace:*",
-    "drizzle-kit": "^0.31.11"
+    "@experiments/typescript-config": "workspace:*"
   },
   "exports": {
     ".": "./src/index.ts"

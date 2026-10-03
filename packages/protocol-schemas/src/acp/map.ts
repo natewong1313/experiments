@@ -57,15 +57,17 @@ function ahpMessageToAcpPrompt(
 }
 
 /** Wire-visible ids retain the turn/kind/index format across mapping changes. */
+type ChatResponsePartIdParts = {
+  turnId: string;
+  kind: Extract<ActiveTurn["responseParts"][number], { id: string }>["kind"];
+  index: number;
+};
+
 function chatResponsePartId({
   turnId,
   kind,
   index,
-}: {
-  turnId: string;
-  kind: Extract<ActiveTurn["responseParts"][number], { id: string }>["kind"];
-  index: number;
-}): string {
+}: ChatResponsePartIdParts): string {
   return `${turnId}/${kind}/${index}`;
 }
 

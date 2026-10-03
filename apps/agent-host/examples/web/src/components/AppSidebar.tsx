@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { createLink, useLocation } from "@tanstack/react-router";
 import { Sidebar, useSidebar } from "@cloudflare/kumo";
-import { HouseIcon, StackIcon, RobotIcon } from "@phosphor-icons/react";
+import { HouseIcon, StackIcon } from "@phosphor-icons/react";
 import { useAgentHost } from "../hooks/use-agent-host";
 
 const MenuLink = createLink(Sidebar.MenuButton);
@@ -12,6 +12,8 @@ export default function AppSidebar(): JSX.Element {
   const { host, view } = useAgentHost();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
+
+  const sessionsActive = pathname === "/sessions";
 
   function closeMobile(): void {
     if (isMobile) {
@@ -25,21 +27,14 @@ export default function AppSidebar(): JSX.Element {
       className="md:sticky md:top-0 md:h-svh"
     >
       <Sidebar.Header>
-        <Sidebar.Menu>
-          <MenuLink
-            icon={RobotIcon}
-            to="/"
-            search={{ host }}
-            tooltip="Agent host"
-            onClick={closeMobile}
-          >
-            Agent host
-          </MenuLink>
-        </Sidebar.Menu>
+        <img
+          src="https://imagedelivery.net/HqFoVJao5LE850LIcBfxAQ/3f767dfc-8267-475e-fc66-642783920400/public"
+          alt="Agent host"
+          className="w-52 px-3 py-1"
+        />
       </Sidebar.Header>
       <Sidebar.Content>
         <Sidebar.Group>
-          <Sidebar.GroupLabel>{host}</Sidebar.GroupLabel>
           <Sidebar.Menu>
             <MenuLink
               to="/"
@@ -52,17 +47,20 @@ export default function AppSidebar(): JSX.Element {
             </MenuLink>
             <Sidebar.MenuItem>
               <Sidebar.Collapsible defaultOpen>
-                <div className="flex items-center">
+                <div
+                  className={`flex items-center rounded-lg ${
+                    sessionsActive
+                      ? "bg-(--sidebar-active-bg)"
+                      : "hover:bg-(--sidebar-active-bg) focus-within:bg-(--sidebar-active-bg)"
+                  }`}
+                >
                   <MenuLink
                     to="/sessions"
                     search={{ host }}
                     icon={StackIcon}
-                    active={
-                      pathname === "/sessions" ||
-                      pathname.startsWith("/sessions/")
-                    }
+                    active={sessionsActive}
                     onClick={closeMobile}
-                    className="min-w-0 flex-1"
+                    className="min-w-0 flex-1 hover:bg-transparent"
                   >
                     Sessions
                   </MenuLink>
@@ -71,9 +69,9 @@ export default function AppSidebar(): JSX.Element {
                       <button
                         type="button"
                         aria-label="Toggle session names"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-kumo-focus group-data-[state=collapsed]/sidebar:hidden"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-transparent focus-visible:outline-2 focus-visible:outline-kumo-focus group-data-[state=collapsed]/sidebar:hidden"
                       >
-                        <Sidebar.MenuChevron />
+                        <Sidebar.MenuChevron className="ml-0" />
                       </button>
                     }
                   />

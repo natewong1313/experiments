@@ -12,7 +12,7 @@ class AgentHost extends BaseAgentHost<Env> {
       agent: {
         provider: "pi",
         displayName: "Pi",
-        description: "Pi through the harness container",
+        description: "Pi in a Durable Object",
         models: [],
       },
       cwd: this.env.WORKSPACE_DIR,
@@ -27,7 +27,7 @@ class AgentHost extends BaseAgentHost<Env> {
     let response: Response;
 
     if (this.env.ACP_URL === "") {
-      response = await this.env.HARNESS_CONTAINER.getByName(sessionKey).fetch(
+      response = await this.env.PI_AGENT.getByName(sessionKey).fetch(
         "https://agent/acp",
         options,
       );

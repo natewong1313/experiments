@@ -1,9 +1,9 @@
 # Agent host web example
 
-This TanStack Start app runs an `AgentHost` Durable Object and a
-`HarnessContainer` Durable Object in the same Worker. Each session opens its
-ACP WebSocket through the container binding. `WORKSPACE_DIR` configures the
-agent's working directory. The host always uses the container.
+This TanStack Start app runs an `AgentHost` and a `PiAgent` Durable Object in the
+same Worker. Each session opens an ACP WebSocket through `PI_AGENT`. The agent
+uses `PiHarness` and a durable SQLite workspace. `WORKSPACE_DIR` configures its
+working directory.
 
 The app connects to `/hosts/<host-id>/ahp` with the AHP TypeScript SDK.
 Home selects the host. The Sessions page lists and creates sessions. The sidebar
@@ -23,25 +23,15 @@ Install dependencies from the repository root:
 pnpm install
 ```
 
-Docker must be running to create agent sessions. Put the following credentials
-in `apps/agent-host/examples/web/.dev.vars`:
-
-```dotenv
-CLOUDFLARE_API_KEY=your-workers-ai-key
-CLOUDFLARE_ACCOUNT_ID=your-account-id
-```
-
-Start the app:
+Wrangler authentication supplies access to the remote Workers AI binding.
+The default model is `@cf/moonshotai/kimi-k2.7-code`. No Docker or provider secrets
+are required. Start Vite:
 
 ```sh
 pnpm --filter @experiments/agent-host-example-web dev
 ```
 
-The dev command uses `wrangler-dev-linux --vite` from `@experiments/scripts`.
-It starts Vite through the Docker API proxy that applies the Linux container
-networking workaround described in [the scripts package](../../../../packages/scripts/README.md).
-
-Open `http://localhost:3000`. Listing sessions does not start a container.
+Open `http://localhost:3000`.
 AHP clients can connect to `ws://localhost:3000/hosts/example/ahp` to create
 sessions and send prompts. The basic example's prompt client accepts this URL:
 
@@ -60,14 +50,10 @@ pnpm --filter @experiments/agent-host-example-web check-types
 pnpm --filter @experiments/agent-host-example-web build
 ```
 
-`wrangler.jsonc` exports both DO classes with SQLite storage, binds both
-namespaces, and builds the shared harness Dockerfile. Set provider secrets
-before deploying from this directory:
+`wrangler.jsonc` declares both classes with SQLite storage and binds `AI` and
+`LOADER` for model calls and workspace JavaScript execution. Set your Worker name,
+then deploy:
 
 ```sh
-pnpm exec wrangler secret put CLOUDFLARE_API_KEY
-pnpm exec wrangler secret put CLOUDFLARE_ACCOUNT_ID
-pnpm deploy
+pnpm --filter @experiments/agent-host-example-web deploy
 ```
-
-Local credentials are not uploaded during deployment.

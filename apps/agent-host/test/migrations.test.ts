@@ -53,7 +53,7 @@ it("initializes a fresh database and applies generated migrations once", async (
       state: { agents: [], activeSessions: 0 },
       fromSeq: 0,
     });
-    expect(store.sessions()).toEqual([]);
+    expect(store.list({ limit: 1 }).items).toEqual([]);
     expect(appliedMigrations(state)).toEqual(
       migrations.journal.entries.map((entry) => entry.when),
     );

@@ -20,7 +20,7 @@ wrangler-dev-linux [wrangler dev args...]
 For example, with extra configs:
 
 ```sh
-wrangler-dev-linux --config wrangler.jsonc --config ../harness-container/example/wrangler.jsonc
+wrangler-dev-linux --config wrangler.jsonc --config ../another-worker/wrangler.jsonc
 ```
 
 For a Vite app using the Cloudflare plugin:

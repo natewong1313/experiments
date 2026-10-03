@@ -1,9 +1,13 @@
 packages:
   - "apps/*"
-  - "apps/harness-container/example"
   - "apps/agent-host/examples/*"
   - "packages/*"
 allowBuilds:
+  '@google/genai': false
+  '@mongodb-js/zstd': false
+  core-js-pure: false
+  node-liblzma: false
+  protobufjs: false
   esbuild: true
   lightningcss: true
   sharp: true
@@ -12,3 +16,14 @@ minimumReleaseAgeExclude:
   - '@cloudflare/vite-plugin@1.62.5'
   - miniflare@5.20261001.0-alpha
   - wrangler@4.147.0
+  - '@cloudflare/computer@0.4.0'
+  - agents@0.25.0
+catalog:
+  '@agentclientprotocol/sdk': 1.7.0
+  zod: 4.6.5
+  agents: 0.25.0
+  '@microsoft/agent-host-protocol': 0.9.0
+  react: 19.2.8
+  react-dom: 19.2.8
+  '@types/react': 19.2.18
+  '@types/react-dom': 19.2.5

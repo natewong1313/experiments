@@ -4,12 +4,10 @@ import {
   AgentSideConnection,
   PROTOCOL_VERSION,
   type Agent,
-  type PromptRequest,
   type PromptResponse,
 } from "@agentclientprotocol/sdk";
 import {
   ChatStateSchema,
-  SessionStateSchema,
   SubscribeResultSchema,
   type Message,
 } from "@experiments/protocol-schemas/ahp";
@@ -21,112 +19,13 @@ import { HostStore } from "../src/state/store";
 import { connectPeer, type Peer } from "./peer";
 import { createSession } from "./config";
 import { connectAcp } from "./worker";
+import { withAcpAgent } from "./acp-host";
 
 const SESSION = "ahp-session:/host-test";
 
 const SWITCHING_PROTOCOLS = 101;
 
 const CREATION_LIMIT = 2;
-
-async function withAcpAgent(options: {
-  prompt(
-    connection: AgentSideConnection,
-    request: PromptRequest,
-  ): Promise<PromptResponse>;
-  cancel?(): Promise<void>;
-  run(peer: Peer, chat: string, disconnect: () => Promise<void>): Promise<void>;
-}): Promise<void> {
-  const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
-  const sockets: WebSocket[] = [];
-  const servers: AgentSideConnection[] = [];
-
-  const fetchSpy = vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async () => {
-      const { 0: client, 1: server } = new WebSocketPair();
-
-      const connection = new AgentSideConnection(
-        (): Agent => ({
-          initialize: async () => ({
-            protocolVersion: PROTOCOL_VERSION,
-            agentCapabilities: { loadSession: true },
-          }),
-          newSession: async () => ({ sessionId: "conversation" }),
-          loadSession: async (request) => {
-            expect(request).toMatchObject({
-              sessionId: "conversation",
-              cwd: "/workspace",
-              mcpServers: [],
-            });
-            await connection.sessionUpdate({
-              sessionId: request.sessionId,
-              update: {
-                sessionUpdate: "agent_message_chunk",
-                content: { type: "text", text: "Old history" },
-              },
-            });
-
-            return {};
-          },
-          authenticate: async () => ({}),
-          prompt: async (request) => await options.prompt(connection, request),
-          cancel: async (): Promise<void> => {
-            await options.cancel?.();
-          },
-        }),
-        websocketStream(server),
-      );
-
-      server.accept();
-      sockets.push(server);
-      servers.push(connection);
-
-      return new Response(null, {
-        status: SWITCHING_PROTOCOLS,
-        webSocket: client,
-      });
-    });
-
-  async function disconnect(): Promise<void> {
-    await runInDurableObject(stub, async (instance) => {
-      expect(instance).toBeDefined();
-
-      for (const socket of sockets) {
-        socket.close();
-      }
-
-      await Promise.all(servers.map((server) => server.closed));
-    });
-  }
-
-  const peer = await connectPeer(stub);
-
-  try {
-    await peer.request("createSession", { channel: SESSION });
-
-    const session = await vi.waitFor(async () => {
-      const result = SubscribeResultSchema.parse(
-        await peer.request("subscribe", { channel: SESSION }),
-      );
-
-      const state = SessionStateSchema.parse(result.snapshot?.state);
-      expect(state.lifecycle).toBe("ready");
-
-      return state;
-    });
-
-    if (session.defaultChat === void 0) {
-      throw new Error("Ready session has no default chat");
-    }
-
-    await peer.request("subscribe", { channel: session.defaultChat });
-    await options.run(peer, session.defaultChat, disconnect);
-  } finally {
-    peer.close();
-    await disconnect();
-    fetchSpy.mockRestore();
-  }
-}
 
 function dispatchTurn({
   peer,
@@ -721,4 +620,59 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
   } finally {
     fetchSpy.mockRestore();
   }
+});
+
+it("ends an oversized streamed turn with a durable error and releases the agent", async () => {
+  const chunkBytes = 500_000;
+  const chunkCount = 5;
+  await withAcpAgent({
+    prompt: async (connection, request) => {
+      await Promise.all(
+        Array.from({ length: chunkCount }, () =>
+          connection.sessionUpdate({
+            sessionId: request.sessionId,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "x".repeat(chunkBytes) },
+            },
+          }),
+        ),
+      );
+
+      return { stopReason: "end_turn" };
+    },
+    run: async (peer, chat) => {
+      peer.notify("dispatchAction", {
+        channel: chat,
+        clientSeq: 1,
+        action: {
+          type: "chat/turnStarted",
+          turnId: "oversized",
+          startedAt: new Date().toISOString(),
+          message: { text: "Generate output", origin: { kind: "user" } },
+        },
+      });
+      await vi.waitFor(() => {
+        expect(
+          peer.actions.some(
+            ({ action }) =>
+              action.type === "chat/error" &&
+              action.part.error.errorType === "resource-limit",
+          ),
+        ).toBe(true);
+      });
+
+      const response = SubscribeResultSchema.parse(
+        await peer.request("subscribe", { channel: chat }),
+      );
+
+      const state = ChatStateSchema.parse(response.snapshot?.state);
+      expect(state.activeTurn).toBeUndefined();
+      expect(state.turns).toHaveLength(1);
+      expect(state.turns[0]?.state).toBe("error");
+      expect(
+        peer.actions.some(({ action }) => action.type === "chat/turnComplete"),
+      ).toBe(false);
+    },
+  });
 });

@@ -1,18 +1,14 @@
 {
   "extends": "@experiments/typescript-config/base.json",
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "noEmit": true,
     "types": [
-      "@cloudflare/workers-types",
-      "node"
+      "@cloudflare/workers-types"
     ]
   },
   "include": [
-    "src/**/*.ts",
-    "container/**/*.ts",
-    "test/**/*.ts"
+    "src/**/*.ts"
   ]
 }

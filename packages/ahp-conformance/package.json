@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@experiments/protocol-schemas": "workspace:*",
-    "@microsoft/agent-host-protocol": "0.9.0"
+    "@microsoft/agent-host-protocol": "catalog:"
   },
   "scripts": {
     "test": "vitest run",
@@ -15,11 +15,7 @@
   },
   "devDependencies": {
     "@experiments/oxlint-config": "workspace:*",
-    "@types/node": "26.4.1",
     "@types/ws": "8.18.1",
-    "oxlint": "1.78.0",
-    "typescript": "7.0.2",
-    "vitest": "4.1.10",
     "ws": "8.21.3"
   }
 }

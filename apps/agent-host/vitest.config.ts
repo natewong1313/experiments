@@ -25,6 +25,8 @@ export default defineConfig({
       main: "./test/worker.ts",
       miniflare: {
         compatibilityDate: "2026-09-28",
+        compatibilityFlags: ["nodejs_compat"],
+        workerLoaders: { LOADER: {} },
         durableObjects: {
           AGENT_HOST: { className: "AgentHost", useSQLite: true },
           CUSTOM_HOST: { className: "CustomHost", useSQLite: true },

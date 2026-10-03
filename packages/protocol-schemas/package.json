@@ -9,17 +9,13 @@
     "./acp": "./src/acp/index.ts"
   },
   "dependencies": {
-    "@microsoft/agent-host-protocol": "0.9.0",
-    "zod": "4.6.5"
+    "@microsoft/agent-host-protocol": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@agentclientprotocol/sdk": "0.26.0",
+    "@agentclientprotocol/sdk": "catalog:",
     "@experiments/oxlint-config": "workspace:*",
-    "@experiments/typescript-config": "workspace:*",
-    "@types/node": "26.6.3",
-    "oxlint": "1.78.0",
-    "typescript": "7.0.2",
-    "vitest": "5.0.2"
+    "@experiments/typescript-config": "workspace:*"
   },
   "scripts": {
     "test": "vitest run",

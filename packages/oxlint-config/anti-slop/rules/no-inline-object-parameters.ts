@@ -16,19 +16,66 @@ type ParameterOwner =
   | ESTree.TSFunctionType
   | ESTree.TSMethodSignature;
 
-/** Return whether a TypeScript type node is or contains an inline object type literal. */
-function containsTypeLiteral(type: ESTree.TSType): boolean {
-  if (type.type === "TSTypeLiteral") return true;
-  if (type.type === "TSParenthesizedType") {
-    return containsTypeLiteral(type.typeAnnotation);
+type VisitorKeys = Readonly<Record<string, readonly string[]>>;
+
+function isNode(value: unknown): value is ESTree.Node {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string"
+  );
+}
+
+/** Return the first inline object type literal within a type annotation subtree. */
+function findTypeLiteral(
+  node: ESTree.Node,
+  keys: VisitorKeys,
+): ESTree.TSTypeLiteral | null {
+  if (node.type === "TSTypeLiteral") return node;
+  for (const key of keys[node.type] ?? []) {
+    const value: unknown = (node as Record<string, unknown>)[key];
+    for (const child of Array.isArray(value) ? value : [value]) {
+      if (!isNode(child)) continue;
+      const found = findTypeLiteral(child, keys);
+      if (found !== null) return found;
+    }
   }
-  if (type.type === "TSArrayType") {
-    return containsTypeLiteral(type.elementType);
+  return null;
+}
+
+/** Return a statically derivable owner name for a function-like node, if any. */
+function ownerName(node: ParameterOwner): string | null {
+  if (node.type === "TSMethodSignature") {
+    return node.key.type === "Identifier" ? node.key.name : null;
   }
-  if (type.type === "TSUnionType" || type.type === "TSIntersectionType") {
-    return type.types.some(containsTypeLiteral);
+  if (node.type === "ArrowFunctionExpression") {
+    const parent = node.parent;
+    if (
+      parent.type === "VariableDeclarator" &&
+      parent.id.type === "Identifier"
+    ) {
+      return parent.id.name;
+    }
+    if (
+      parent.type === "Property" ||
+      parent.type === "PropertyDefinition" ||
+      parent.type === "MethodDefinition"
+    ) {
+      return parent.computed === true || parent.key.type !== "Identifier"
+        ? null
+        : parent.key.name;
+    }
+    return null;
   }
-  return false;
+  return node.id?.name ?? null;
+}
+
+/** Return the `*Params` type name suggested for an owner, or a placeholder. */
+function suggestedParamsName(node: ParameterOwner): string {
+  const name = ownerName(node);
+  if (name === null) return "…Params";
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)}Params`;
 }
 
 /** Disallow inline object type literals in function parameter annotations. */
@@ -41,7 +88,7 @@ export const noInlineObjectParametersRule = defineRule({
     },
     messages: {
       inlineObjectParameter:
-        "Parameter `{{parameter}}` uses an inline object type. Extract the shape into a named type (`interface` or `type` alias) and reference it by name.",
+        "Parameter `{{parameter}}` uses an inline object type. Extract the shape into a named `*Params` type (for example `{{suggested}}`) and reference it by name.",
     },
   },
   createOnce(context) {
@@ -49,15 +96,20 @@ export const noInlineObjectParametersRule = defineRule({
       for (const parameter of node.params) {
         const annotation = functionParameterTypeAnnotation(parameter);
         if (annotation === null || annotation === undefined) continue;
-        if (!containsTypeLiteral(annotation.typeAnnotation)) continue;
+        const typeLiteral = findTypeLiteral(
+          annotation.typeAnnotation,
+          context.sourceCode.visitorKeys,
+        );
+        if (typeLiteral === null) continue;
         context.report({
-          node: annotation.typeAnnotation,
+          node: typeLiteral,
           messageId: "inlineObjectParameter",
           data: {
             parameter: functionParameterBindingName(
               parameter,
               context.sourceCode,
             ),
+            suggested: suggestedParamsName(node),
           },
         });
       }

@@ -92,9 +92,9 @@ source for Workers bundlers and remains a private workspace package.
 ## Self-hosting example
 
 [examples/basic/](./examples/basic/README.md) contains a Worker that connects through a named
-`HarnessContainer`, or directly to a bridge through `ACP_URL`. Those settings
+`PiAgent`, or directly to an ACP service through `ACP_URL`. Those settings
 belong to the example. Its [host subclass](./examples/basic/src/agent-host.ts) implements
-both hooks and uses `WORKSPACE_DIR` for the ACP working directory and the container.
+both hooks and uses `WORKSPACE_DIR` for the ACP working directory and durable workspace.
 Its [prompt client](./examples/basic/client/prompt.ts) creates an AHP session, streams a
 response, and disposes the session.
 
@@ -102,7 +102,12 @@ response, and disposes the session.
 AHP client → consumer Worker → AgentHost DO → ACP WebSocket → consumer's backend
 ```
 
-## Code organization
+## Pi backend
+
+The Pi backend lives in [`apps/pi-agent`](../pi-agent/README.md). Its
+`@experiments/pi-agent` package exports `PiAgent` and `PiAgentEnv`; both
+examples extend that Durable Object. The main package entrypoint remains
+independent of the Pi backend.## Code organization
 
 `src/agent-host.ts` constructs the host components and delegates Durable Object
 callbacks. The implementation is grouped by responsibility:
@@ -141,7 +146,7 @@ agent.
 | Provider sessions                   | Supported with limits | `createSession`, `listSessions`, and `disposeSession` work with the configured provider and fixed working directory.                                                                                                              |
 | Chats and turns                     | Partial               | One default chat per session. Text prompts stream text, reasoning, and text tool results; `chat/turnCancelled` cancels the active turn. Prompts need `message.origin`, for example `{ text: "Hello", origin: { kind: "user" } }`. |
 | Session and chat actions            | Partial               | Session title, read, archive, metadata, and default-chat actions are accepted. Turn start and cancellation actions are accepted on the chat. Other client-dispatched actions are rejected.                                        |
-| Turn history                        | Partial               | Chat snapshots contain all retained turns. `fetchTurns` succeeds without a cursor because the snapshot already contains the history; cursor-based requests are rejected.                                                          |
+| Turn history                        | Partial               | Snapshots support `view.turns` and `turnsNextCursor`. `fetchTurns` publishes bounded pages as `chat/turnsLoaded`; full-history requests exceeding the memory budget are rejected.                                                 |
 | Files and resources                 | Unsupported           | Resource read, write, list, and resolve methods are not implemented.                                                                                                                                                              |
 | Terminals                           | Unsupported           | Terminal channels and terminal commands are not implemented.                                                                                                                                                                      |
 | Resource watches and changesets     | Unsupported           | Watch channels, changeset channels, and changeset operations are not implemented.                                                                                                                                                 |
@@ -161,15 +166,51 @@ exposes shared state selected by a host ID without authentication.
 ## Storage and restart behavior
 
 SQLite stores session and chat state, backend session keys, ACP conversation IDs, accepted client
-actions, and the last 1,000 action envelopes. The host stores an accepted turn
+actions, and up to the last 1,000 action envelopes. Envelopes larger than 1 MiB advance the replay floor instead of entering the journal. The host stores an accepted turn
 before sending its prompt to the ACP backend. Resending the same client sequence and
 action returns its original acknowledgement without executing it again.
 
 Session metadata, the active chat, and completed turns are stored separately.
-JSON documents use 64 KiB UTF-8 chunks to stay below SQLite's row limit. Streaming
-deltas update only changed chunks of the active chat; completed history is loaded
-for chat snapshots. Listing sessions reads metadata without loading chat history.
-State changes, replay entries, and dispatch acknowledgements commit together.
+JSON documents use 64 KiB UTF-8 chunks to stay below SQLite's row limit. Reads
+consume one stored chunk at a time; writes compare one chunk at a time and write
+only differences. Each ACP update loads live state once and reuses it across its
+actions. Trusted reducer output is not reparsed through Zod. State changes,
+replay entries, and dispatch acknowledgements commit together.
+
+Memory budgets are defined in `src/memory.ts`. They bound serialized data, with
+room left for parsed objects, serialization, connections, and runtime overhead:
+
+| Operation                                   | Budget                                                    |
+| ------------------------------------------- | --------------------------------------------------------- |
+| Stored turn or live chat document           | 2 MiB, with 16 KiB reserved for completing an active turn |
+| Snapshot response or session catalogue page | 4 MiB, less response overhead                             |
+| Replayed action envelopes                   | 2 MiB                                                     |
+| Older history page                          | 3 MiB and at most 100 turns                               |
+| Open or connecting ACP sessions per host    | 8                                                         |
+| Reloadable ACP connection idle time         | 60 seconds                                                |
+
+Snapshots and replay check stored byte counts before loading payloads. Replay
+filters channels in SQL. A full chat snapshot still contains all retained turns
+when it fits. Larger histories require `subscribe` with `view: { turns: 100 }`
+and successive `fetchTurns` requests using `turnsNextCursor`. Older pages arrive
+as `chat/turnsLoaded` actions before the command response. Initializing with many
+chat subscriptions shares one snapshot budget; subscription URIs are deduplicated
+before snapshots are loaded. Initialize without chat subscriptions if the combined
+history is too large, then subscribe to chats with a view.
+
+A streamed update that exceeds the live-document budget is rolled back. The host
+ends the turn with a `resource-limit` error, retains previously accepted output,
+and releases the agent connection. Existing documents above the new budget remain
+stored and are rejected before allocation. Startup skips oversized legacy live
+documents so other sessions remain available; those sessions can still be disposed.
+Startup otherwise reads only sessions with interrupted work. Listing sessions
+reads bounded metadata pages without loading chats.
+
+Closed ACP connections leave the cache immediately. Reloadable connections close
+after 60 seconds idle and reopen with the persisted ACP session ID. Connections
+without reload support stay open until explicitly released or disconnected, within
+the same connection cap. Active turns cancel idle expiry. Notifications are
+serialized once and reused for all subscribers.
 
 Session state follows the AHP 0.9 reducer: chat activity appears in
 `session.chats`. Session catalogue summaries derive their activity status from
@@ -182,8 +223,10 @@ advertised agent metadata through the journal when the subclass configuration
 differs from the stored metadata.
 
 Reconnect returns retained actions. If the client has fallen behind the retained
-actions, it receives fresh snapshots. Session catalogue notifications are not
-replayed; refresh the catalogue with `listSessions` after reconnecting.
+actions or the replay exceeds its byte budget, it receives fresh snapshots.
+If those snapshots exceed their budget, reconnect returns a parameter error; the
+client must initialize without chat subscriptions and resubscribe with views.
+Session catalogue notifications are not replayed; refresh the catalogue with `listSessions` after reconnecting.
 
 When the host restarts, it ends each unfinished turn with `chat/error`,
 `errorType: "interrupted"`, and an explanation. It retains the prompt and partial
@@ -244,7 +287,7 @@ pnpm run format
 The test Worker exports subclasses of the package's public `AgentHost` class.
 A separate ACP backend Durable Object exercises custom provider metadata,
 working directories, authentication headers, socket ownership, and conversation
-restoration after eviction without a harness container.
+restoration after eviction against a separate ACP backend.
 Tests cover snapshot and replay consistency, bounded delta writes, history larger
 than a SQL row across eviction, atomic rollback, migration, connection generation
 ownership, and timestamp rejection acknowledgements.
