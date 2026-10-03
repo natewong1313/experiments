@@ -33,8 +33,8 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
 
       const agents = new AgentConnections({
         connect: (options): Promise<WebSocket> => this.connectAcp(options),
-        updates: (identity, notification): void => {
-          turns.onAgentUpdate(identity, notification);
+        updates: (identity, notification, rootSessionId): void => {
+          turns.onAgentUpdate(identity, notification, rootSessionId);
         },
       });
 

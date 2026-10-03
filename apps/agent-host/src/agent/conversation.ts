@@ -2,9 +2,9 @@ import { methods, type ClientConnection } from "@agentclientprotocol/sdk";
 import {
   ahpMessageToAcpPrompt,
   acpStopReasonToOutcome,
-  PromptRequestSchema,
+  PromptRequestOutboundSchema,
   PromptResponseSchema,
-  CancelNotificationSchema,
+  CancelNotificationOutboundSchema,
   type AcpTurnOutcome,
 } from "@experiments/protocol-schemas/acp";
 import type { Message } from "@experiments/protocol-schemas/ahp";
@@ -20,6 +20,7 @@ type AgentConversationParams = {
   socket: WebSocket;
   sessionId: string;
   canReload: boolean;
+  activate(): void;
 };
 
 class AgentConversation {
@@ -27,16 +28,24 @@ class AgentConversation {
   readonly canReload: boolean;
   private readonly connection: ClientConnection;
   private readonly socket: WebSocket;
+  private readonly onActivate: () => void;
 
-  constructor({ connection, socket, sessionId, canReload }: AgentConversationParams) {
-    this.connection = connection;
-    this.socket = socket;
-    this.sessionId = sessionId;
-    this.canReload = canReload;
+  constructor(params: AgentConversationParams) {
+    this.connection = params.connection;
+    this.socket = params.socket;
+    this.sessionId = params.sessionId;
+    this.canReload = params.canReload;
+    this.onActivate = (): void => {
+      params.activate();
+    };
   }
 
   get closed(): boolean {
     return this.connection.signal.aborted;
+  }
+
+  activate(): void {
+    this.onActivate();
   }
 
   async prompt(message: Pick<Message, "text" | "attachments">): Promise<AcpTurnOutcome> {
@@ -46,7 +55,7 @@ class AgentConversation {
       throw new ProtocolError(RpcCodes.params, "This host supports text prompts only");
     }
 
-    const request = PromptRequestSchema.parse({
+    const request = PromptRequestOutboundSchema.parse({
       sessionId: this.sessionId,
       prompt: mapped.blocks,
     });
@@ -65,7 +74,7 @@ class AgentConversation {
   }
 
   async cancel(): Promise<void> {
-    const request = CancelNotificationSchema.parse({
+    const request = CancelNotificationOutboundSchema.parse({
       sessionId: this.sessionId,
     });
 

@@ -1,6 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { AgentSideConnection, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import type { Agent } from "@agentclientprotocol/sdk";
+import { agent, methods, PROTOCOL_VERSION, type AgentConnection } from "@agentclientprotocol/sdk";
 import { websocketStream } from "../src/agent/websocket-stream";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
@@ -13,7 +12,7 @@ type BackendEvent =
   | { kind: "prompt"; sessionId: string };
 
 class AcpBackend extends DurableObject {
-  private readonly connections: Map<WebSocket, AgentSideConnection> = new Map();
+  private readonly connections: Map<WebSocket, AgentConnection> = new Map();
 
   async events(): Promise<BackendEvent[]> {
     return (await this.ctx.storage.get<BackendEvent[]>("events")) ?? [];
@@ -51,42 +50,37 @@ class AcpBackend extends DurableObject {
     await this.record({ kind: "connect", sessionKey });
     const { 0: client, 1: server } = new WebSocketPair();
 
-    const connection = new AgentSideConnection(
-      (): Agent => ({
-        initialize: async () => ({
-          protocolVersion: PROTOCOL_VERSION,
-          agentCapabilities: {
-            loadSession: (await this.ctx.storage.get<boolean>("loadSupported")) ?? true,
+    const connection = agent()
+      .onRequest(methods.agent.initialize, async () => ({
+        protocolVersion: PROTOCOL_VERSION,
+        agentCapabilities: {
+          loadSession: (await this.ctx.storage.get<boolean>("loadSupported")) ?? true,
+        },
+      }))
+      .onRequest(methods.agent.session.new, async ({ params: { cwd } }) => {
+        const sessionId = crypto.randomUUID();
+        await this.record({ kind: "new", cwd, sessionId });
+
+        return { sessionId };
+      })
+      .onRequest(methods.agent.session.load, async ({ params: { cwd, sessionId } }) => {
+        await this.record({ kind: "load", cwd, sessionId });
+
+        return {};
+      })
+      .onRequest(methods.agent.session.prompt, async ({ params: { sessionId }, client: host }) => {
+        await this.record({ kind: "prompt", sessionId });
+        await host.notify(methods.client.session.update, {
+          sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "Custom reply" },
           },
-        }),
-        authenticate: async () => ({}),
-        newSession: async ({ cwd }) => {
-          const sessionId = crypto.randomUUID();
-          await this.record({ kind: "new", cwd, sessionId });
+        });
 
-          return { sessionId };
-        },
-        loadSession: async ({ cwd, sessionId }) => {
-          await this.record({ kind: "load", cwd, sessionId });
-
-          return {};
-        },
-        prompt: async ({ sessionId }) => {
-          await this.record({ kind: "prompt", sessionId });
-          await connection.sessionUpdate({
-            sessionId,
-            update: {
-              sessionUpdate: "agent_message_chunk",
-              content: { type: "text", text: "Custom reply" },
-            },
-          });
-
-          return { stopReason: "end_turn" };
-        },
-        cancel: async (): Promise<void> => {},
-      }),
-      websocketStream(server),
-    );
+        return { stopReason: "end_turn" };
+      })
+      .connect(websocketStream(server));
 
     server.accept();
     this.connections.set(server, connection);

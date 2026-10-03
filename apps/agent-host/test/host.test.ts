@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import {
-  AgentSideConnection,
+  agent,
+  methods,
+  type AgentConnection,
   PROTOCOL_VERSION,
-  type Agent,
   type PromptResponse,
 } from "@agentclientprotocol/sdk";
 import {
@@ -14,7 +15,7 @@ import {
 import { expect, it, vi } from "vitest";
 import { AgentConnections } from "../src/agent/acp";
 import { websocketStream } from "../src/agent/websocket-stream";
-import type { TextContent } from "@experiments/protocol-schemas/acp";
+import type { ContentBlock } from "@experiments/protocol-schemas/acp";
 import { HostStore } from "../src/state/store";
 import { connectPeer, type Peer } from "./peer";
 import { createSession } from "./config";
@@ -27,19 +28,23 @@ const SWITCHING_PROTOCOLS = 101;
 
 const CREATION_LIMIT = 2;
 
+type DispatchTurnParams = {
+  peer: Peer;
+  chat: string;
+  message: Message;
+  turnId?: string;
+  clientSeq?: number;
+};
+
+type ChatSnapshotParams = { peer: Peer; chat: string };
+
 function dispatchTurn({
   peer,
   chat,
   message,
   turnId = "mapped-turn",
   clientSeq = 1,
-}: {
-  peer: Peer;
-  chat: string;
-  message: Message;
-  turnId?: string;
-  clientSeq?: number;
-}): void {
+}: DispatchTurnParams): void {
   peer.notify("dispatchAction", {
     channel: chat,
     clientSeq,
@@ -55,10 +60,7 @@ function dispatchTurn({
 async function chatSnapshot({
   peer,
   chat,
-}: {
-  peer: Peer;
-  chat: string;
-}): Promise<ReturnType<typeof ChatStateSchema.parse>> {
+}: ChatSnapshotParams): Promise<ReturnType<typeof ChatStateSchema.parse>> {
   const result = SubscribeResultSchema.parse(await peer.request("subscribe", { channel: chat }));
 
   return ChatStateSchema.parse(result.snapshot?.state);
@@ -74,37 +76,37 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
         type: "text",
         text: "Hel",
         futureField: true,
-      } satisfies TextContent;
+      } satisfies ContentBlock;
 
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId,
         update: {
           sessionUpdate: "agent_thought_chunk",
           content: { type: "text", text: "Think" },
         },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId,
         update: {
           sessionUpdate: "agent_thought_chunk",
           content: { type: "text", text: " carefully" },
         },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
           content: firstMessage,
         },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
           content: { type: "text", text: "lo" },
         },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId,
         update: {
           sessionUpdate: "tool_call",
@@ -115,7 +117,7 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
           status: "in_progress",
         },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId,
         update: {
           sessionUpdate: "tool_call_update",
@@ -130,7 +132,7 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
           ],
         },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
@@ -173,7 +175,16 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
                 status: "completed",
                 toolInput: '{"path":"file.txt"}',
                 success: true,
-                content: [{ type: "text", text: "File contents" }],
+                content: [
+                  { type: "text", text: "File contents" },
+                  {
+                    type: "fileEdit",
+                    after: {
+                      uri: "file:///file.txt",
+                      content: { uri: "data:text/plain;charset=utf-8,Ignored%20diff" },
+                    },
+                  },
+                ],
               },
             },
             {
@@ -258,7 +269,7 @@ it.each([
 it("declines ACP permission requests and publishes agent cancellation", async () => {
   await withAcpAgent({
     prompt: async (connection, request) => {
-      const permission = await connection.requestPermission({
+      const permission = await connection.client.request(methods.client.session.requestPermission, {
         sessionId: request.sessionId,
         toolCall: { toolCallId: "read-file", title: "Read file", kind: "read" },
         options: [{ optionId: "allow-read", name: "Allow reading", kind: "allow_once" }],
@@ -368,21 +379,21 @@ it("rejects attachments through the prompt mapper before invoking ACP", async ()
   });
 });
 
-it("ignores unsupported updates and chunks for another ACP session", async () => {
+it("preserves plans and images while ignoring unrelated ACP sessions", async () => {
   await withAcpAgent({
     prompt: async (connection, request) => {
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId: request.sessionId,
         update: { sessionUpdate: "plan", entries: [] },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId: request.sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
           content: { type: "image", data: "AQ==", mimeType: "image/png" },
         },
       });
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId: "another-conversation",
         update: {
           sessionUpdate: "agent_message_chunk",
@@ -402,7 +413,15 @@ it("ignores unsupported updates and chunks for another ACP session", async () =>
         expect(peer.actions.some(({ action }) => action.type === "chat/turnComplete")).toBe(true);
       });
       const state = await chatSnapshot({ peer, chat });
-      expect(state.turns).toMatchObject([{ state: "complete", responseParts: [] }]);
+      expect(state.turns).toMatchObject([
+        {
+          state: "complete",
+          responseParts: [
+            { kind: "systemNotification", _meta: { acp: { update: { sessionUpdate: "plan" } } } },
+            { kind: "contentRef", uri: "data:image/png;base64,AQ==" },
+          ],
+        },
+      ]);
     },
   });
 });
@@ -410,7 +429,7 @@ it("ignores unsupported updates and chunks for another ACP session", async () =>
 it("loads the bound ACP session without publishing its historical updates", async () => {
   await withAcpAgent({
     prompt: async (connection, request) => {
-      await connection.sessionUpdate({
+      await connection.client.notify(methods.client.session.update, {
         sessionId: request.sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
@@ -513,25 +532,21 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
 
 it("releasing an old generation keeps a replacement ACP connection usable", async () => {
   const sockets: WebSocket[] = [];
-  const servers: AgentSideConnection[] = [];
+  const servers: AgentConnection[] = [];
 
   const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (): Promise<Response> => {
     const { 0: client, 1: server } = new WebSocketPair();
     const sessionId = crypto.randomUUID();
 
-    const agent: Agent = {
-      initialize: async () => ({
+    const connection = agent()
+      .onRequest(methods.agent.initialize, () => ({
         protocolVersion: PROTOCOL_VERSION,
         agentCapabilities: { loadSession: true },
-      }),
-      newSession: async () => ({ sessionId }),
-      authenticate: async () => ({}),
-      loadSession: async () => ({}),
-      prompt: async () => ({ stopReason: "end_turn" }),
-      cancel: async (): Promise<void> => {},
-    };
-
-    const connection = new AgentSideConnection(() => agent, websocketStream(server));
+      }))
+      .onRequest(methods.agent.session.new, () => ({ sessionId }))
+      .onRequest(methods.agent.session.load, () => ({}))
+      .onRequest(methods.agent.session.prompt, () => ({ stopReason: "end_turn" }))
+      .connect(websocketStream(server));
 
     server.accept();
     sockets.push(server);
@@ -590,7 +605,7 @@ it("ends an oversized streamed turn with a durable error and releases the agent"
     prompt: async (connection, request) => {
       await Promise.all(
         Array.from({ length: chunkCount }, () =>
-          connection.sessionUpdate({
+          connection.client.notify(methods.client.session.update, {
             sessionId: request.sessionId,
             update: {
               sessionUpdate: "agent_message_chunk",

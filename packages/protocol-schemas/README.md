@@ -3,77 +3,94 @@
 Runtime schemas, inferred wire types, and AHP/ACP mappings for the agent host.
 Consumers import TypeScript source directly. This package has no build step.
 
-| Import                              | Contents                                                        |
-| ----------------------------------- | --------------------------------------------------------------- |
-| `@experiments/protocol-schemas/ahp` | AHP commands, state, actions, and shared JSON-RPC schemas       |
-| `@experiments/protocol-schemas/acp` | The host's ACP subset, mappings, and shared JSON-RPC schemas    |
-| `@experiments/protocol-schemas`     | Compatibility alias for `/ahp`, retained for existing consumers |
+| Import                              | Contents                                                  |
+| ----------------------------------- | --------------------------------------------------------- |
+| `@experiments/protocol-schemas/ahp` | AHP commands, state, actions, and shared JSON-RPC schemas |
+| `@experiments/protocol-schemas/acp` | Complete ACP v1 schemas, mappings, and session metadata   |
+| `@experiments/protocol-schemas`     | Compatibility alias for `/ahp`                            |
 
-Use the explicit subpaths for new imports. Both re-export `src/jsonrpc.ts`.
-Protocol-specific names stay within their own subpaths.
+Use explicit subpaths for new imports.
 
 ## ACP validation
 
-Inbound ACP envelopes and modeled payloads allow and preserve additional fields.
-Outbound envelopes and payloads reject undeclared fields. Agent-host validates at
-the connection boundary and keeps its wire error codes and reporting policy.
+The workspace catalog pins `@agentclientprotocol/sdk` to `1.7.0` for every consumer.
+The generator reads the SDK's public `schema/schema.json` export and produces
+validators for all 276 definitions. Each definition exports `NameSchema`,
+`NameOutboundSchema`, and the inferred `Name` type.
 
-The subset includes initialization with empty client capabilities, new/load
-session requests with no MCP servers, text prompts, cancellation, and cancelled
-permission responses. Initialization responses model the protocol version and
-`loadSession` capability. Session responses model the conversation ID where
-needed. Prompt responses model the stop reason.
+Inbound validators preserve additional fields. Outbound validators reject
+undeclared fields, except extension objects and dictionaries that the protocol
+explicitly allows. `_meta` remains extensible in both directions. Malformed known
+variants cannot pass through extensible union alternatives.
 
-Four session updates produce AHP actions:
+Compile-time checks compare generated payload types against the SDK in both
+directions. The six RPC envelope definitions use method-specific parameter unions
+from the JSON schema; the SDK types widen these envelope parameters, so they are
+excluded from type comparison. Envelope validators are still generated and tested.
+The package's runtime code does not import the SDK.
 
-- `agent_message_chunk` appends text to markdown parts.
-- `agent_thought_chunk` appends text to reasoning parts.
-- `tool_call` starts a tool and publishes its input and text results.
-- `tool_call_update` updates an existing tool's text results and completion.
+After changing the catalog version, regenerate and verify:
 
-The host ignores unmodeled update variants and non-text content. Non-text output
-blocks and tool diffs/terminals retain their payloads without modeling their fields.
+```sh
+pnpm --filter @experiments/protocol-schemas generate:acp
+pnpm --filter @experiments/protocol-schemas generate:acp:check
+pnpm --filter @experiments/protocol-schemas check-types
+```
 
-Expand the subset when a consumer needs another field or operation. Unmodeled
-areas include user message chunks, plans, available commands, mode/configuration
-changes, session information, usage updates, non-text prompts, MCP configuration,
-additional client capabilities, and permission approval.
+## Session updates
+
+Mappings handle every variant of the SDK's 19-member `SessionUpdate` union.
+Exhaustive switches and a typed fixture record fail compilation when the SDK adds
+a variant without a corresponding implementation.
+
+Agent text and thought chunks produce markdown and reasoning parts. Images, audio,
+resource links, and embedded resources produce content references. Tool updates
+preserve inputs, outputs, progress, file diffs, and terminal references. ACP context
+usage appears in `chat/usage` metadata, without treating context size as token usage.
+
+Commands, modes, configuration, session information, usage, plans, compactions,
+subagents, notices, and session messages update persisted session metadata under
+`session._meta.acp[acpSessionId]`. The root session's title also updates the AHP title.
+Transcript updates without a native AHP representation produce system notification
+parts with the original notification in `part._meta.acp`. Child session output uses
+this representation too, retaining its session ID and avoiding root tool ID collisions.
+Updates outside an active turn publish session metadata and retain `lastUpdate`.
+
+The host buffers setup updates until the conversation is bound. It accepts child
+traffic after a subagent announcement and ignores unrelated sessions. Reloading
+retains metadata updates while suppressing repeated transcript history.
 
 ## Mappings
 
-| Function                                      | Result                                                                         |
-| --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `ahpMessageToAcpPrompt(message)`              | Text blocks, or `{ ok: false, reason: "unsupported-content" }` for attachments |
-| `acpUpdateToChatActions(turn, notification)`  | AHP actions using only the active turn's ID and response parts                 |
-| `acpStopReasonToOutcome(stopReason)`          | `done`, `cancelled`, or `failed`, with message text and the raw stop reason    |
-| `chatResponsePartId({ turnId, kind, index })` | A stable `${turnId}/${kind}/${index}` wire ID                                  |
+| Function                                                                   | Result                                                        |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `ahpMessageToAcpPrompt(message)`                                           | Text blocks, or an unsupported-content result for attachments |
+| `acpUpdateToChatActions(turn, notification, rootSessionId)`                | AHP chat actions for an active turn                           |
+| `acpUpdateToSessionActions(session, notification, rootSessionId, hasTurn)` | Persisted ACP metadata and root title actions                 |
+| `acpStopReasonToOutcome(stopReason)`                                       | A done, cancelled, or failed outcome                          |
+| `chatResponsePartId({ turnId, kind, index })`                              | Stable wire IDs for response parts                            |
 
-Mapping functions return typed results and do not throw. Tool input that cannot
-be serialized omits `toolInput` while retaining the tool actions. Unsupported
-prompt content leaves the app to choose its rejection response.
+Adjacent chunks of the same kind and message ID reuse their part. A kind change,
+message ID change, or intervening tool creates another part. Existing part IDs stay
+unchanged when the agent omits message IDs.
 
-`end_turn` completes a turn; `cancelled` cancels it. All other modeled stop reasons
-produce one failure outcome. The package owns the failure message, and the app
-publishes it using its existing error handling.
-
-Adjacent chunks of the same kind reuse their response part. A kind change or an
-intervening tool creates a part at the next response-part index. Preserve the ID
-format when changing mappings because clients receive these IDs on the wire.
+Complete schemas include file access, terminals, authentication, permissions,
+MCP, configuration operations, and elicitation. These validators do not implement
+host controls for those operations. The host still accepts text prompts, passes an
+empty MCP server list, and cancels permission requests.
 
 ## Verification
 
-The ACP SDK is exact-pinned to `0.26.0` as a development dependency. It supplies
-the types for compile-time drift checks; package runtime code does not import it.
-The checks compare each modeled field, nested content, optionality, nullability,
-and modeled enum values. Unmodeled upstream fields do not require schema expansion.
-
 ```sh
-pnpm --filter @experiments/protocol-schemas check-types
-pnpm --filter @experiments/protocol-schemas lint
 pnpm --filter @experiments/protocol-schemas test
+pnpm --filter @experiments/protocol-schemas lint
+pnpm --filter @experiments/agent-host check-types
 pnpm --filter @experiments/agent-host test
+pnpm run lint
+pnpm run format
 ```
 
-Package tests cover mapping rules. The host integration tests exercise ACP
-connections, Durable Object publication, and AHP snapshots, including reasoning,
-tool results, stop reasons, attachment rejection, cancellation, and session loading.
+Tests check every published definition and every session-update variant, inbound
+extensions, strict outbound validation, and metadata patch semantics. Workers
+integration tests verify setup updates, subagent routing, session snapshots,
+transcript payloads, cancellation, and session loading.

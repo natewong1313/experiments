@@ -1,85 +1,110 @@
 // Generated from the catalog-pinned ACP SDK. Run pnpm generate:acp.
 import * as z from "zod";
-import { RequestIdSchema, RequestIdOutboundSchema } from "./schemas-0";
-import { WriteTextFileRequestSchema, WriteTextFileRequestOutboundSchema } from "./schemas-0";
-import { SessionIdSchema, SessionIdOutboundSchema } from "./schemas-0";
-import { ReadTextFileRequestSchema, ReadTextFileRequestOutboundSchema } from "./schemas-0";
+import {
+  RequestIdSchema,
+  RequestIdOutboundSchema,
+  WriteTextFileRequestSchema,
+  WriteTextFileRequestOutboundSchema,
+  SessionIdSchema,
+  SessionIdOutboundSchema,
+  ReadTextFileRequestSchema,
+  ReadTextFileRequestOutboundSchema,
+  ToolCallIdSchema,
+  ToolCallIdOutboundSchema,
+} from "./schemas-0";
 import {
   RequestPermissionRequestSchema,
   RequestPermissionRequestOutboundSchema,
-} from "./schemas-1";
-import { ToolCallIdSchema, ToolCallIdOutboundSchema } from "./schemas-0";
-import { CreateTerminalRequestSchema, CreateTerminalRequestOutboundSchema } from "./schemas-1";
-import { TerminalOutputRequestSchema, TerminalOutputRequestOutboundSchema } from "./schemas-1";
-import { ReleaseTerminalRequestSchema, ReleaseTerminalRequestOutboundSchema } from "./schemas-1";
-import {
+  CreateTerminalRequestSchema,
+  CreateTerminalRequestOutboundSchema,
+  TerminalOutputRequestSchema,
+  TerminalOutputRequestOutboundSchema,
+  ReleaseTerminalRequestSchema,
+  ReleaseTerminalRequestOutboundSchema,
   WaitForTerminalExitRequestSchema,
   WaitForTerminalExitRequestOutboundSchema,
+  KillTerminalRequestSchema,
+  KillTerminalRequestOutboundSchema,
+  ElicitationSchemaTypeSchema,
+  ElicitationSchemaTypeOutboundSchema,
+  StringFormatSchema,
+  StringFormatOutboundSchema,
+  EnumOptionSchema,
+  EnumOptionOutboundSchema,
 } from "./schemas-1";
-import { KillTerminalRequestSchema, KillTerminalRequestOutboundSchema } from "./schemas-1";
-import { ElicitationSchemaTypeSchema, ElicitationSchemaTypeOutboundSchema } from "./schemas-1";
-import { StringFormatSchema, StringFormatOutboundSchema } from "./schemas-1";
-import { EnumOptionSchema, EnumOptionOutboundSchema } from "./schemas-1";
+
 const IntegerPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minimum: z
-    .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+    .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
     .optional(),
   maximum: z
-    .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+    .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
     .optional(),
   default: z
-    .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+    .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
     .optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const IntegerPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minimum: z
-    .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+    .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
     .optional(),
   maximum: z
-    .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+    .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
     .optional(),
   default: z
-    .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+    .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
     .optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type IntegerPropertySchema = z.output<typeof IntegerPropertySchemaSchema>;
+
 const BooleanPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   default: z.union([z.boolean(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const BooleanPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   default: z.union([z.boolean(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type BooleanPropertySchema = z.output<typeof BooleanPropertySchemaSchema>;
+
 const StringMultiSelectItemsSchema = z.looseObject({
   enum: z.array(z.string()),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const StringMultiSelectItemsOutboundSchema = z.strictObject({
   enum: z.array(z.string()),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type StringMultiSelectItems = z.output<typeof StringMultiSelectItemsSchema>;
+
 const TitledMultiSelectItemsSchema = z.looseObject({
   anyOf: z.array(EnumOptionSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const TitledMultiSelectItemsOutboundSchema = z.strictObject({
   anyOf: z.array(EnumOptionOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type TitledMultiSelectItems = z.output<typeof TitledMultiSelectItemsSchema>;
+
 const MultiSelectItemsSchema = z.union([
   z.looseObject({
     enum: z.array(z.string()),
@@ -87,10 +112,11 @@ const MultiSelectItemsSchema = z.union([
     type: z.literal("string"),
   }),
   z.looseObject({ type: z.string() }).refine((value) => !["string"].includes(value["type"]), {
-    message: "Malformed known ACP variant",
+    error: "Malformed known ACP variant",
   }),
   TitledMultiSelectItemsSchema,
 ]);
+
 const MultiSelectItemsOutboundSchema = z.union([
   z.strictObject({
     enum: z.array(z.string()),
@@ -98,23 +124,25 @@ const MultiSelectItemsOutboundSchema = z.union([
     type: z.literal("string"),
   }),
   z.looseObject({ type: z.string() }).refine((value) => !["string"].includes(value["type"]), {
-    message: "Malformed known ACP variant",
+    error: "Malformed known ACP variant",
   }),
   TitledMultiSelectItemsOutboundSchema,
 ]);
+
 type MultiSelectItems = z.output<typeof MultiSelectItemsSchema>;
+
 const MultiSelectPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minItems: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   maxItems: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
@@ -122,18 +150,19 @@ const MultiSelectPropertySchemaSchema = z.looseObject({
   default: z.union([z.array(z.string()), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const MultiSelectPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minItems: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   maxItems: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
@@ -141,20 +170,22 @@ const MultiSelectPropertySchemaOutboundSchema = z.strictObject({
   default: z.union([z.array(z.string()), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type MultiSelectPropertySchema = z.output<typeof MultiSelectPropertySchemaSchema>;
+
 const ElicitationPropertySchemaSchema = z.union([
   z.looseObject({
     title: z.union([z.string(), z.null()]).optional(),
     description: z.union([z.string(), z.null()]).optional(),
     minLength: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
     maxLength: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
@@ -179,13 +210,13 @@ const ElicitationPropertySchemaSchema = z.union([
     title: z.union([z.string(), z.null()]).optional(),
     description: z.union([z.string(), z.null()]).optional(),
     minimum: z
-      .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+      .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
       .optional(),
     maximum: z
-      .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+      .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
       .optional(),
     default: z
-      .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+      .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
       .optional(),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
     type: z.literal("integer"),
@@ -202,13 +233,13 @@ const ElicitationPropertySchemaSchema = z.union([
     description: z.union([z.string(), z.null()]).optional(),
     minItems: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
     maxItems: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
@@ -221,22 +252,23 @@ const ElicitationPropertySchemaSchema = z.union([
     .looseObject({ type: z.string() })
     .refine(
       (value) => !["string", "number", "integer", "boolean", "array"].includes(value["type"]),
-      { message: "Malformed known ACP variant" },
+      { error: "Malformed known ACP variant" },
     ),
 ]);
+
 const ElicitationPropertySchemaOutboundSchema = z.union([
   z.strictObject({
     title: z.union([z.string(), z.null()]).optional(),
     description: z.union([z.string(), z.null()]).optional(),
     minLength: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
     maxLength: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
@@ -261,13 +293,13 @@ const ElicitationPropertySchemaOutboundSchema = z.union([
     title: z.union([z.string(), z.null()]).optional(),
     description: z.union([z.string(), z.null()]).optional(),
     minimum: z
-      .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+      .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
       .optional(),
     maximum: z
-      .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+      .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
       .optional(),
     default: z
-      .union([z.number().refine(Number.isInteger, { message: "Expected integer" }), z.null()])
+      .union([z.number().refine(Number.isInteger, { error: "Expected integer" }), z.null()])
       .optional(),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
     type: z.literal("integer"),
@@ -284,13 +316,13 @@ const ElicitationPropertySchemaOutboundSchema = z.union([
     description: z.union([z.string(), z.null()]).optional(),
     minItems: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
     maxItems: z
       .union([
-        z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+        z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
         z.null(),
       ])
       .optional(),
@@ -303,10 +335,12 @@ const ElicitationPropertySchemaOutboundSchema = z.union([
     .looseObject({ type: z.string() })
     .refine(
       (value) => !["string", "number", "integer", "boolean", "array"].includes(value["type"]),
-      { message: "Malformed known ACP variant" },
+      { error: "Malformed known ACP variant" },
     ),
 ]);
+
 type ElicitationPropertySchema = z.output<typeof ElicitationPropertySchemaSchema>;
+
 const ElicitationSchemaSchema = z.looseObject({
   type: ElicitationSchemaTypeSchema.optional(),
   title: z.union([z.string(), z.null()]).optional(),
@@ -315,6 +349,7 @@ const ElicitationSchemaSchema = z.looseObject({
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const ElicitationSchemaOutboundSchema = z.strictObject({
   type: ElicitationSchemaTypeOutboundSchema.optional(),
   title: z.union([z.string(), z.null()]).optional(),
@@ -323,21 +358,29 @@ const ElicitationSchemaOutboundSchema = z.strictObject({
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type ElicitationSchema = z.output<typeof ElicitationSchemaSchema>;
+
 const ElicitationSessionScopeSchema = z.looseObject({
   sessionId: SessionIdSchema,
   toolCallId: z.union([ToolCallIdSchema, z.null()]).optional(),
 });
+
 const ElicitationSessionScopeOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   toolCallId: z.union([ToolCallIdOutboundSchema, z.null()]).optional(),
 });
+
 type ElicitationSessionScope = z.output<typeof ElicitationSessionScopeSchema>;
+
 const ElicitationRequestScopeSchema = z.looseObject({ requestId: RequestIdSchema });
+
 const ElicitationRequestScopeOutboundSchema = z.strictObject({
   requestId: RequestIdOutboundSchema,
 });
+
 type ElicitationRequestScope = z.output<typeof ElicitationRequestScopeSchema>;
+
 const ElicitationFormModeSchema = z.union([
   z.looseObject({
     sessionId: SessionIdSchema,
@@ -346,6 +389,7 @@ const ElicitationFormModeSchema = z.union([
   }),
   z.looseObject({ requestId: RequestIdSchema, requestedSchema: ElicitationSchemaSchema }),
 ]);
+
 const ElicitationFormModeOutboundSchema = z.union([
   z.strictObject({
     sessionId: SessionIdOutboundSchema,
@@ -357,10 +401,15 @@ const ElicitationFormModeOutboundSchema = z.union([
     requestedSchema: ElicitationSchemaOutboundSchema,
   }),
 ]);
+
 type ElicitationFormMode = z.output<typeof ElicitationFormModeSchema>;
+
 const ElicitationIdSchema = z.string();
+
 const ElicitationIdOutboundSchema = z.string();
+
 type ElicitationId = z.output<typeof ElicitationIdSchema>;
+
 const ElicitationUrlModeSchema = z.union([
   z.looseObject({
     sessionId: SessionIdSchema,
@@ -374,6 +423,7 @@ const ElicitationUrlModeSchema = z.union([
     url: z.string(),
   }),
 ]);
+
 const ElicitationUrlModeOutboundSchema = z.union([
   z.strictObject({
     sessionId: SessionIdOutboundSchema,
@@ -387,7 +437,9 @@ const ElicitationUrlModeOutboundSchema = z.union([
     url: z.string(),
   }),
 ]);
+
 type ElicitationUrlMode = z.output<typeof ElicitationUrlModeSchema>;
+
 const CreateElicitationRequestSchema = z.union([
   z.looseObject({
     sessionId: SessionIdSchema,
@@ -421,20 +473,29 @@ const CreateElicitationRequestSchema = z.union([
     message: z.string(),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
   }),
-  z.looseObject({
-    sessionId: SessionIdSchema,
-    toolCallId: z.union([ToolCallIdSchema, z.null()]).optional(),
-    mode: z.string(),
-    message: z.string(),
-    _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
-  }),
-  z.looseObject({
-    requestId: RequestIdSchema,
-    mode: z.string(),
-    message: z.string(),
-    _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
-  }),
+  z
+    .looseObject({
+      sessionId: SessionIdSchema,
+      toolCallId: z.union([ToolCallIdSchema, z.null()]).optional(),
+      mode: z.string(),
+      message: z.string(),
+      _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
+    })
+    .refine((value) => !["form", "url"].includes(value["mode"]), {
+      error: "Malformed known ACP variant",
+    }),
+  z
+    .looseObject({
+      requestId: RequestIdSchema,
+      mode: z.string(),
+      message: z.string(),
+      _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
+    })
+    .refine((value) => !["form", "url"].includes(value["mode"]), {
+      error: "Malformed known ACP variant",
+    }),
 ]);
+
 const CreateElicitationRequestOutboundSchema = z.union([
   z.strictObject({
     sessionId: SessionIdOutboundSchema,
@@ -468,27 +529,43 @@ const CreateElicitationRequestOutboundSchema = z.union([
     message: z.string(),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
   }),
-  z.strictObject({
-    sessionId: SessionIdOutboundSchema,
-    toolCallId: z.union([ToolCallIdOutboundSchema, z.null()]).optional(),
-    mode: z.string(),
-    message: z.string(),
-    _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
-  }),
-  z.strictObject({
-    requestId: RequestIdOutboundSchema,
-    mode: z.string(),
-    message: z.string(),
-    _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
-  }),
+  z
+    .looseObject({
+      sessionId: SessionIdOutboundSchema,
+      toolCallId: z.union([ToolCallIdOutboundSchema, z.null()]).optional(),
+      mode: z.string(),
+      message: z.string(),
+      _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
+    })
+    .refine((value) => !["form", "url"].includes(value["mode"]), {
+      error: "Malformed known ACP variant",
+    }),
+  z
+    .looseObject({
+      requestId: RequestIdOutboundSchema,
+      mode: z.string(),
+      message: z.string(),
+      _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
+    })
+    .refine((value) => !["form", "url"].includes(value["mode"]), {
+      error: "Malformed known ACP variant",
+    }),
 ]);
+
 type CreateElicitationRequest = z.output<typeof CreateElicitationRequestSchema>;
+
 const McpServerAcpIdSchema = z.string();
+
 const McpServerAcpIdOutboundSchema = z.string();
+
 type McpServerAcpId = z.output<typeof McpServerAcpIdSchema>;
+
 const McpRequestIdSchema = z.string();
+
 const McpRequestIdOutboundSchema = z.string();
+
 type McpRequestId = z.output<typeof McpRequestIdSchema>;
+
 const MessageMcpRequestSchema = z.looseObject({
   serverId: McpServerAcpIdSchema,
   requestId: McpRequestIdSchema,
@@ -496,6 +573,7 @@ const MessageMcpRequestSchema = z.looseObject({
   params: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const MessageMcpRequestOutboundSchema = z.strictObject({
   serverId: McpServerAcpIdOutboundSchema,
   requestId: McpRequestIdOutboundSchema,
@@ -503,10 +581,15 @@ const MessageMcpRequestOutboundSchema = z.strictObject({
   params: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type MessageMcpRequest = z.output<typeof MessageMcpRequestSchema>;
+
 const ExtRequestSchema = z.unknown();
+
 const ExtRequestOutboundSchema = z.unknown();
+
 type ExtRequest = z.output<typeof ExtRequestSchema>;
+
 const AgentRequestSchema = z.looseObject({
   id: RequestIdSchema,
   method: z.string(),
@@ -529,6 +612,7 @@ const AgentRequestSchema = z.looseObject({
     ])
     .optional(),
 });
+
 const AgentRequestOutboundSchema = z.strictObject({
   id: RequestIdOutboundSchema,
   method: z.string(),
@@ -551,18 +635,23 @@ const AgentRequestOutboundSchema = z.strictObject({
     ])
     .optional(),
 });
+
 type AgentRequest = z.output<typeof AgentRequestSchema>;
+
 const ProtocolVersionSchema = z
   .number()
-  .refine(Number.isInteger, { message: "Expected integer" })
+  .refine(Number.isInteger, { error: "Expected integer" })
   .check(z.gte(0))
   .check(z.lte(65535));
+
 const ProtocolVersionOutboundSchema = z
   .number()
-  .refine(Number.isInteger, { message: "Expected integer" })
+  .refine(Number.isInteger, { error: "Expected integer" })
   .check(z.gte(0))
   .check(z.lte(65535));
+
 type ProtocolVersion = z.output<typeof ProtocolVersionSchema>;
+
 export {
   IntegerPropertySchemaSchema,
   IntegerPropertySchemaOutboundSchema,

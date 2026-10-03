@@ -1,10 +1,13 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import {
-  AgentSideConnection,
+  agent,
+  methods,
+  type AgentConnection,
   PROTOCOL_VERSION,
-  type Agent,
   type PromptRequest,
+  type SessionNotification,
+  type AgentContext,
   type PromptResponse,
 } from "@agentclientprotocol/sdk";
 import { SessionStateSchema, SubscribeResultSchema } from "@experiments/protocol-schemas/ahp";
@@ -16,49 +19,59 @@ const SESSION = "ahp-session:/host-test";
 
 const SWITCHING_PROTOCOLS = 101;
 
-async function withAcpAgent(options: {
-  prompt(connection: AgentSideConnection, request: PromptRequest): Promise<PromptResponse>;
+const LAST_CONNECTION = -1;
+
+type WithAcpAgentParams = {
+  prompt(connection: AgentConnection, request: PromptRequest): Promise<PromptResponse>;
   cancel?(): Promise<void>;
-  run(peer: Peer, chat: string, disconnect: () => Promise<void>): Promise<void>;
-}): Promise<void> {
+  setup?(client: AgentContext, sessionId: string): Promise<void>;
+  run(
+    peer: Peer,
+    chat: string,
+    disconnect: () => Promise<void>,
+    notify: (notification: SessionNotification) => Promise<void>,
+  ): Promise<void>;
+};
+
+async function withAcpAgent(options: WithAcpAgentParams): Promise<void> {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   const sockets: WebSocket[] = [];
-  const servers: AgentSideConnection[] = [];
+  const servers: AgentConnection[] = [];
 
   const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
     const { 0: client, 1: server } = new WebSocketPair();
 
-    const connection = new AgentSideConnection(
-      (): Agent => ({
-        initialize: async () => ({
-          protocolVersion: PROTOCOL_VERSION,
-          agentCapabilities: { loadSession: true },
-        }),
-        newSession: async () => ({ sessionId: "conversation" }),
-        loadSession: async (request) => {
-          expect(request).toMatchObject({
-            sessionId: "conversation",
-            cwd: "/workspace",
-            mcpServers: [],
-          });
-          await connection.sessionUpdate({
-            sessionId: request.sessionId,
-            update: {
-              sessionUpdate: "agent_message_chunk",
-              content: { type: "text", text: "Old history" },
-            },
-          });
+    const connection: AgentConnection = agent()
+      .onRequest(methods.agent.initialize, () => ({
+        protocolVersion: PROTOCOL_VERSION,
+        agentCapabilities: { loadSession: true },
+      }))
+      .onRequest(methods.agent.session.new, async ({ client: host }) => {
+        await options.setup?.(host, "conversation");
 
-          return {};
-        },
-        authenticate: async () => ({}),
-        prompt: async (request) => await options.prompt(connection, request),
-        cancel: async (): Promise<void> => {
-          await options.cancel?.();
-        },
-      }),
-      websocketStream(server),
-    );
+        return { sessionId: "conversation" };
+      })
+      .onRequest(methods.agent.session.load, async ({ params: request, client: host }) => {
+        expect(request).toMatchObject({
+          sessionId: "conversation",
+          cwd: "/workspace",
+          mcpServers: [],
+        });
+        await host.notify(methods.client.session.update, {
+          sessionId: request.sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "Old history" },
+          },
+        });
+
+        return {};
+      })
+      .onRequest(methods.agent.session.prompt, ({ params }) => options.prompt(connection, params))
+      .onNotification(methods.agent.session.cancel, async () => {
+        await options.cancel?.();
+      })
+      .connect(websocketStream(server));
 
     server.accept();
     sockets.push(server);
@@ -103,7 +116,18 @@ async function withAcpAgent(options: {
     }
 
     await peer.request("subscribe", { channel: session.defaultChat });
-    await options.run(peer, session.defaultChat, disconnect);
+    await options.run(peer, session.defaultChat, disconnect, async (notification) => {
+      await runInDurableObject(stub, async (instance) => {
+        expect(instance).toBeDefined();
+        const connection = servers.at(LAST_CONNECTION);
+
+        if (!connection) {
+          throw new Error("No ACP connection");
+        }
+
+        await connection.client.notify(methods.client.session.update, notification);
+      });
+    });
   } finally {
     peer.close();
     await disconnect();

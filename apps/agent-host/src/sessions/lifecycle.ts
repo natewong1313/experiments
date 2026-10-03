@@ -106,6 +106,7 @@ class SessionLifecycle {
       }
 
       this.store.bindAgent(uri, agent.sessionId);
+      agent.activate();
       this.publish(uri, { type: "session/ready" });
       await this.agents.idle(original);
     } catch (error) {

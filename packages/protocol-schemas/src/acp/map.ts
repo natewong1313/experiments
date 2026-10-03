@@ -1,9 +1,10 @@
 import type { ChatAction } from "../ahp/channels/chat/actions";
 import type { ActiveTurn } from "../ahp/channels/chat/state";
-import type { ToolResultContent } from "../ahp/channels/chat/tool-call";
 import type { SessionNotification } from "./session";
 import type { Message } from "../ahp/channels/chat/message";
 import type { PromptRequest, StopReason } from "./prompt";
+import { contentReference, toolContent } from "./content";
+import { sessionUpdateText } from "./update-text";
 
 const NO_ATTACHMENTS = 0;
 
@@ -68,6 +69,7 @@ function chatResponsePartId({ turnId, kind, index }: ChatResponsePartIdParts): s
 function acpUpdateToChatActions(
   turn: Pick<ActiveTurn, "id" | "responseParts"> | undefined,
   notification: SessionNotification,
+  rootSessionId = notification.sessionId,
 ): ChatAction[] {
   if (!turn) {
     return [];
@@ -75,25 +77,51 @@ function acpUpdateToChatActions(
 
   const { update } = notification;
 
+  if (notification.sessionId !== rootSessionId) {
+    return [
+      systemUpdate(
+        turn.id,
+        notification,
+        `${notification.sessionId}: ${sessionUpdateText(update)}`,
+      ),
+    ];
+  }
+
   switch (update.sessionUpdate) {
     case "agent_message_chunk":
     case "agent_thought_chunk": {
       if (update.content.type !== "text") {
-        return [];
+        return [
+          {
+            type: "chat/responsePart",
+            turnId: turn.id,
+            part: { kind: "contentRef", ...contentReference(update.content) },
+            _meta: { acp: notification },
+          },
+        ];
       }
 
       const kind = update.sessionUpdate === "agent_message_chunk" ? "markdown" : "reasoning";
 
       const last = turn.responseParts.at(LAST_PART_INDEX);
-      const existing = last?.kind === kind ? last : null;
+
+      const messageSuffix = update.messageId
+        ? `/message/${encodeURIComponent(update.messageId)}`
+        : "";
+
+      const existing =
+        last?.kind === kind &&
+        (messageSuffix ? last.id.endsWith(messageSuffix) : !last.id.includes("/message/"))
+          ? last
+          : null;
 
       const partId =
         existing?.id ??
-        chatResponsePartId({
+        `${chatResponsePartId({
           turnId: turn.id,
           kind,
           index: turn.responseParts.length,
-        });
+        })}${messageSuffix}`;
 
       const actions: ChatAction[] = existing
         ? []
@@ -132,6 +160,7 @@ function acpUpdateToChatActions(
           toolCallId,
           invocationMessage: title,
           confirmed: "not-needed",
+          _meta: { acp: update },
           ...toolInputFields(update.rawInput),
         },
         ...toolProgress(turn.id, update),
@@ -144,13 +173,40 @@ function acpUpdateToChatActions(
       );
 
       if (!tool) {
-        return [];
+        return [systemUpdate(turn.id, notification, sessionUpdateText(update))];
       }
 
       return toolProgress(turn.id, update);
     }
-    default: {
+
+    case "available_commands_update":
+    case "current_mode_update":
+    case "config_option_update":
+    case "session_info_update": {
       return [];
+    }
+
+    case "usage_update": {
+      return [{ type: "chat/usage", turnId: turn.id, usage: { _meta: { acp: notification } } }];
+    }
+
+    case "user_message_chunk":
+    case "plan":
+    case "plan_update":
+    case "plan_removed":
+    case "notice":
+    case "compaction_update":
+    case "compaction_summary_chunk":
+    case "subagent_update":
+    case "session_message":
+    case "session_message_chunk": {
+      return [systemUpdate(turn.id, notification, sessionUpdateText(update))];
+    }
+
+    default: {
+      const exhaustive: never = update;
+
+      return exhaustive;
     }
   }
 }
@@ -173,11 +229,20 @@ function toolInputFields<T>(
 }
 
 function toolProgress(turnId: string, update: ToolUpdate): ChatAction[] {
-  const content = update.content?.flatMap((item): ToolResultContent[] =>
-    item.type === "content" && item.content.type === "text"
-      ? [{ type: "text", text: item.content.text }]
-      : [],
-  );
+  const content = update.content?.flatMap(toolContent);
+
+  const progress: ChatAction[] =
+    update.sessionUpdate === "tool_call_update"
+      ? [
+          {
+            type: "chat/toolCallDelta",
+            turnId,
+            toolCallId: update.toolCallId,
+            invocationMessage: update.title ?? void 0,
+            _meta: { acp: update },
+          },
+        ]
+      : [];
 
   if (update.status === "completed" || update.status === "failed") {
     const result = {
@@ -186,25 +251,37 @@ function toolProgress(turnId: string, update: ToolUpdate): ChatAction[] {
     };
 
     return [
+      ...progress,
       {
         type: "chat/toolCallComplete",
         turnId,
         toolCallId: update.toolCallId,
-        result: content ? { ...result, content } : result,
+        result: { ...result, content, structuredContent: { acp: update } },
+        _meta: { acp: update },
       },
     ];
   }
 
   return content
     ? [
+        ...progress,
         {
           type: "chat/toolCallContentChanged",
           turnId,
           toolCallId: update.toolCallId,
           content,
+          _meta: { acp: update },
         },
       ]
-    : [];
+    : progress;
+}
+
+function systemUpdate(turnId: string, notification: SessionNotification, text: string): ChatAction {
+  return {
+    type: "chat/responsePart",
+    turnId,
+    part: { kind: "systemNotification", content: text, _meta: { acp: notification } },
+  };
 }
 
 export {

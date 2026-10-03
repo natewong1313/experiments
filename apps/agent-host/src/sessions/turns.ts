@@ -1,5 +1,6 @@
 import {
   acpUpdateToChatActions,
+  acpUpdateToSessionActions,
   type SessionNotification,
 } from "@experiments/protocol-schemas/acp";
 import type { StateAction } from "@experiments/protocol-schemas/ahp";
@@ -60,21 +61,32 @@ class TurnExecution {
     }
   }
 
-  onAgentUpdate(identity: SessionGeneration, notification: SessionNotification): void {
+  onAgentUpdate(
+    identity: SessionGeneration,
+    notification: SessionNotification,
+    rootSessionId: string,
+  ): void {
     const record = this.store.lookup(identity.uri);
 
     if (
       !record ||
       record.sessionKey !== identity.sessionKey ||
-      record.acpSession !== notification.sessionId
+      record.acpSession !== rootSessionId
     ) {
       return;
     }
 
     try {
-      const actions = acpUpdateToChatActions(record.chat.activeTurn, notification);
+      const actions = acpUpdateToChatActions(record.chat.activeTurn, notification, rootSessionId);
 
-      for (const publication of this.store.updateChat(record, actions)) {
+      const sessionActions = acpUpdateToSessionActions(
+        record.session,
+        notification,
+        rootSessionId,
+        record.chat.activeTurn !== void 0,
+      );
+
+      for (const publication of this.store.updateAgent(record, sessionActions, actions)) {
         this.clients.broadcast(publication);
       }
     } catch (error) {
@@ -82,8 +94,14 @@ class TurnExecution {
         throw error;
       }
 
-      this.failTurn(record, error.message, "resource-limit");
       this.waitUntil(this.agents.release(identity));
+
+      if (!record.chat.activeTurn) {
+        console.error({ event: "acp_metadata_limit", session: record.uri, message: error.message });
+        throw error;
+      }
+
+      this.failTurn(record, error.message, "resource-limit");
     }
   }
 
@@ -111,6 +129,7 @@ class TurnExecution {
 
     try {
       const agent = await this.agents.get(original);
+      agent.activate();
       const current = this.store.lookup(uri);
       const turn = current?.chat.activeTurn;
 

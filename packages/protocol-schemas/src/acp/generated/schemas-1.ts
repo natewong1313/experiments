@@ -1,22 +1,36 @@
 // Generated from the catalog-pinned ACP SDK. Run pnpm generate:acp.
 import * as z from "zod";
-import { SessionIdSchema, SessionIdOutboundSchema } from "./schemas-0";
-import { ToolCallIdSchema, ToolCallIdOutboundSchema } from "./schemas-0";
-import { ToolKindSchema, ToolKindOutboundSchema } from "./schemas-0";
-import { ToolCallStatusSchema, ToolCallStatusOutboundSchema } from "./schemas-0";
-import { ContentBlockSchema, ContentBlockOutboundSchema } from "./schemas-0";
+import {
+  SessionIdSchema,
+  SessionIdOutboundSchema,
+  ToolCallIdSchema,
+  ToolCallIdOutboundSchema,
+  ToolKindSchema,
+  ToolKindOutboundSchema,
+  ToolCallStatusSchema,
+  ToolCallStatusOutboundSchema,
+  ContentBlockSchema,
+  ContentBlockOutboundSchema,
+} from "./schemas-0";
+
 const TerminalIdSchema = z.string();
+
 const TerminalIdOutboundSchema = z.string();
+
 type TerminalId = z.output<typeof TerminalIdSchema>;
+
 const TerminalSchema = z.looseObject({
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const TerminalOutboundSchema = z.strictObject({
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type Terminal = z.output<typeof TerminalSchema>;
+
 const ToolCallContentSchema = z.union([
   z.looseObject({
     content: ContentBlockSchema,
@@ -36,6 +50,7 @@ const ToolCallContentSchema = z.union([
     type: z.literal("terminal"),
   }),
 ]);
+
 const ToolCallContentOutboundSchema = z.union([
   z.strictObject({
     content: ContentBlockOutboundSchema,
@@ -55,28 +70,33 @@ const ToolCallContentOutboundSchema = z.union([
     type: z.literal("terminal"),
   }),
 ]);
+
 type ToolCallContent = z.output<typeof ToolCallContentSchema>;
+
 const ToolCallLocationSchema = z.looseObject({
   path: z.string(),
   line: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const ToolCallLocationOutboundSchema = z.strictObject({
   path: z.string(),
   line: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type ToolCallLocation = z.output<typeof ToolCallLocationSchema>;
+
 const ToolCallUpdateSchema = z.looseObject({
   toolCallId: ToolCallIdSchema,
   kind: z.union([ToolKindSchema, z.null()]).optional(),
@@ -89,6 +109,7 @@ const ToolCallUpdateSchema = z.looseObject({
   rawOutput: z.unknown().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const ToolCallUpdateOutboundSchema = z.strictObject({
   toolCallId: ToolCallIdOutboundSchema,
   kind: z.union([ToolKindOutboundSchema, z.null()]).optional(),
@@ -101,60 +122,77 @@ const ToolCallUpdateOutboundSchema = z.strictObject({
   rawOutput: z.unknown().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type ToolCallUpdate = z.output<typeof ToolCallUpdateSchema>;
+
 const PermissionOptionIdSchema = z.string();
+
 const PermissionOptionIdOutboundSchema = z.string();
+
 type PermissionOptionId = z.output<typeof PermissionOptionIdSchema>;
-const PermissionOptionKindSchema = z.union([
-  z.literal("allow_once"),
-  z.literal("allow_always"),
-  z.literal("reject_once"),
-  z.literal("reject_always"),
+
+const PermissionOptionKindSchema = z.enum([
+  "allow_once",
+  "allow_always",
+  "reject_once",
+  "reject_always",
 ]);
-const PermissionOptionKindOutboundSchema = z.union([
-  z.literal("allow_once"),
-  z.literal("allow_always"),
-  z.literal("reject_once"),
-  z.literal("reject_always"),
+
+const PermissionOptionKindOutboundSchema = z.enum([
+  "allow_once",
+  "allow_always",
+  "reject_once",
+  "reject_always",
 ]);
+
 type PermissionOptionKind = z.output<typeof PermissionOptionKindSchema>;
+
 const PermissionOptionSchema = z.looseObject({
   optionId: PermissionOptionIdSchema,
   name: z.string(),
   kind: PermissionOptionKindSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const PermissionOptionOutboundSchema = z.strictObject({
   optionId: PermissionOptionIdOutboundSchema,
   name: z.string(),
   kind: PermissionOptionKindOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type PermissionOption = z.output<typeof PermissionOptionSchema>;
+
 const RequestPermissionRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   toolCall: ToolCallUpdateSchema,
   options: z.array(PermissionOptionSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const RequestPermissionRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   toolCall: ToolCallUpdateOutboundSchema,
   options: z.array(PermissionOptionOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type RequestPermissionRequest = z.output<typeof RequestPermissionRequestSchema>;
+
 const EnvVariableSchema = z.looseObject({
   name: z.string(),
   value: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const EnvVariableOutboundSchema = z.strictObject({
   name: z.string(),
   value: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type EnvVariable = z.output<typeof EnvVariableSchema>;
+
 const CreateTerminalRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   command: z.string(),
@@ -163,12 +201,13 @@ const CreateTerminalRequestSchema = z.looseObject({
   cwd: z.union([z.string(), z.null()]).optional(),
   outputByteLimit: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const CreateTerminalRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   command: z.string(),
@@ -177,98 +216,111 @@ const CreateTerminalRequestOutboundSchema = z.strictObject({
   cwd: z.union([z.string(), z.null()]).optional(),
   outputByteLimit: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type CreateTerminalRequest = z.output<typeof CreateTerminalRequestSchema>;
+
 const TerminalOutputRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const TerminalOutputRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type TerminalOutputRequest = z.output<typeof TerminalOutputRequestSchema>;
+
 const ReleaseTerminalRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const ReleaseTerminalRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type ReleaseTerminalRequest = z.output<typeof ReleaseTerminalRequestSchema>;
+
 const WaitForTerminalExitRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const WaitForTerminalExitRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type WaitForTerminalExitRequest = z.output<typeof WaitForTerminalExitRequestSchema>;
+
 const KillTerminalRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const KillTerminalRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type KillTerminalRequest = z.output<typeof KillTerminalRequestSchema>;
-const ElicitationSchemaTypeSchema = z.literal("object");
-const ElicitationSchemaTypeOutboundSchema = z.literal("object");
+
+const ElicitationSchemaTypeSchema = z.enum(["object"]);
+
+const ElicitationSchemaTypeOutboundSchema = z.enum(["object"]);
+
 type ElicitationSchemaType = z.output<typeof ElicitationSchemaTypeSchema>;
-const StringFormatSchema = z.union([
-  z.literal("email"),
-  z.literal("uri"),
-  z.literal("date"),
-  z.literal("date-time"),
-]);
-const StringFormatOutboundSchema = z.union([
-  z.literal("email"),
-  z.literal("uri"),
-  z.literal("date"),
-  z.literal("date-time"),
-]);
+
+const StringFormatSchema = z.enum(["email", "uri", "date", "date-time"]);
+
+const StringFormatOutboundSchema = z.enum(["email", "uri", "date", "date-time"]);
+
 type StringFormat = z.output<typeof StringFormatSchema>;
+
 const EnumOptionSchema = z.looseObject({
   const: z.string(),
   title: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const EnumOptionOutboundSchema = z.strictObject({
   const: z.string(),
   title: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type EnumOption = z.output<typeof EnumOptionSchema>;
+
 const StringPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minLength: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   maxLength: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
@@ -279,18 +331,19 @@ const StringPropertySchemaSchema = z.looseObject({
   oneOf: z.union([z.array(EnumOptionSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const StringPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minLength: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
   maxLength: z
     .union([
-      z.number().refine(Number.isInteger, { message: "Expected integer" }).check(z.gte(0)),
+      z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
       z.null(),
     ])
     .optional(),
@@ -301,7 +354,9 @@ const StringPropertySchemaOutboundSchema = z.strictObject({
   oneOf: z.union([z.array(EnumOptionOutboundSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type StringPropertySchema = z.output<typeof StringPropertySchemaSchema>;
+
 const NumberPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
@@ -310,6 +365,7 @@ const NumberPropertySchemaSchema = z.looseObject({
   default: z.union([z.number(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NumberPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
@@ -318,7 +374,9 @@ const NumberPropertySchemaOutboundSchema = z.strictObject({
   default: z.union([z.number(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NumberPropertySchema = z.output<typeof NumberPropertySchemaSchema>;
+
 export {
   TerminalIdSchema,
   TerminalIdOutboundSchema,

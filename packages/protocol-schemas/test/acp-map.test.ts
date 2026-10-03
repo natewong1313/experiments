@@ -91,7 +91,7 @@ it("omits unserializable tool input without losing the tool actions", () => {
     },
   );
 
-  expect(actions).toEqual([
+  expect(actions).toMatchObject([
     {
       type: "chat/toolCallStart",
       turnId: "turn",

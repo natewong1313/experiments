@@ -13,6 +13,12 @@ const REPLAY_LIMIT = 1000;
 
 type Database = ReturnType<typeof drizzle>;
 
+type RememberDispatchParams = {
+  origin: ActionOrigin;
+  frame: string;
+  envelope: ActionEnvelope;
+};
+
 class ActionJournal {
   private readonly db: Database;
 
@@ -112,15 +118,7 @@ class ActionJournal {
     );
   }
 
-  remember({
-    origin,
-    frame,
-    envelope,
-  }: {
-    origin: ActionOrigin;
-    frame: string;
-    envelope: ActionEnvelope;
-  }): void {
+  remember({ origin, frame, envelope }: RememberDispatchParams): void {
     this.db
       .insert(dispatches)
       .values({

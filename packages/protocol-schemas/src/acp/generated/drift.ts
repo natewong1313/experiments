@@ -1,6 +1,7 @@
 import type * as Upstream from "@agentclientprotocol/sdk";
 import type * as Generated from "./index";
 import type { Drift, Expect } from "../drift";
+
 type _AcpDrift = [
   Expect<Drift<Upstream.RequestId, Generated.RequestId>>,
   Expect<Drift<Generated.RequestId, Upstream.RequestId>>,

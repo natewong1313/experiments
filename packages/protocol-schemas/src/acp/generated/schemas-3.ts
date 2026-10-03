@@ -7,70 +7,94 @@ const PromptCapabilitiesSchema = z.looseObject({
   embeddedContext: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const PromptCapabilitiesOutboundSchema = z.strictObject({
   image: z.boolean().optional(),
   audio: z.boolean().optional(),
   embeddedContext: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type PromptCapabilities = z.output<typeof PromptCapabilitiesSchema>;
+
 const McpCapabilitiesSchema = z.looseObject({
   http: z.boolean().optional(),
   sse: z.boolean().optional(),
   acp: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const McpCapabilitiesOutboundSchema = z.strictObject({
   http: z.boolean().optional(),
   sse: z.boolean().optional(),
   acp: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type McpCapabilities = z.output<typeof McpCapabilitiesSchema>;
+
 const SessionListCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const SessionListCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type SessionListCapabilities = z.output<typeof SessionListCapabilitiesSchema>;
+
 const SessionDeleteCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const SessionDeleteCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type SessionDeleteCapabilities = z.output<typeof SessionDeleteCapabilitiesSchema>;
+
 const SessionAdditionalDirectoriesCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const SessionAdditionalDirectoriesCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type SessionAdditionalDirectoriesCapabilities = z.output<
   typeof SessionAdditionalDirectoriesCapabilitiesSchema
 >;
+
 const SessionForkCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const SessionForkCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type SessionForkCapabilities = z.output<typeof SessionForkCapabilitiesSchema>;
+
 const SessionResumeCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const SessionResumeCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type SessionResumeCapabilities = z.output<typeof SessionResumeCapabilitiesSchema>;
+
 const SessionCloseCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const SessionCloseCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type SessionCloseCapabilities = z.output<typeof SessionCloseCapabilitiesSchema>;
+
 const SessionCapabilitiesSchema = z.looseObject({
   list: z.union([SessionListCapabilitiesSchema, z.null()]).optional(),
   delete: z.union([SessionDeleteCapabilitiesSchema, z.null()]).optional(),
@@ -82,6 +106,7 @@ const SessionCapabilitiesSchema = z.looseObject({
   close: z.union([SessionCloseCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const SessionCapabilitiesOutboundSchema = z.strictObject({
   list: z.union([SessionListCapabilitiesOutboundSchema, z.null()]).optional(),
   delete: z.union([SessionDeleteCapabilitiesOutboundSchema, z.null()]).optional(),
@@ -93,70 +118,99 @@ const SessionCapabilitiesOutboundSchema = z.strictObject({
   close: z.union([SessionCloseCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type SessionCapabilities = z.output<typeof SessionCapabilitiesSchema>;
+
 const LogoutCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const LogoutCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type LogoutCapabilities = z.output<typeof LogoutCapabilitiesSchema>;
+
 const AgentAuthCapabilitiesSchema = z.looseObject({
   logout: z.union([LogoutCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const AgentAuthCapabilitiesOutboundSchema = z.strictObject({
   logout: z.union([LogoutCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type AgentAuthCapabilities = z.output<typeof AgentAuthCapabilitiesSchema>;
+
 const ProvidersCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const ProvidersCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type ProvidersCapabilities = z.output<typeof ProvidersCapabilitiesSchema>;
+
 const NesDocumentDidOpenCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NesDocumentDidOpenCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NesDocumentDidOpenCapabilities = z.output<typeof NesDocumentDidOpenCapabilitiesSchema>;
-const TextDocumentSyncKindSchema = z.union([z.literal("full"), z.literal("incremental")]);
-const TextDocumentSyncKindOutboundSchema = z.union([z.literal("full"), z.literal("incremental")]);
+
+const TextDocumentSyncKindSchema = z.enum(["full", "incremental"]);
+
+const TextDocumentSyncKindOutboundSchema = z.enum(["full", "incremental"]);
+
 type TextDocumentSyncKind = z.output<typeof TextDocumentSyncKindSchema>;
+
 const NesDocumentDidChangeCapabilitiesSchema = z.looseObject({
   syncKind: TextDocumentSyncKindSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NesDocumentDidChangeCapabilitiesOutboundSchema = z.strictObject({
   syncKind: TextDocumentSyncKindOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NesDocumentDidChangeCapabilities = z.output<typeof NesDocumentDidChangeCapabilitiesSchema>;
+
 const NesDocumentDidCloseCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NesDocumentDidCloseCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NesDocumentDidCloseCapabilities = z.output<typeof NesDocumentDidCloseCapabilitiesSchema>;
+
 const NesDocumentDidSaveCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NesDocumentDidSaveCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NesDocumentDidSaveCapabilities = z.output<typeof NesDocumentDidSaveCapabilitiesSchema>;
+
 const NesDocumentDidFocusCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NesDocumentDidFocusCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NesDocumentDidFocusCapabilities = z.output<typeof NesDocumentDidFocusCapabilitiesSchema>;
+
 const NesDocumentEventCapabilitiesSchema = z.looseObject({
   didOpen: z.union([NesDocumentDidOpenCapabilitiesSchema, z.null()]).optional(),
   didChange: z.union([NesDocumentDidChangeCapabilitiesSchema, z.null()]).optional(),
@@ -165,6 +219,7 @@ const NesDocumentEventCapabilitiesSchema = z.looseObject({
   didFocus: z.union([NesDocumentDidFocusCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NesDocumentEventCapabilitiesOutboundSchema = z.strictObject({
   didOpen: z.union([NesDocumentDidOpenCapabilitiesOutboundSchema, z.null()]).optional(),
   didChange: z.union([NesDocumentDidChangeCapabilitiesOutboundSchema, z.null()]).optional(),
@@ -173,16 +228,21 @@ const NesDocumentEventCapabilitiesOutboundSchema = z.strictObject({
   didFocus: z.union([NesDocumentDidFocusCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NesDocumentEventCapabilities = z.output<typeof NesDocumentEventCapabilitiesSchema>;
+
 const NesEventCapabilitiesSchema = z.looseObject({
   document: z.union([NesDocumentEventCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 const NesEventCapabilitiesOutboundSchema = z.strictObject({
   document: z.union([NesDocumentEventCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
+
 type NesEventCapabilities = z.output<typeof NesEventCapabilitiesSchema>;
+
 export {
   PromptCapabilitiesSchema,
   PromptCapabilitiesOutboundSchema,

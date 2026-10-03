@@ -11,6 +11,7 @@ import type {
   StateAction,
   ChatState,
   ChatAction,
+  SessionAction,
 } from "@experiments/protocol-schemas/ahp";
 import { reduceChat, reduceRoot, reduceSession } from "./reducers";
 import { ROOT, RpcCodes, ProtocolError } from "../ahp/protocol";
@@ -36,6 +37,8 @@ const HOST_ID = 1;
 
 const ACTIVE_TURN_STATUS = 8;
 
+const MAX_SESSION_BYTES = 65_536;
+
 type Database = ReturnType<typeof drizzle>;
 
 type HostRow = InferSelectModel<typeof host>;
@@ -50,6 +53,24 @@ type Publication = {
 type Transition = { record: LiveSession; publication: Publication };
 
 type SessionPage = { items: SessionSummary[]; nextCursor?: string };
+
+type ListSessionsParams = { cursor?: string; limit: number };
+
+type CreateSessionParams = {
+  uri: string;
+  sessionKey: string;
+  provider: string;
+  workingDirectory: string;
+};
+
+type StoreDispatchParams = {
+  record: LiveSession;
+  channel: string;
+  action: StateAction;
+  origin: ActionOrigin;
+  frame: string;
+  rejection?: string;
+};
 
 class HostStore {
   private readonly storage: DurableObjectStorage;
@@ -103,7 +124,7 @@ class HostStore {
     return this.db.select({ uri: sessions.uri }).from(sessions).where(match).get() !== void 0;
   }
 
-  list(input: { cursor?: string; limit: number }): SessionPage {
+  list(input: ListSessionsParams): SessionPage {
     if (input.cursor !== void 0) {
       const cursor = this.db
         .select({ uri: sessions.uri })
@@ -263,17 +284,7 @@ class HostStore {
     return this.apply(ROOT, { type: "root/agentsChanged", agents });
   }
 
-  create({
-    uri,
-    sessionKey,
-    provider,
-    workingDirectory,
-  }: {
-    uri: string;
-    sessionKey: string;
-    provider: string;
-    workingDirectory: string;
-  }): Publication {
+  create({ uri, sessionKey, provider, workingDirectory }: CreateSessionParams): Publication {
     return this.storage.transactionSync(() => {
       if (this.entry(uri)) {
         throw new ProtocolError(RpcCodes.sessionExists, "Session already exists");
@@ -377,11 +388,25 @@ class HostStore {
   }
 
   updateChat(record: LiveSession, actions: ChatAction[]): Publication[] {
+    return this.updateAgent(record, [], actions);
+  }
+
+  updateAgent(
+    record: LiveSession,
+    sessionActions: SessionAction[],
+    chatActions: ChatAction[],
+  ): Publication[] {
     return this.storage.transactionSync(() => {
       let current = record;
       const publications: Publication[] = [];
 
-      for (const action of actions) {
+      for (const action of sessionActions) {
+        const result = this.transition(current, current.uri, action);
+        current = result.record;
+        publications.push(result.publication);
+      }
+
+      for (const action of chatActions) {
         const result = this.transition(current, current.chatUri, action);
         current = result.record;
         publications.push(result.publication);
@@ -426,14 +451,7 @@ class HostStore {
     return this.journal.previous(origin);
   }
 
-  dispatch(input: {
-    record: LiveSession;
-    channel: string;
-    action: StateAction;
-    origin: ActionOrigin;
-    frame: string;
-    rejection?: string;
-  }): Publication {
+  dispatch(input: StoreDispatchParams): Publication {
     return this.storage.transactionSync(() => {
       const { record, channel, action, origin, frame, rejection } = input;
 
@@ -488,6 +506,9 @@ class HostStore {
     const changed = !deepEqual(next.session, record.session);
 
     if (changed) {
+      const sessionJson = JSON.stringify(next.session);
+      const sessionBytes = new TextEncoder().encode(sessionJson).byteLength;
+      checkBytes(sessionBytes, MAX_SESSION_BYTES, "Session metadata exceeds the storage budget");
       this.db
         .update(sessions)
         .set({ session: next.session, modifiedAt: new Date().toISOString() })

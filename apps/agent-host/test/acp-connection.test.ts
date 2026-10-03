@@ -5,7 +5,7 @@ import { AgentConnections } from "../src/agent/acp";
 import { HostStore } from "../src/state/store";
 import { createSession } from "./config";
 
-import { AgentSideConnection, PROTOCOL_VERSION, type Agent } from "@agentclientprotocol/sdk";
+import { agent as createAgent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { websocketStream } from "../src/agent/websocket-stream";
 import { AGENT_IDLE_TIMEOUT_MS, MAX_AGENT_CONNECTIONS } from "../src/memory";
 import type { AgentBinding } from "../src/sessions/record";
@@ -130,24 +130,19 @@ function localAgents(loadSession: boolean): LocalAgents {
   const agents = new AgentConnections({
     connect: async ({ sessionKey }): Promise<WebSocket> => {
       const { 0: client, 1: server } = new WebSocketPair();
-      new AgentSideConnection(
-        (): Agent => ({
-          initialize: async () => ({
-            protocolVersion: PROTOCOL_VERSION,
-            agentCapabilities: { loadSession },
-          }),
-          authenticate: async () => ({}),
-          newSession: async () => ({ sessionId: sessionKey }),
-          loadSession: async (request) => {
-            loads.push(request.sessionId);
+      createAgent()
+        .onRequest(methods.agent.initialize, () => ({
+          protocolVersion: PROTOCOL_VERSION,
+          agentCapabilities: { loadSession },
+        }))
+        .onRequest(methods.agent.session.new, () => ({ sessionId: sessionKey }))
+        .onRequest(methods.agent.session.load, ({ params }) => {
+          loads.push(params.sessionId);
 
-            return {};
-          },
-          prompt: async () => ({ stopReason: "end_turn" }),
-          cancel: async (): Promise<void> => {},
-        }),
-        websocketStream(server),
-      );
+          return {};
+        })
+        .onRequest(methods.agent.session.prompt, () => ({ stopReason: "end_turn" }))
+        .connect(websocketStream(server));
       server.accept();
       servers.set(sessionKey, server);
 

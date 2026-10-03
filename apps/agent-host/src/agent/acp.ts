@@ -1,15 +1,14 @@
 import { client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import {
-  InitializeRequestSchema,
+  InitializeRequestOutboundSchema,
   InitializeResponseSchema,
-  LoadSessionRequestSchema,
+  LoadSessionRequestOutboundSchema,
   LoadSessionResponseSchema,
-  NewSessionRequestSchema,
+  NewSessionRequestOutboundSchema,
   NewSessionResponseSchema,
-  RequestPermissionResponseSchema,
+  RequestPermissionResponseOutboundSchema,
   SessionNotificationSchema,
   type RequestPermissionResponse,
-  type SessionNotification,
 } from "@experiments/protocol-schemas/acp";
 import type { AgentBinding, SessionGeneration } from "../sessions/record";
 import { FAILED_CONNECTION_CLOSE } from "../ahp/protocol";
@@ -17,11 +16,10 @@ import { workingDirectoryPath, type ConnectAcp, type AcpConnectionOptions } from
 import { withDeadline } from "../deadline";
 import { websocketStream } from "./websocket-stream";
 import { AgentConversation } from "./conversation";
+import { SessionUpdates, type AgentUpdates } from "./updates";
 import { AGENT_IDLE_TIMEOUT_MS, MAX_AGENT_CONNECTIONS, MemoryLimitError } from "../memory";
 
 const CONNECT_TIMEOUT_MS = 30_000;
-
-type AgentUpdates = (record: SessionGeneration, notification: SessionNotification) => void;
 
 type ConnectionEntry = {
   pending: Promise<AgentConversation>;
@@ -187,21 +185,21 @@ class AgentConnections {
       },
     );
 
-    let loading = true;
     let sessionId = record.acpSession;
 
-    const app = client({ name: "agent-host" })
-      .onNotification(methods.client.session.update, ({ params: notification }) => {
-        if (!loading && notification.sessionId === sessionId) {
-          const parsed = SessionNotificationSchema.safeParse(notification);
+    const updates = new SessionUpdates(record, sessionId, this.updates);
 
-          if (parsed.success) {
-            this.updates(record, parsed.data);
-          }
+    const app = client({ name: "agent-host" })
+      .onNotification(methods.client.session.update, SessionNotificationSchema, ({ params }) => {
+        try {
+          updates.receive(params);
+        } catch (error) {
+          socket.close(FAILED_CONNECTION_CLOSE, "Invalid agent update");
+          throw error;
         }
       })
       .onRequest(methods.client.session.requestPermission, (): RequestPermissionResponse =>
-        RequestPermissionResponseSchema.parse({ outcome: { outcome: "cancelled" } }),
+        RequestPermissionResponseOutboundSchema.parse({ outcome: { outcome: "cancelled" } }),
       );
 
     try {
@@ -217,9 +215,13 @@ class AgentConnections {
         await withDeadline(
           connection.agent.request(
             methods.agent.initialize,
-            InitializeRequestSchema.parse({
+            InitializeRequestOutboundSchema.parse({
               protocolVersion: PROTOCOL_VERSION,
-              clientCapabilities: {},
+              clientCapabilities: {
+                session: { compaction: {}, notices: {}, configOptions: { boolean: {} } },
+                subagents: {},
+                plan: {},
+              },
             }),
           ),
           CONNECT_TIMEOUT_MS,
@@ -239,7 +241,7 @@ class AgentConnections {
         throw new Error("Session working directory is missing");
       }
 
-      const options = NewSessionRequestSchema.parse({
+      const options = NewSessionRequestOutboundSchema.parse({
         cwd: workingDirectoryPath(directory),
         mcpServers: [],
       });
@@ -269,7 +271,7 @@ class AgentConnections {
           await withDeadline(
             connection.agent.request(
               methods.agent.session.load,
-              LoadSessionRequestSchema.parse({ ...options, sessionId }),
+              LoadSessionRequestOutboundSchema.parse({ ...options, sessionId }),
             ),
             CONNECT_TIMEOUT_MS,
             () => {
@@ -279,13 +281,16 @@ class AgentConnections {
         );
       }
 
-      loading = false;
-
       return new AgentConversation({
         connection,
         socket,
         sessionId,
         canReload: initialized.agentCapabilities?.loadSession === true,
+        activate: (): void => {
+          if (sessionId !== null) {
+            updates.activate(sessionId);
+          }
+        },
       });
     } catch (error) {
       socket.close(FAILED_CONNECTION_CLOSE, "Agent setup failed");

@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import {
-  AgentSideConnection,
+  agent,
+  methods,
+  type AgentConnection,
   PROTOCOL_VERSION,
-  type Agent,
   type PromptResponse,
 } from "@agentclientprotocol/sdk";
 import { expect, it, vi } from "vitest";
@@ -51,7 +52,7 @@ function startTurn(peer: Peer, chat: string, clientSeq: number): void {
 it("a delayed failure of an old turn cannot stop a recreated session's turn", async () => {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   const sockets: WebSocket[] = [];
-  const servers: AgentSideConnection[] = [];
+  const servers: AgentConnection[] = [];
   const pendingFetch = Promise.withResolvers<Response>();
   const replacementPrompt = Promise.withResolvers<PromptResponse>();
   let calls = 0;
@@ -67,19 +68,15 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
     const { 0: client, 1: server } = new WebSocketPair();
     const sessionId = crypto.randomUUID();
 
-    const agent: Agent = {
-      initialize: async () => ({ protocolVersion: PROTOCOL_VERSION }),
-      newSession: async () => ({ sessionId }),
-      authenticate: async () => ({}),
-      prompt: async () => {
+    const connection = agent()
+      .onRequest(methods.agent.initialize, () => ({ protocolVersion: PROTOCOL_VERSION }))
+      .onRequest(methods.agent.session.new, () => ({ sessionId }))
+      .onRequest(methods.agent.session.prompt, async () => {
         prompts++;
 
         return await replacementPrompt.promise;
-      },
-      cancel: async (): Promise<void> => {},
-    };
-
-    const connection = new AgentSideConnection(() => agent, websocketStream(server));
+      })
+      .connect(websocketStream(server));
 
     servers.push(connection);
     server.accept();

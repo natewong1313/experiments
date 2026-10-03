@@ -11,6 +11,8 @@ type ActionDispatchParams = {
   turns: TurnExecution;
 };
 
+type ReadyConnection = Extract<Connection, { phase: "ready" }>;
+
 class ActionDispatch {
   private readonly store: HostStore;
   private readonly clients: AhpClients;
@@ -22,11 +24,7 @@ class ActionDispatch {
     this.turns = turns;
   }
 
-  dispatch(
-    socket: WebSocket,
-    client: Extract<Connection, { phase: "ready" }>,
-    input: DispatchActionParams,
-  ): void {
+  dispatch(socket: WebSocket, client: ReadyConnection, input: DispatchActionParams): void {
     const origin = { clientId: client.clientId, clientSeq: input.clientSeq };
 
     const frame = JSON.stringify({
