@@ -18,6 +18,6 @@ An example Turborepo monorepo using pnpm, applying the conventions documented in
 | `pnpm build`       | Build all workspaces in dependency order, cached    |
 | `pnpm lint`        | Lint all workspaces with oxlint (`--deny-warnings`) |
 | `pnpm check-types` | Type-check all workspaces (`tsc --noEmit`)          |
-| `pnpm format`      | Format the repo with Prettier                       |
+| `pnpm format`      | Format the repo with oxfmt                          |
 
 Add `--filter=<workspace>` to scope any task, e.g. `pnpm build --filter=agent-host`.

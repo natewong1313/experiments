@@ -1,9 +1,6 @@
 import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
 import * as z from "zod";
-import {
-  AcpMessageSchema,
-  AcpOutboundMessageSchema,
-} from "@experiments/protocol-schemas/acp";
+import { AcpMessageSchema, AcpOutboundMessageSchema } from "@experiments/protocol-schemas/acp";
 
 const MAX_FRAME_BYTES = 1_048_576;
 

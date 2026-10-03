@@ -46,9 +46,7 @@ function acpStopReasonToOutcome(stopReason: StopReason): AcpTurnOutcome {
   }
 }
 
-function ahpMessageToAcpPrompt(
-  message: Pick<Message, "text" | "attachments">,
-): AcpPromptMapping {
+function ahpMessageToAcpPrompt(message: Pick<Message, "text" | "attachments">): AcpPromptMapping {
   if ((message.attachments?.length ?? NO_ATTACHMENTS) > NO_ATTACHMENTS) {
     return { ok: false, reason: "unsupported-content" };
   }
@@ -63,11 +61,7 @@ type ChatResponsePartIdParts = {
   index: number;
 };
 
-function chatResponsePartId({
-  turnId,
-  kind,
-  index,
-}: ChatResponsePartIdParts): string {
+function chatResponsePartId({ turnId, kind, index }: ChatResponsePartIdParts): string {
   return `${turnId}/${kind}/${index}`;
 }
 
@@ -88,10 +82,7 @@ function acpUpdateToChatActions(
         return [];
       }
 
-      const kind =
-        update.sessionUpdate === "agent_message_chunk"
-          ? "markdown"
-          : "reasoning";
+      const kind = update.sessionUpdate === "agent_message_chunk" ? "markdown" : "reasoning";
 
       const last = turn.responseParts.at(LAST_PART_INDEX);
       const existing = last?.kind === kind ? last : null;
@@ -149,9 +140,7 @@ function acpUpdateToChatActions(
 
     case "tool_call_update": {
       const tool = turn.responseParts.find(
-        (part) =>
-          part.kind === "toolCall" &&
-          part.toolCall.toolCallId === update.toolCallId,
+        (part) => part.kind === "toolCall" && part.toolCall.toolCallId === update.toolCallId,
       );
 
       if (!tool) {
@@ -159,6 +148,9 @@ function acpUpdateToChatActions(
       }
 
       return toolProgress(turn.id, update);
+    }
+    default: {
+      return [];
     }
   }
 }
@@ -190,8 +182,7 @@ function toolProgress(turnId: string, update: ToolUpdate): ChatAction[] {
   if (update.status === "completed" || update.status === "failed") {
     const result = {
       success: update.status === "completed",
-      pastTenseMessage:
-        update.status === "completed" ? "Tool completed" : "Tool failed",
+      pastTenseMessage: update.status === "completed" ? "Tool completed" : "Tool failed",
     };
 
     return [

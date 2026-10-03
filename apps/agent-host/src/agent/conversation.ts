@@ -1,4 +1,4 @@
-import type { ClientSideConnection } from "@agentclientprotocol/sdk";
+import { methods, type ClientConnection } from "@agentclientprotocol/sdk";
 import {
   ahpMessageToAcpPrompt,
   acpStopReasonToOutcome,
@@ -16,7 +16,7 @@ const TURN_TIMEOUT_MS = 600_000;
 const CANCEL_TIMEOUT_MS = 10_000;
 
 type AgentConversationParams = {
-  connection: ClientSideConnection;
+  connection: ClientConnection;
   socket: WebSocket;
   sessionId: string;
   canReload: boolean;
@@ -25,15 +25,10 @@ type AgentConversationParams = {
 class AgentConversation {
   readonly sessionId: string;
   readonly canReload: boolean;
-  private readonly connection: ClientSideConnection;
+  private readonly connection: ClientConnection;
   private readonly socket: WebSocket;
 
-  constructor({
-    connection,
-    socket,
-    sessionId,
-    canReload,
-  }: AgentConversationParams) {
+  constructor({ connection, socket, sessionId, canReload }: AgentConversationParams) {
     this.connection = connection;
     this.socket = socket;
     this.sessionId = sessionId;
@@ -44,16 +39,11 @@ class AgentConversation {
     return this.connection.signal.aborted;
   }
 
-  async prompt(
-    message: Pick<Message, "text" | "attachments">,
-  ): Promise<AcpTurnOutcome> {
+  async prompt(message: Pick<Message, "text" | "attachments">): Promise<AcpTurnOutcome> {
     const mapped = ahpMessageToAcpPrompt(message);
 
     if (!mapped.ok) {
-      throw new ProtocolError(
-        RpcCodes.params,
-        "This host supports text prompts only",
-      );
+      throw new ProtocolError(RpcCodes.params, "This host supports text prompts only");
     }
 
     const request = PromptRequestSchema.parse({
@@ -62,7 +52,7 @@ class AgentConversation {
     });
 
     const response = await withDeadline(
-      this.connection.prompt(request),
+      this.connection.agent.request(methods.agent.session.prompt, request),
       TURN_TIMEOUT_MS,
       () => {
         this.abort();
@@ -80,7 +70,7 @@ class AgentConversation {
     });
 
     await withDeadline(
-      this.connection.cancel(request),
+      this.connection.agent.notify(methods.agent.session.cancel, request),
       CANCEL_TIMEOUT_MS,
       () => {
         this.abort();

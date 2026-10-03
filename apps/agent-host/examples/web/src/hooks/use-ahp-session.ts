@@ -51,8 +51,7 @@ function useAhpSession({ sessionUri }: { sessionUri: string }): SessionView {
     reduce: reduceSession,
   });
 
-  const chatUri =
-    session.status === "ready" ? session.state.defaultChat : ABSENT;
+  const chatUri = session.status === "ready" ? session.state.defaultChat : ABSENT;
 
   const chat = useAhpChannel({
     client,
@@ -105,11 +104,7 @@ function useAhpSession({ sessionUri }: { sessionUri: string }): SessionView {
   }
 
   async function cancelTurn(): Promise<void> {
-    if (
-      view.status !== "connected" ||
-      chat.status !== "ready" ||
-      !chat.state.activeTurn
-    ) {
+    if (view.status !== "connected" || chat.status !== "ready" || !chat.state.activeTurn) {
       throw new Error("There is no active turn to cancel.");
     }
 

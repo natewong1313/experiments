@@ -16,10 +16,7 @@ export function unwrapArrayExpression(node: ESTree.Node): ESTree.Node {
 }
 
 /** Resolve a local binding by scope, not by identifier spelling. */
-export function resolveArrayBinding(
-  sourceCode: SourceCode,
-  node: ESTree.Node,
-): Variable | null {
+export function resolveArrayBinding(sourceCode: SourceCode, node: ESTree.Node): Variable | null {
   node = unwrapArrayExpression(node);
   if (node.type !== "Identifier") return null;
   let scope: Scope | null = sourceCode.getScope(node);
@@ -41,11 +38,7 @@ export function arrayMethodTarget(
   if (!node.computed && property.type === "Identifier") {
     return { name: property.name, object: node.object };
   }
-  if (
-    node.computed &&
-    property.type === "Literal" &&
-    typeof property.value === "string"
-  ) {
+  if (node.computed && property.type === "Literal" && typeof property.value === "string") {
     return { name: property.value, object: node.object };
   }
   return null;
@@ -53,8 +46,7 @@ export function arrayMethodTarget(
 
 function isArrayAnnotation(type: ESTree.TSType): boolean {
   if (type.type === "TSArrayType" || type.type === "TSTupleType") return true;
-  if (type.type === "TSParenthesizedType")
-    return isArrayAnnotation(type.typeAnnotation);
+  if (type.type === "TSParenthesizedType") return isArrayAnnotation(type.typeAnnotation);
   if (type.type === "TSTypeOperator" && type.operator === "readonly") {
     return isArrayAnnotation(type.typeAnnotation);
   }
@@ -94,12 +86,7 @@ export function isKnownArrayExpression(
   const variable = resolveArrayBinding(sourceCode, node);
   if (variable === null || visited.has(variable)) return false;
   visited.add(variable);
-  if (
-    variable.references.some(
-      (reference) => reference.isWrite() && !reference.init,
-    )
-  )
-    return false;
+  if (variable.references.some((reference) => reference.isWrite() && !reference.init)) return false;
   for (const identifier of variable.identifiers) {
     const annotation = identifier.typeAnnotation?.typeAnnotation;
     if (annotation !== undefined) return isArrayAnnotation(annotation);

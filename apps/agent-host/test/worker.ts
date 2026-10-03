@@ -12,9 +12,7 @@ type TestEnv = {
   ACP_BACKEND: DurableObjectNamespace<AcpBackend>;
 };
 
-async function connectAcp({
-  signal,
-}: AcpConnectionOptions): Promise<WebSocket> {
+async function connectAcp({ signal }: AcpConnectionOptions): Promise<WebSocket> {
   const response = await fetch("http://agent.test/acp", {
     headers: { Upgrade: "websocket" },
     signal,
@@ -31,9 +29,7 @@ class AgentHost extends BaseAgentHost<TestEnv> {
   protected override getAgentConfig(): AgentConfig {
     return TEST_CONFIG;
   }
-  protected override async connectAcp(
-    options: AcpConnectionOptions,
-  ): Promise<WebSocket> {
+  protected override async connectAcp(options: AcpConnectionOptions): Promise<WebSocket> {
     return await connectAcp(options);
   }
 }

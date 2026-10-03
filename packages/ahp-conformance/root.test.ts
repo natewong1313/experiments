@@ -1,8 +1,5 @@
 import type { AhpClient } from "@microsoft/agent-host-protocol/client";
-import {
-  ListSessionsResultSchema,
-  type RootState,
-} from "@experiments/protocol-schemas";
+import { ListSessionsResultSchema, type RootState } from "@experiments/protocol-schemas";
 import { describe, expect } from "vitest";
 import { expectRootState, initialized, ROOT, test } from "./client";
 
@@ -23,9 +20,7 @@ describe("root state and session catalogue", () => {
     expect(Array.isArray(state.agents)).toBe(true);
   });
 
-  test("gives each agent a provider identifier and display name", async ({
-    client,
-  }) => {
+  test("gives each agent a provider identifier and display name", async ({ client }) => {
     const state = await rootState(client);
 
     for (const agent of state.agents) {
@@ -40,9 +35,7 @@ describe("root state and session catalogue", () => {
     expect(new Set(providers).size).toBe(providers.length);
   });
 
-  test("exposes a nonnegative active session count when present", async ({
-    client,
-  }) => {
+  test("exposes a nonnegative active session count when present", async ({ client }) => {
     const state = await rootState(client);
     const count = state.activeSessions;
 
@@ -54,9 +47,7 @@ describe("root state and session catalogue", () => {
     expect(count).toBeGreaterThanOrEqual(0);
   });
 
-  test("exposes a terminal catalogue array when present", async ({
-    client,
-  }) => {
+  test("exposes a terminal catalogue array when present", async ({ client }) => {
     const state = await rootState(client);
     const { terminals } = state;
 
@@ -77,29 +68,24 @@ describe("root state and session catalogue", () => {
     expect(Array.isArray(page.items)).toBe(true);
   });
 
-  test.for([1, 2, 10])(
-    "accepts listSessions limit %i",
-    async (limit, { client }) => {
-      await initialized(client);
+  test.for([1, 2, 10])("accepts listSessions limit %i", async (limit, { client }) => {
+    await initialized(client);
 
-      const page = ListSessionsResultSchema.parse(
-        await client.request("listSessions", { channel: ROOT, limit }),
-      );
+    const page = ListSessionsResultSchema.parse(
+      await client.request("listSessions", { channel: ROOT, limit }),
+    );
 
-      expect(Array.isArray(page.items)).toBe(true);
-      const { nextCursor } = page;
+    expect(Array.isArray(page.items)).toBe(true);
+    const { nextCursor } = page;
 
-      if (!nextCursor) {
-        return;
-      }
+    if (!nextCursor) {
+      return;
+    }
 
-      expect(nextCursor).toEqual(expect.any(String));
-    },
-  );
+    expect(nextCursor).toEqual(expect.any(String));
+  });
 
-  test("gives each listed session a URI, provider, and title", async ({
-    client,
-  }) => {
+  test("gives each listed session a URI, provider, and title", async ({ client }) => {
     await initialized(client);
 
     const page = ListSessionsResultSchema.parse(

@@ -67,12 +67,8 @@ function isInsideTypeAliasDeclaration(node: ESTree.Node): boolean {
   return false;
 }
 
-function isPlainAliasConsumerUse(
-  node: ESTree.TSType,
-  environment: TypeEnvironment,
-): boolean {
-  if (node.type !== "TSTypeReference" || node.typeArguments?.params.length)
-    return false;
+function isPlainAliasConsumerUse(node: ESTree.TSType, environment: TypeEnvironment): boolean {
+  if (node.type !== "TSTypeReference" || node.typeArguments?.params.length) return false;
   const name = typeReferenceName(node);
   return (
     name !== null &&
@@ -85,27 +81,20 @@ function isInsideTypeParameterConstraint(node: ESTree.TSType): boolean {
   let child: ESTree.Node = node;
   let parent: ESTree.Node | null = child.parent;
   while (parent !== null && parent.type !== "Program") {
-    if (parent.type === "TSTypeParameter" && parent.constraint === child)
-      return true;
+    if (parent.type === "TSTypeParameter" && parent.constraint === child) return true;
     child = parent;
     parent = child.parent;
   }
   return false;
 }
 
-function shouldReportType(
-  node: ESTree.TSType,
-  environment: TypeEnvironment,
-): boolean {
+function shouldReportType(node: ESTree.TSType, environment: TypeEnvironment): boolean {
   if (isInsideTypeParameterConstraint(node)) return false;
   if (isPlainAliasConsumerUse(node, environment)) return false;
   if (classifyUnsafeDictionary(node, environment) === null) return false;
   let current: ESTree.Node | null = node.parent;
   while (current !== null && current.type !== "Program") {
-    if (
-      isTypeNode(current) &&
-      classifyUnsafeDictionary(current, environment) !== null
-    )
+    if (isTypeNode(current) && classifyUnsafeDictionary(current, environment) !== null)
       return false;
     current = current.parent;
   }
@@ -139,10 +128,7 @@ export const noUnsafeDictionaryTypeRule = defineRule({
 
     return {
       Program(node) {
-        environment = createTypeEnvironment(
-          node,
-          context.sourceCode.visitorKeys,
-        );
+        environment = createTypeEnvironment(node, context.sourceCode.visitorKeys);
       },
       TSTypeReference: reportIfUnsafe,
       TSTypeLiteral: reportIfUnsafe,

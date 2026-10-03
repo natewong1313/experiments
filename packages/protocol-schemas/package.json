@@ -20,6 +20,8 @@
   "scripts": {
     "test": "vitest run",
     "lint": "oxlint --deny-warnings .",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "generate:acp": "node scripts/generate-acp.mjs",
+    "generate:acp:check": "node scripts/generate-acp.mjs --check"
   }
 }

@@ -34,11 +34,7 @@ const worker = server.getWorker("api-worker");
 const storage = await worker.getDurableObjectStorage("COUNTER", {
   name: "example",
 });
-await storage.exec(
-  "INSERT INTO counters (id, value) VALUES (?, ?)",
-  "example",
-  0,
-);
+await storage.exec("INSERT INTO counters (id, value) VALUES (?, ?)", "example", 0);
 
 const response = await worker.fetch("/counter/example");
 await response.text();

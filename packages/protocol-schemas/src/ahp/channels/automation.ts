@@ -1,10 +1,5 @@
 import * as z from "zod";
-import {
-  ConfigSchemaSchema,
-  isoTimestampSchema,
-  metaSchema,
-  uriSchema,
-} from "../common";
+import { ConfigSchemaSchema, isoTimestampSchema, metaSchema, uriSchema } from "../common";
 import { AgentSelectionSchema, ModelSelectionSchema } from "../primitives";
 import { MessageSchema } from "./chat/message";
 import { AutomationRunSummarySchema } from "./automation-run";
@@ -122,19 +117,13 @@ type AutomationSchedule = z.output<typeof AutomationScheduleSchema>;
 
 type AutomationTrigger = z.output<typeof AutomationTriggerSchema>;
 
-type AutomationTriggerDefinition = z.output<
-  typeof AutomationTriggerDefinitionSchema
->;
+type AutomationTriggerDefinition = z.output<typeof AutomationTriggerDefinitionSchema>;
 
-type AutomationSessionTemplate = z.output<
-  typeof AutomationSessionTemplateSchema
->;
+type AutomationSessionTemplate = z.output<typeof AutomationSessionTemplateSchema>;
 
 type AutomationDefinition = z.output<typeof AutomationDefinitionSchema>;
 
-type AutomationDefinitionPatch = z.output<
-  typeof AutomationDefinitionPatchSchema
->;
+type AutomationDefinitionPatch = z.output<typeof AutomationDefinitionPatchSchema>;
 
 type AutomationOperation = z.output<typeof AutomationOperationSchema>;
 

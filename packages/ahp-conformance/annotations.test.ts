@@ -1,12 +1,6 @@
 import { AnnotationsStateSchema } from "@experiments/protocol-schemas";
 import { describe, expect } from "vitest";
-import {
-  expectState,
-  initialized,
-  SESSION,
-  sessionSnapshot,
-  test,
-} from "./client";
+import { expectState, initialized, SESSION, sessionSnapshot, test } from "./client";
 
 describe("annotations channel", () => {
   test.skipIf(!SESSION)(

@@ -42,8 +42,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-unknown-type-aliases": noUnknownTypeAliasesRule,
     "no-widen-then-assert": noWidenThenAssertRule,
     "require-readable-spacing": requireReadableSpacingRule,
-    "require-safety-comment-for-type-assertion":
-      requireSafetyCommentForTypeAssertionRule,
+    "require-safety-comment-for-type-assertion": requireSafetyCommentForTypeAssertionRule,
   },
 });
 

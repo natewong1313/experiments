@@ -82,9 +82,7 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
   }
 
   protected abstract getAgentConfig(): AgentConfig;
-  protected abstract connectAcp(
-    options: AcpConnectionOptions,
-  ): Promise<WebSocket>;
+  protected abstract connectAcp(options: AcpConnectionOptions): Promise<WebSocket>;
 
   async fetch(request: Request): Promise<Response> {
     await this.rpc;
@@ -92,10 +90,7 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
     return this.clients.upgrade(request);
   }
 
-  async webSocketMessage(
-    socket: WebSocket,
-    message: string | ArrayBuffer,
-  ): Promise<void> {
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const rpc = await this.rpc;
     await rpc.message(socket, message);
   }

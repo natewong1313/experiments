@@ -1,7 +1,4 @@
-import type {
-  ChatState,
-  SessionState,
-} from "@experiments/protocol-schemas/ahp";
+import type { ChatState, SessionState } from "@experiments/protocol-schemas/ahp";
 
 const IDLE = 1;
 

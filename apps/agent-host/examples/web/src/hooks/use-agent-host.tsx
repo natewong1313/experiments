@@ -13,9 +13,7 @@ type AgentHostContextValue = {
   view: ReturnType<typeof useSessions>;
 };
 
-const AgentHostContext = createContext<AgentHostContextValue | undefined>(
-  ABSENT,
-);
+const AgentHostContext = createContext<AgentHostContextValue | undefined>(ABSENT);
 
 function HostConnection({
   host,
@@ -24,11 +22,7 @@ function HostConnection({
 }: Omit<AgentHostContextValue, "view"> & { children: ReactNode }): JSX.Element {
   const view = useSessions(host);
 
-  return (
-    <AgentHostContext value={{ host, setHost, view }}>
-      {children}
-    </AgentHostContext>
-  );
+  return <AgentHostContext value={{ host, setHost, view }}>{children}</AgentHostContext>;
 }
 
 function AgentHostProvider({ children }: { children: ReactNode }): JSX.Element {

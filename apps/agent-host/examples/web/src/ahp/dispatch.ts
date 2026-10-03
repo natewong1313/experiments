@@ -1,9 +1,6 @@
 import type { AhpClient } from "@microsoft/agent-host-protocol/client";
 import type { StateAction as SdkAction } from "@microsoft/agent-host-protocol";
-import {
-  StateActionSchema,
-  type StateAction,
-} from "@experiments/protocol-schemas/ahp";
+import { StateActionSchema, type StateAction } from "@experiments/protocol-schemas/ahp";
 
 const ABSENT = void 0;
 
@@ -36,10 +33,7 @@ async function dispatchAction({
 
         const envelope = item.event.params;
 
-        if (
-          envelope.origin?.clientId !== clientId ||
-          envelope.origin.clientSeq !== clientSeq
-        ) {
+        if (envelope.origin?.clientId !== clientId || envelope.origin.clientSeq !== clientSeq) {
           continue;
         }
 

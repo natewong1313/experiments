@@ -14,8 +14,7 @@ const SessionPreviewSchema = z.object({
   creationError: z.object({ message: z.string() }).optional(),
 });
 
-const [endpoint, prompt = "Say hello in one sentence."] =
-  process.argv.slice(ARGUMENT_OFFSET);
+const [endpoint, prompt = "Say hello in one sentence."] = process.argv.slice(ARGUMENT_OFFSET);
 
 const transport = await WebSocketTransport.connect(
   endpoint ?? "ws://localhost:8787/hosts/example/ahp",
@@ -38,9 +37,7 @@ async function waitUntilReady(
   }
 
   if (initial.lifecycle === "failed") {
-    throw new Error(
-      initial.creationError?.message ?? "Session creation failed",
-    );
+    throw new Error(initial.creationError?.message ?? "Session creation failed");
   }
 
   for await (const event of subscription) {

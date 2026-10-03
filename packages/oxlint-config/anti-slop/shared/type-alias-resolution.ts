@@ -29,17 +29,11 @@ export type ResolvedTypeMatcher = (
   matches: (child: ESTree.TSType) => boolean,
 ) => boolean;
 
-const environmentsByProgram = new WeakMap<
-  ESTree.Program,
-  TypeAliasEnvironment
->();
+const environmentsByProgram = new WeakMap<ESTree.Program, TypeAliasEnvironment>();
 
 function isNode(value: unknown): value is ESTree.Node {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    typeof value.type === "string"
+    typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
   );
 }
 
@@ -131,10 +125,7 @@ export function createTypeAliasEnvironment(
   return environment;
 }
 
-function ancestorDistance(
-  ancestor: ESTree.Node,
-  node: ESTree.Node,
-): number | null {
+function ancestorDistance(ancestor: ESTree.Node, node: ESTree.Node): number | null {
   let current: ESTree.Node | null = node;
   let distance = 0;
   while (current !== null) {
@@ -172,8 +163,7 @@ export function visibleTypeAlias(
   use: ESTree.Node,
   environment: TypeAliasEnvironment,
 ): ESTree.TSTypeAliasDeclaration | null {
-  if (lexicalTypeParameterNames(use, environment.visitorKeys).has(name))
-    return null;
+  if (lexicalTypeParameterNames(use, environment.visitorKeys).has(name)) return null;
   const bindings = nearestTypeBindings(name, use, environment);
   return bindings.length === 1 ? (bindings[0]?.alias ?? null) : null;
 }
@@ -230,38 +220,21 @@ export function resolvedTypeMatches(
       const name = typeReferenceName(current);
       if (name !== null) {
         const substitution = substitutions.get(name);
-        if (
-          substitution !== undefined &&
-          !current.typeArguments?.params.length
-        ) {
-          return evaluate(
-            substitution.type,
-            substitution.substitutions,
-            resolvingAliases,
-          );
+        if (substitution !== undefined && !current.typeArguments?.params.length) {
+          return evaluate(substitution.type, substitution.substitutions, resolvingAliases);
         }
         const alias = visibleTypeAlias(name, current, environment);
         if (alias !== null && !resolvingAliases.has(alias)) {
-          const nextSubstitutions = aliasSubstitutions(
-            alias,
-            current,
-            substitutions,
-          );
+          const nextSubstitutions = aliasSubstitutions(alias, current, substitutions);
           if (nextSubstitutions !== null) {
             const nextResolving = new Set(resolvingAliases);
             nextResolving.add(alias);
-            return evaluate(
-              alias.typeAnnotation,
-              nextSubstitutions,
-              nextResolving,
-            );
+            return evaluate(alias.typeAnnotation, nextSubstitutions, nextResolving);
           }
         }
       }
     }
-    return matcher(current, (child) =>
-      evaluate(child, substitutions, resolvingAliases),
-    );
+    return matcher(current, (child) => evaluate(child, substitutions, resolvingAliases));
   };
 
   return evaluate(type, new Map(), new Set());

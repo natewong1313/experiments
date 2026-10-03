@@ -45,10 +45,7 @@ workspace inherits the plugin and its rules:
 
 ```json
 {
-  "jsPlugins": [
-    "eslint-plugin-zod",
-    { "name": "anti-slop", "specifier": "./anti-slop/index.ts" }
-  ]
+  "jsPlugins": ["eslint-plugin-zod", { "name": "anti-slop", "specifier": "./anti-slop/index.ts" }]
 }
 ```
 
@@ -73,4 +70,5 @@ reason); without it, boundary code cannot discriminate values typed
 Dependency: `@oxlint/plugins` pinned to `1.78.0` in
 `packages/oxlint-config/package.json`, matching the repo-wide `oxlint@1.78.0`.
 
-The vendored plugin is excluded from `pnpm run format` via `.prettierignore`.
+The vendored plugin is formatted with the repository's formatter settings (see
+`Intentional deviations` above), so `pnpm run format` rewrites it in place.

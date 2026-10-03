@@ -17,10 +17,9 @@ function retainedTurnIds(): string[] | null {
   try {
     parsed = JSON.parse(fixture);
   } catch (error) {
-    throw new Error(
-      "AHP_RETAINED_TURN_IDS must be a JSON array of ordered retained turn IDs",
-      { cause: error },
-    );
+    throw new Error("AHP_RETAINED_TURN_IDS must be a JSON array of ordered retained turn IDs", {
+      cause: error,
+    });
   }
 
   if (!Array.isArray(parsed) || parsed.length === 0) {
@@ -28,14 +27,11 @@ function retainedTurnIds(): string[] | null {
   }
 
   const ids = parsed.filter(
-    (entry): entry is string =>
-      typeof entry === "string" && entry.trim().length > 0,
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
   );
 
   if (ids.length !== parsed.length) {
-    throw new Error(
-      "AHP_RETAINED_TURN_IDS must contain only nonempty string IDs",
-    );
+    throw new Error("AHP_RETAINED_TURN_IDS must contain only nonempty string IDs");
   }
 
   if (new Set(ids).size !== ids.length) {
@@ -48,41 +44,31 @@ function retainedTurnIds(): string[] | null {
 const RETAINED_TURN_IDS = retainedTurnIds();
 
 describe("chat state", () => {
-  test.skipIf(!SESSION)(
-    "matches the chat title in the session catalogue",
-    async ({ client }) => {
-      await initialized(client);
-      const chat = await chatSnapshot(client);
+  test.skipIf(!SESSION)("matches the chat title in the session catalogue", async ({ client }) => {
+    await initialized(client);
+    const chat = await chatSnapshot(client);
 
-      const summary = chat.session.chats.find(
-        (item) => item.resource === chat.uri,
-      );
+    const summary = chat.session.chats.find((item) => item.resource === chat.uri);
 
-      if (!summary) {
-        throw new Error("Chat missing from session catalogue");
-      }
+    if (!summary) {
+      throw new Error("Chat missing from session catalogue");
+    }
 
-      expect(summary.title).toBe(chat.state.title);
-    },
-  );
+    expect(summary.title).toBe(chat.state.title);
+  });
 
-  test.skipIf(!SESSION)(
-    "matches the chat status in the session catalogue",
-    async ({ client }) => {
-      await initialized(client);
-      const chat = await chatSnapshot(client);
+  test.skipIf(!SESSION)("matches the chat status in the session catalogue", async ({ client }) => {
+    await initialized(client);
+    const chat = await chatSnapshot(client);
 
-      const summary = chat.session.chats.find(
-        (item) => item.resource === chat.uri,
-      );
+    const summary = chat.session.chats.find((item) => item.resource === chat.uri);
 
-      if (!summary) {
-        throw new Error("Chat missing from session catalogue");
-      }
+    if (!summary) {
+      throw new Error("Chat missing from session catalogue");
+    }
 
-      expect(summary.status).toBe(chat.state.status);
-    },
-  );
+    expect(summary.status).toBe(chat.state.status);
+  });
 
   test.skipIf(!SESSION)(
     "keeps chat working directories within the session set",
@@ -108,9 +94,7 @@ describe("chat state", () => {
     async ({ client }) => {
       await initialized(client);
       const chat = await chatSnapshot(client);
-      expect(chat.state.turns.map((turn) => turn.id)).toEqual(
-        RETAINED_TURN_IDS,
-      );
+      expect(chat.state.turns.map((turn) => turn.id)).toEqual(RETAINED_TURN_IDS);
     },
   );
 });

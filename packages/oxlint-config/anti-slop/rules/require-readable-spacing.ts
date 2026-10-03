@@ -27,21 +27,11 @@ const paddingRule = createPaddingLineRule([
   {
     blankLine: "always",
     prev: "*",
-    next: [
-      "multiline-const",
-      "multiline-let",
-      "multiline-var",
-      "multiline-using",
-    ],
+    next: ["multiline-const", "multiline-let", "multiline-var", "multiline-using"],
   },
   {
     blankLine: "always",
-    prev: [
-      "multiline-const",
-      "multiline-let",
-      "multiline-var",
-      "multiline-using",
-    ],
+    prev: ["multiline-const", "multiline-let", "multiline-var", "multiline-using"],
     next: "*",
   },
   {
@@ -70,8 +60,7 @@ export const requireReadableSpacingRule: CreateRule = {
   meta: {
     ...paddingRule.meta,
     docs: {
-      description:
-        "Require readable spacing between declarations and logical statement groups.",
+      description: "Require readable spacing between declarations and logical statement groups.",
     },
     schema: [],
   },

@@ -20,18 +20,13 @@ import type {
 } from "../channels/automation-run";
 import type { TelemetryCapabilitiesSchema } from "../channels/otlp";
 
-type SameKeys<T extends object, U extends object> = [
-  Exclude<keyof T, keyof U>,
-] extends [never]
+type SameKeys<T extends object, U extends object> = [Exclude<keyof T, keyof U>] extends [never]
   ? [Exclude<keyof U, keyof T>] extends [never]
     ? true
     : false
   : false;
 
-type Drift<Upstream extends object, Ours extends object> = SameKeys<
-  Upstream,
-  Ours
->;
+type Drift<Upstream extends object, Ours extends object> = SameKeys<Upstream, Ours>;
 
 type UnionDrift<Upstream, Ours> = [Upstream] extends [Ours] ? true : false;
 
@@ -47,25 +42,16 @@ type AutomationTriggerDrift = UnionDrift<
   z.output<typeof AutomationTriggerSchema>
 >;
 
-type AutomationEntryDrift = Drift<
-  AutomationEntry,
-  z.output<typeof AutomationEntrySchema>
->;
+type AutomationEntryDrift = Drift<AutomationEntry, z.output<typeof AutomationEntrySchema>>;
 
-type AutomationStateDrift = Drift<
-  AutomationState,
-  z.output<typeof AutomationStateSchema>
->;
+type AutomationStateDrift = Drift<AutomationState, z.output<typeof AutomationStateSchema>>;
 
 type AutomationRunSummaryDrift = Drift<
   AutomationRunSummary,
   z.output<typeof AutomationRunSummarySchema>
 >;
 
-type AutomationRunStateDrift = Drift<
-  AutomationRunState,
-  z.output<typeof AutomationRunStateSchema>
->;
+type AutomationRunStateDrift = Drift<AutomationRunState, z.output<typeof AutomationRunStateSchema>>;
 
 type TelemetryCapabilitiesDrift = Drift<
   TelemetryCapabilities,

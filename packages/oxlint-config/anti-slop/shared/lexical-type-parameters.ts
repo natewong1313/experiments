@@ -4,10 +4,7 @@ type VisitorKeys = Readonly<Record<string, readonly string[]>>;
 
 function isNode(value: unknown): value is ESTree.Node {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    typeof value.type === "string"
+    typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
   );
 }
 
@@ -26,8 +23,7 @@ function collectInferTypeParameterNames(
     }
     if (!Array.isArray(value)) continue;
     for (const child of value) {
-      if (isNode(child))
-        collectInferTypeParameterNames(child, visitorKeys, names);
+      if (isNode(child)) collectInferTypeParameterNames(child, visitorKeys, names);
     }
   }
 }
@@ -52,10 +48,7 @@ export function lexicalTypeParameterNames(
     ) {
       names.add(current.key.name);
     }
-    if (
-      current.type === "TSConditionalType" &&
-      descendant === current.trueType
-    ) {
+    if (current.type === "TSConditionalType" && descendant === current.trueType) {
       collectInferTypeParameterNames(current.extendsType, visitorKeys, names);
     }
     descendant = current;

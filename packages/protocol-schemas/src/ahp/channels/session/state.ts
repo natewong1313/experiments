@@ -1,10 +1,5 @@
 import * as z from "zod";
-import {
-  ErrorInfoSchema,
-  configPropertyFields,
-  isoTimestampSchema,
-  uriSchema,
-} from "../../common";
+import { ErrorInfoSchema, configPropertyFields, isoTimestampSchema, uriSchema } from "../../common";
 import {
   ClientPluginCustomizationSchema,
   CustomizationSchema,
@@ -63,20 +58,16 @@ const SessionSummarySchema = z.strictObject({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-const SessionConfigPropertySchema: z.ZodType<SessionConfigProperty> = z.lazy(
-  () => {
-    return z.strictObject({
-      ...configPropertyFields,
-      enumDynamic: z.boolean().optional(),
-      sessionMutable: z.boolean().optional(),
-      items: sessionConfigPropertySchemaLazy.optional(),
-      properties: z
-        .record(z.string(), sessionConfigPropertySchemaLazy)
-        .optional(),
-      additionalProperties: sessionConfigPropertySchemaLazy.optional(),
-    });
-  },
-);
+const SessionConfigPropertySchema: z.ZodType<SessionConfigProperty> = z.lazy(() => {
+  return z.strictObject({
+    ...configPropertyFields,
+    enumDynamic: z.boolean().optional(),
+    sessionMutable: z.boolean().optional(),
+    items: sessionConfigPropertySchemaLazy.optional(),
+    properties: z.record(z.string(), sessionConfigPropertySchemaLazy).optional(),
+    additionalProperties: sessionConfigPropertySchemaLazy.optional(),
+  });
+});
 
 const sessionConfigPropertySchemaLazy = SessionConfigPropertySchema;
 

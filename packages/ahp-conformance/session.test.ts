@@ -1,7 +1,4 @@
-import {
-  ListSessionsResultSchema,
-  SubscribeResultSchema,
-} from "@experiments/protocol-schemas";
+import { ListSessionsResultSchema, SubscribeResultSchema } from "@experiments/protocol-schemas";
 import { describe, expect } from "vitest";
 import { AhpConnection, initialize } from "./raw";
 import { withCleanup } from "./cleanup";
@@ -18,48 +15,39 @@ import {
 } from "./client";
 
 describe("session channel", () => {
-  test.skipIf(!SESSION)(
-    "subscribes to the ready fixture session",
-    async ({ client }) => {
-      const uri = sessionUri();
-      await initialized(client);
-      const subscribed = await client.subscribe(uri);
-      const state = expectSessionState(subscribed.result.snapshot, uri);
-      expect(state.lifecycle).toBe("ready");
-    },
-  );
+  test.skipIf(!SESSION)("subscribes to the ready fixture session", async ({ client }) => {
+    const uri = sessionUri();
+    await initialized(client);
+    const subscribed = await client.subscribe(uri);
+    const state = expectSessionState(subscribed.result.snapshot, uri);
+    expect(state.lifecycle).toBe("ready");
+  });
 
-  test.skipIf(!SESSION)(
-    "links defaultChat to a listed chat when present",
-    async ({ client }) => {
-      await initialized(client);
-      const state = await sessionSnapshot(client);
-      const { defaultChat } = state;
+  test.skipIf(!SESSION)("links defaultChat to a listed chat when present", async ({ client }) => {
+    await initialized(client);
+    const state = await sessionSnapshot(client);
+    const { defaultChat } = state;
 
-      if (!defaultChat) {
-        return;
-      }
+    if (!defaultChat) {
+      return;
+    }
 
-      const listed = state.chats.some((chat) => chat.resource === defaultChat);
-      expect(listed).toBe(true);
-    },
-  );
+    const listed = state.chats.some((chat) => chat.resource === defaultChat);
+    expect(listed).toBe(true);
+  });
 
-  test.skipIf(!SESSION)(
-    "matches the fixture metadata in listSessions",
-    async ({ client }) => {
-      await initialized(client);
-      const state = await sessionSnapshot(client);
+  test.skipIf(!SESSION)("matches the fixture metadata in listSessions", async ({ client }) => {
+    await initialized(client);
+    const state = await sessionSnapshot(client);
 
-      const page = ListSessionsResultSchema.parse(
-        await client.request("listSessions", { channel: "ahp-root://" }),
-      );
+    const page = ListSessionsResultSchema.parse(
+      await client.request("listSessions", { channel: "ahp-root://" }),
+    );
 
-      const listed = page.items.find((item) => item.resource === SESSION);
-      expect(listed?.provider).toBe(state.provider);
-      expect(listed?.title).toBe(state.title);
-    },
-  );
+    const listed = page.items.find((item) => item.resource === SESSION);
+    expect(listed?.provider).toBe(state.provider);
+    expect(listed?.title).toBe(state.title);
+  });
 
   test.skipIf(!SESSION || !MUTATIONS)(
     "rejects a default chat URI outside the catalogue",
@@ -79,14 +67,10 @@ describe("session channel", () => {
           },
         });
 
-        const envelope = await connection.waitForAction(
-          uri,
-          "session/defaultChatChanged",
-          {
-            after,
-            predicate: (action) => action.origin?.clientSeq === 1,
-          },
-        );
+        const envelope = await connection.waitForAction(uri, "session/defaultChatChanged", {
+          after,
+          predicate: (action) => action.origin?.clientSeq === 1,
+        });
 
         expect(envelope.rejectionReason).toEqual(expect.any(String));
         expect(envelope.rejectionReason).not.toBe("");
@@ -131,17 +115,13 @@ describe("session channel", () => {
               action: { type: "session/titleChanged", title: changed },
             });
 
-            const envelope = await connection.waitForAction(
-              uri,
-              "session/titleChanged",
-              {
-                after,
-                predicate: (action) =>
-                  action.origin?.clientSeq === 1 &&
-                  action.action.type === "session/titleChanged" &&
-                  action.action.title === changed,
-              },
-            );
+            const envelope = await connection.waitForAction(uri, "session/titleChanged", {
+              after,
+              predicate: (action) =>
+                action.origin?.clientSeq === 1 &&
+                action.action.type === "session/titleChanged" &&
+                action.action.title === changed,
+            });
 
             expect(envelope.rejectionReason).toBeUndefined();
             await withClient(async (observer) => {
@@ -150,9 +130,7 @@ describe("session channel", () => {
               expect(observed.title).toBe(changed);
               await observer.unsubscribe(uri);
               const resubscribed = await observer.subscribe(uri);
-              expect(
-                expectSessionState(resubscribed.result.snapshot, uri).title,
-              ).toBe(changed);
+              expect(expectSessionState(resubscribed.result.snapshot, uri).title).toBe(changed);
             });
           },
           async () => {
@@ -163,17 +141,13 @@ describe("session channel", () => {
               action: { type: "session/titleChanged", title: original },
             });
 
-            const restored = await connection.waitForAction(
-              uri,
-              "session/titleChanged",
-              {
-                after,
-                predicate: (action) =>
-                  action.origin?.clientSeq === 2 &&
-                  action.action.type === "session/titleChanged" &&
-                  action.action.title === original,
-              },
-            );
+            const restored = await connection.waitForAction(uri, "session/titleChanged", {
+              after,
+              predicate: (action) =>
+                action.origin?.clientSeq === 2 &&
+                action.action.type === "session/titleChanged" &&
+                action.action.title === original,
+            });
 
             expect(restored.rejectionReason).toBeUndefined();
           },

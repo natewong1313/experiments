@@ -1,8 +1,4 @@
-import {
-  ClientSideConnection,
-  PROTOCOL_VERSION,
-  type Client,
-} from "@agentclientprotocol/sdk";
+import { client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import {
   InitializeRequestSchema,
   InitializeResponseSchema,
@@ -17,26 +13,15 @@ import {
 } from "@experiments/protocol-schemas/acp";
 import type { AgentBinding, SessionGeneration } from "../sessions/record";
 import { FAILED_CONNECTION_CLOSE } from "../ahp/protocol";
-import {
-  workingDirectoryPath,
-  type ConnectAcp,
-  type AcpConnectionOptions,
-} from "../host-config";
+import { workingDirectoryPath, type ConnectAcp, type AcpConnectionOptions } from "../host-config";
 import { withDeadline } from "../deadline";
 import { websocketStream } from "./websocket-stream";
 import { AgentConversation } from "./conversation";
-import {
-  AGENT_IDLE_TIMEOUT_MS,
-  MAX_AGENT_CONNECTIONS,
-  MemoryLimitError,
-} from "../memory";
+import { AGENT_IDLE_TIMEOUT_MS, MAX_AGENT_CONNECTIONS, MemoryLimitError } from "../memory";
 
 const CONNECT_TIMEOUT_MS = 30_000;
 
-type AgentUpdates = (
-  record: SessionGeneration,
-  notification: SessionNotification,
-) => void;
+type AgentUpdates = (record: SessionGeneration, notification: SessionNotification) => void;
 
 type ConnectionEntry = {
   pending: Promise<AgentConversation>;
@@ -176,9 +161,7 @@ class AgentConnections {
     }
   }
 
-  private async connectSocket(
-    options: AcpConnectionOptions,
-  ): Promise<WebSocket> {
+  private async connectSocket(options: AcpConnectionOptions): Promise<WebSocket> {
     const socket = await this.connect(options);
 
     if (options.signal.aborted) {
@@ -190,10 +173,7 @@ class AgentConnections {
     return socket;
   }
 
-  private async open(
-    record: AgentBinding,
-    onClose: () => void,
-  ): Promise<AgentConversation> {
+  private async open(record: AgentBinding, onClose: () => void): Promise<AgentConversation> {
     const controller = new AbortController();
 
     const socket = await withDeadline(
@@ -210,8 +190,8 @@ class AgentConnections {
     let loading = true;
     let sessionId = record.acpSession;
 
-    const client: Client = {
-      sessionUpdate: async (notification): Promise<void> => {
+    const app = client({ name: "agent-host" })
+      .onNotification(methods.client.session.update, ({ params: notification }) => {
         if (!loading && notification.sessionId === sessionId) {
           const parsed = SessionNotificationSchema.safeParse(notification);
 
@@ -219,18 +199,13 @@ class AgentConnections {
             this.updates(record, parsed.data);
           }
         }
-      },
-      requestPermission: async (): Promise<RequestPermissionResponse> =>
-        RequestPermissionResponseSchema.parse({
-          outcome: { outcome: "cancelled" },
-        }),
-    };
+      })
+      .onRequest(methods.client.session.requestPermission, (): RequestPermissionResponse =>
+        RequestPermissionResponseSchema.parse({ outcome: { outcome: "cancelled" } }),
+      );
 
     try {
-      const connection = new ClientSideConnection(
-        () => client,
-        websocketStream(socket),
-      );
+      const connection = app.connect(websocketStream(socket));
 
       connection.signal.addEventListener("abort", onClose, { once: true });
 
@@ -240,7 +215,8 @@ class AgentConnections {
 
       const initialized = InitializeResponseSchema.parse(
         await withDeadline(
-          connection.initialize(
+          connection.agent.request(
+            methods.agent.initialize,
             InitializeRequestSchema.parse({
               protocolVersion: PROTOCOL_VERSION,
               clientCapabilities: {},
@@ -273,7 +249,7 @@ class AgentConnections {
 
         const session = NewSessionResponseSchema.parse(
           await withDeadline(
-            connection.newSession(options),
+            connection.agent.request(methods.agent.session.new, options),
             CONNECT_TIMEOUT_MS,
             () => {
               socket.close();
@@ -291,7 +267,8 @@ class AgentConnections {
 
         LoadSessionResponseSchema.parse(
           await withDeadline(
-            connection.loadSession(
+            connection.agent.request(
+              methods.agent.session.load,
               LoadSessionRequestSchema.parse({ ...options, sessionId }),
             ),
             CONNECT_TIMEOUT_MS,

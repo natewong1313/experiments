@@ -1,14 +1,7 @@
 import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
 import * as z from "zod";
-import {
-  AcpMessageSchema,
-  AcpOutboundMessageSchema,
-} from "@experiments/protocol-schemas/acp";
-import {
-  MAX_FRAME_BYTES,
-  FAILED_CONNECTION_CLOSE,
-  NORMAL_CLOSE,
-} from "../ahp/protocol";
+import { AcpMessageSchema, AcpOutboundMessageSchema } from "@experiments/protocol-schemas/acp";
+import { MAX_FRAME_BYTES, FAILED_CONNECTION_CLOSE, NORMAL_CLOSE } from "../ahp/protocol";
 
 function websocketStream(socket: WebSocket): Stream {
   let ended = false;

@@ -9,11 +9,7 @@ import {
 } from "@experiments/protocol-schemas/ahp";
 import { HostStore } from "../src/state/store";
 import { JsonDocuments } from "../src/storage/json-documents";
-import {
-  MemoryLimitError,
-  MAX_DOCUMENT_BYTES,
-  MAX_REPLAY_BYTES,
-} from "../src/memory";
+import { MemoryLimitError, MAX_DOCUMENT_BYTES, MAX_REPLAY_BYTES } from "../src/memory";
 import { createSession } from "./config";
 import { connectPeer, Peer } from "./peer";
 import { reduceChat } from "../src/state/reducers";
@@ -79,22 +75,16 @@ it("rejects oversized history before parsing turn documents and leaves history i
 
     try {
       expect(() => store.snapshot(chat)).toThrow(MemoryLimitError);
-      expect(parse.mock.calls.every(([text]) => text.length < TURN_BYTES)).toBe(
-        true,
-      );
+      expect(parse.mock.calls.every(([text]) => text.length < TURN_BYTES)).toBe(true);
     } finally {
       parse.mockRestore();
     }
 
     expect(
-      state.storage.sql
-        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM turns")
-        .one().count,
+      state.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM turns").one().count,
     ).toBe(HISTORY_TURNS);
     const snapshot = ChatStateSchema.parse(store.snapshot(chat, 1).state);
-    expect(snapshot.turns.map((turn) => turn.id)).toEqual([
-      `turn-${HISTORY_TURNS - 1}`,
-    ]);
+    expect(snapshot.turns.map((turn) => turn.id)).toEqual([`turn-${HISTORY_TURNS - 1}`]);
     expect(snapshot.turnsNextCursor).toBeDefined();
   });
 });
@@ -104,9 +94,7 @@ it("pages history over AHP in order without reinserting persisted turns", async 
   const peer = await connectPeer(stub);
 
   try {
-    await expect(peer.request("subscribe", { channel: chat })).rejects.toThrow(
-      "memory budget",
-    );
+    await expect(peer.request("subscribe", { channel: chat })).rejects.toThrow("memory budget");
 
     const response = SubscribeResultSchema.parse(
       await peer.request("subscribe", { channel: chat, view: { turns: 0 } }),
@@ -138,9 +126,8 @@ it("pages history over AHP in order without reinserting persisted turns", async 
     await runInDurableObject(stub, (instance, state) => {
       expect(instance).toBeDefined();
       expect(
-        state.storage.sql
-          .exec<{ count: number }>("SELECT COUNT(*) AS count FROM turns")
-          .one().count,
+        state.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM turns").one()
+          .count,
       ).toBe(HISTORY_TURNS);
       const store = new HostStore(state);
       expect(store.require(chat).chat.turns).toEqual([]);
@@ -162,10 +149,7 @@ it("deduplicates initialization subscriptions before loading snapshots", async (
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
     state.storage.sql.exec("DELETE FROM turns WHERE turn_id != 'turn-0'");
-    state.storage.sql.exec(
-      "DELETE FROM document_chunks WHERE scope = ? AND id != 'turn-0'",
-      chat,
-    );
+    state.storage.sql.exec("DELETE FROM document_chunks WHERE scope = ? AND id != 'turn-0'", chat);
   });
 
   const response = await stub.fetch("https://host/ahp", {
@@ -179,10 +163,7 @@ it("deduplicates initialization subscriptions before loading snapshots", async (
   const peer = new Peer(response.webSocket);
 
   try {
-    const subscriptions = Array.from(
-      { length: DUPLICATE_SUBSCRIPTIONS },
-      () => chat,
-    );
+    const subscriptions = Array.from({ length: DUPLICATE_SUBSCRIPTIONS }, () => chat);
 
     const result = InitializeResultSchema.parse(
       await peer.request("initialize", {
@@ -206,9 +187,7 @@ it("filters replay in SQL and falls back before parsing an oversized selected re
     const store = new HostStore(state);
 
     const total = state.storage.sql
-      .exec<{ bytes: number }>(
-        "SELECT SUM(LENGTH(envelope)) AS bytes FROM actions",
-      )
+      .exec<{ bytes: number }>("SELECT SUM(LENGTH(envelope)) AS bytes FROM actions")
       .one().bytes;
 
     expect(total).toBeGreaterThan(MAX_REPLAY_BYTES);
@@ -219,9 +198,7 @@ it("filters replay in SQL and falls back before parsing an oversized selected re
       expect(store.replay(0, [])).toEqual([]);
       const root = store.replay(0, [ROOT]);
       expect(root?.every((envelope) => envelope.channel === ROOT)).toBe(true);
-      expect(parse.mock.calls.every(([text]) => text.length < TURN_BYTES)).toBe(
-        true,
-      );
+      expect(parse.mock.calls.every(([text]) => text.length < TURN_BYTES)).toBe(true);
     } finally {
       parse.mockRestore();
     }
@@ -236,9 +213,7 @@ it("checks aggregate snapshot size before loading any subscribed chat", async ()
     const parse = vi.spyOn(JSON, "parse");
 
     try {
-      expect(() => store.snapshots([ROOT, SESSION, chat])).toThrow(
-        MemoryLimitError,
-      );
+      expect(() => store.snapshots([ROOT, SESSION, chat])).toThrow(MemoryLimitError);
       expect(parse).not.toHaveBeenCalled();
     } finally {
       parse.mockRestore();
@@ -286,9 +261,7 @@ it("bounds legacy document reads before allocating and rolls back oversized live
     }
 
     const documents = new JsonDocuments(state.storage.sql);
-    expect(() => documents.read("legacy", "huge")).toThrow(
-      "Stored document exceeds",
-    );
+    expect(() => documents.read("legacy", "huge")).toThrow("Stored document exceeds");
   });
 });
 
@@ -309,15 +282,9 @@ it("recovers only interrupted sessions and preserves oversized legacy data witho
       startedAt: STARTED_AT,
       message: { text: "Hello", origin: { kind: "user" } },
     });
-    state.storage.sql.exec(
-      "DELETE FROM document_chunks WHERE scope = 'chat' AND id = ?",
-      chat,
-    );
+    state.storage.sql.exec("DELETE FROM document_chunks WHERE scope = 'chat' AND id = ?", chat);
 
-    const interrupted = Array.from(
-      store.recoverableSessions(),
-      (record) => record.uri,
-    );
+    const interrupted = Array.from(store.recoverableSessions(), (record) => record.uri);
 
     expect(interrupted).toEqual([active, creating]);
 
@@ -333,10 +300,7 @@ it("recovers only interrupted sessions and preserves oversized legacy data witho
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      const recoverable = Array.from(
-        store.recoverableSessions(),
-        (record) => record.uri,
-      );
+      const recoverable = Array.from(store.recoverableSessions(), (record) => record.uri);
 
       expect(recoverable).toEqual([creating]);
       expect(log).toHaveBeenCalledWith(
@@ -350,9 +314,7 @@ it("recovers only interrupted sessions and preserves oversized legacy data witho
     }
 
     const documents = new JsonDocuments(state.storage.sql);
-    expect(documents.size("chat", live.chatUri)).toBeGreaterThan(
-      MAX_DOCUMENT_BYTES,
-    );
+    expect(documents.size("chat", live.chatUri)).toBeGreaterThan(MAX_DOCUMENT_BYTES);
     expect(store.requireMetadata(active).chatUri).toBe(live.chatUri);
     store.remove(active);
     expect(documents.size("chat", live.chatUri)).toBe(0);

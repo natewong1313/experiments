@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
-import type {
-  ListSessionsParams,
-  SessionSummary,
-} from "@microsoft/agent-host-protocol";
+import type { ListSessionsParams, SessionSummary } from "@microsoft/agent-host-protocol";
 import type { SubscriptionEvent } from "@microsoft/agent-host-protocol/client";
 import { AhpClient } from "@microsoft/agent-host-protocol/client";
 import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
@@ -54,10 +51,7 @@ async function loadSessions(
   return await loadSessions(client, signal, sessions, page.nextCursor);
 }
 
-function applySessionEvent(
-  sessions: SessionCatalog,
-  event: SubscriptionEvent,
-): void {
+function applySessionEvent(sessions: SessionCatalog, event: SubscriptionEvent): void {
   switch (event.type) {
     case "sessionAdded": {
       sessions.set(event.params.summary.resource, event.params.summary);

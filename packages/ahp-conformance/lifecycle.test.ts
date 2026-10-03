@@ -1,13 +1,6 @@
 import { AhpErrorCodes } from "@microsoft/agent-host-protocol";
 import { describe, expect } from "vitest";
-import {
-  endpoint,
-  expectRootState,
-  initialized,
-  ROOT,
-  VERSION,
-  test,
-} from "./client";
+import { endpoint, expectRootState, initialized, ROOT, VERSION, test } from "./client";
 import { AhpConnection } from "./raw";
 
 describe("connection lifecycle", () => {
@@ -40,9 +33,7 @@ describe("connection lifecycle", () => {
     },
   );
 
-  test("negotiates the package's current protocol version", async ({
-    client,
-  }) => {
+  test("negotiates the package's current protocol version", async ({ client }) => {
     const result = await initialized(client);
     expect(result.protocolVersion).toBe(VERSION);
   });
@@ -130,24 +121,18 @@ describe("connection lifecycle", () => {
     expect(result.serverSeq).toBeGreaterThanOrEqual(0);
   });
 
-  test("returns no unsolicited snapshots without subscriptions", async ({
-    client,
-  }) => {
+  test("returns no unsolicited snapshots without subscriptions", async ({ client }) => {
     const result = await initialized(client);
     expect(result.snapshots).toEqual([]);
   });
 
-  test("returns the requested root snapshot during initialize", async ({
-    client,
-  }) => {
+  test("returns the requested root snapshot during initialize", async ({ client }) => {
     const result = await initialized(client, [ROOT]);
     expect(result.snapshots).toHaveLength(1);
     expectRootState(result.snapshots[0]);
   });
 
-  test("does not put a snapshot ahead of the reported server sequence", async ({
-    client,
-  }) => {
+  test("does not put a snapshot ahead of the reported server sequence", async ({ client }) => {
     const result = await initialized(client, [ROOT]);
     const [snapshot] = result.snapshots;
 

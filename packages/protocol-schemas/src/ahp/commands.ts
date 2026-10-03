@@ -1,15 +1,8 @@
 import * as z from "zod";
 import { clientIdSchema, metaSchema, seqSchema, uriSchema } from "./common";
 import { TelemetryCapabilitiesSchema } from "./channels/otlp";
-import {
-  SnapshotSchema,
-  ActionEnvelopeSchema,
-  StateActionSchema,
-} from "./envelope";
-import {
-  SessionActiveClientSchema,
-  SessionSummarySchema,
-} from "./channels/session/state";
+import { SnapshotSchema, ActionEnvelopeSchema, StateActionSchema } from "./envelope";
+import { SessionActiveClientSchema, SessionSummarySchema } from "./channels/session/state";
 
 const ROOT_CHANNEL = "ahp-root://";
 
@@ -93,9 +86,7 @@ const DispatchActionParamsSchema = ChannelParamsSchema.extend({
 
 const AutomationCapabilitiesSchema = z.strictObject({
   create: z.strictObject({}).optional(),
-  schedules: z
-    .strictObject({ minIntervalMinutes: z.number().optional() })
-    .optional(),
+  schedules: z.strictObject({ minIntervalMinutes: z.number().optional() }).optional(),
   runCancellation: z.strictObject({}).optional(),
   runHistoryLimit: z.number().optional(),
 });
@@ -175,9 +166,7 @@ type InitializeParams = z.output<typeof InitializeParamsSchema>;
 
 type ReconnectParams = z.output<typeof ReconnectParamsSchema>;
 
-type SubscriptionDeliveryOptions = z.output<
-  typeof SubscriptionDeliveryOptionsSchema
->;
+type SubscriptionDeliveryOptions = z.output<typeof SubscriptionDeliveryOptionsSchema>;
 
 type SubscribeView = z.output<typeof SubscribeViewSchema>;
 

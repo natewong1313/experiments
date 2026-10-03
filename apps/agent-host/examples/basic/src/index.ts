@@ -19,10 +19,7 @@ const worker: ExportedHandler<Env> = {
       return new Response("Not found", { status: STATUS_NOT_FOUND });
     }
 
-    if (
-      request.method !== "GET" ||
-      request.headers.get("Upgrade")?.toLowerCase() !== "websocket"
-    ) {
+    if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected a WebSocket upgrade", {
         status: STATUS_UPGRADE_REQUIRED,
       });

@@ -11,9 +11,7 @@ it("rejects attached content instead of silently sending only the message text",
   expect(
     ahpMessageToAcpPrompt({
       text: "Describe this",
-      attachments: [
-        { type: "simple", label: "Context", modelRepresentation: "Details" },
-      ],
+      attachments: [{ type: "simple", label: "Context", modelRepresentation: "Details" }],
     }),
   ).toEqual({ ok: false, reason: "unsupported-content" });
   expect(ahpMessageToAcpPrompt({ text: "Hello", attachments: [] })).toEqual({
@@ -35,9 +33,7 @@ it("reuses adjacent markdown parts and creates a new wire id after reasoning", (
     acpUpdateToChatActions(
       {
         id: "turn",
-        responseParts: [
-          { kind: "markdown", id: "turn/markdown/0", content: "First" },
-        ],
+        responseParts: [{ kind: "markdown", id: "turn/markdown/0", content: "First" }],
       },
       notification,
     ),

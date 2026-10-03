@@ -1,14 +1,7 @@
 import * as z from "zod";
-import {
-  JsonRpcCallSchema,
-  JsonRpcErrorSchema,
-  JsonRpcFailureSchema,
-  JsonRpcSuccessSchema,
-} from "../jsonrpc";
+import { JsonRpcCallSchema, JsonRpcFailureSchema, JsonRpcSuccessSchema } from "../jsonrpc";
 
-const RequestIdSchema = JsonRpcSuccessSchema.shape.id.nullable();
-
-const ErrorSchema = JsonRpcErrorSchema.extend({ code: z.int32() }).loose();
+import { ErrorSchema, ErrorOutboundSchema, RequestIdSchema } from "./generated";
 
 const AcpCallSchema = JsonRpcCallSchema.extend({
   id: RequestIdSchema.optional(),
@@ -26,7 +19,7 @@ const AcpSuccessSchema = JsonRpcSuccessSchema.extend({
 
 const AcpFailureSchema = JsonRpcFailureSchema.extend({
   id: RequestIdSchema,
-  error: ErrorSchema.strict(),
+  error: ErrorOutboundSchema,
   method: z.never().optional(),
   result: z.never().optional(),
 });
@@ -46,8 +39,6 @@ const AcpOutboundMessageSchema = z.union([
   AcpFailureSchema,
 ]);
 
-type RequestId = z.output<typeof RequestIdSchema>;
-
 type AcpError = z.output<typeof ErrorSchema>;
 
 type AcpMessage = z.output<typeof AcpMessageSchema>;
@@ -59,10 +50,7 @@ export * from "../jsonrpc";
 export {
   AcpMessageSchema,
   AcpOutboundMessageSchema,
-  ErrorSchema,
-  RequestIdSchema,
   type AcpError,
   type AcpMessage,
   type AcpOutboundMessage,
-  type RequestId,
 };

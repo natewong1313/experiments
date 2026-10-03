@@ -32,8 +32,7 @@ function unsentTextUpdate({
 
   return [
     {
-      sessionUpdate:
-        type === "text" ? "agent_message_chunk" : "agent_thought_chunk",
+      sessionUpdate: type === "text" ? "agent_message_chunk" : "agent_thought_chunk",
       content: { type: "text", text: remaining },
     },
   ];
@@ -100,9 +99,7 @@ export function eventUpdates(
       return [
         {
           sessionUpdate:
-            change.type === "text_delta"
-              ? "agent_message_chunk"
-              : "agent_thought_chunk",
+            change.type === "text_delta" ? "agent_message_chunk" : "agent_thought_chunk",
           content: { type: "text", text: change.delta },
         },
       ];
@@ -134,13 +131,10 @@ export function eventUpdates(
       const output =
         "set" in event.output
           ? event.output.set
-          : (currentToolOutputs.get(event.toolCallId) ?? "").slice(
-              event.output.trimStart ?? 0,
-            ) + (event.output.append ?? "");
+          : (currentToolOutputs.get(event.toolCallId) ?? "").slice(event.output.trimStart ?? 0) +
+            (event.output.append ?? "");
       currentToolOutputs.set(event.toolCallId, output);
-      update.content = [
-        { type: "content", content: { type: "text", text: output } },
-      ];
+      update.content = [{ type: "content", content: { type: "text", text: output } }];
       update.rawOutput = { output, details: event.details };
     } else if (event.details !== undefined) {
       update.rawOutput = {

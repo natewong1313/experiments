@@ -1,8 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import {
-  AgentSideConnection,
-  PROTOCOL_VERSION,
-} from "@agentclientprotocol/sdk";
+import { AgentSideConnection, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { Agent } from "@agentclientprotocol/sdk";
 import { websocketStream } from "../src/agent/websocket-stream";
 
@@ -59,8 +56,7 @@ class AcpBackend extends DurableObject {
         initialize: async () => ({
           protocolVersion: PROTOCOL_VERSION,
           agentCapabilities: {
-            loadSession:
-              (await this.ctx.storage.get<boolean>("loadSupported")) ?? true,
+            loadSession: (await this.ctx.storage.get<boolean>("loadSupported")) ?? true,
           },
         }),
         authenticate: async () => ({}),

@@ -25,22 +25,17 @@ class CustomHost extends AgentHost<CustomEnv> {
     sessionKey,
     signal,
   }: AcpConnectionOptions): Promise<WebSocket> {
-    const response = await this.env.ACP_BACKEND.getByName(sessionKey).fetch(
-      "https://custom/acp",
-      {
-        headers: {
-          Upgrade: "websocket",
-          Authorization: "Bearer test-token",
-          "X-Session-Key": sessionKey,
-        },
-        signal,
+    const response = await this.env.ACP_BACKEND.getByName(sessionKey).fetch("https://custom/acp", {
+      headers: {
+        Upgrade: "websocket",
+        Authorization: "Bearer test-token",
+        "X-Session-Key": sessionKey,
       },
-    );
+      signal,
+    });
 
     if (response.status !== STATUS_SWITCHING_PROTOCOLS || !response.webSocket) {
-      throw new Error(
-        `Custom agent connection failed with HTTP ${response.status}`,
-      );
+      throw new Error(`Custom agent connection failed with HTTP ${response.status}`);
     }
 
     return response.webSocket;

@@ -57,44 +57,39 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
   let calls = 0;
   let prompts = 0;
 
-  const fetchSpy = vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async () => {
-      calls++;
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    calls++;
 
-      if (calls === REOPEN_CALL) {
-        return await pendingFetch.promise;
-      }
+    if (calls === REOPEN_CALL) {
+      return await pendingFetch.promise;
+    }
 
-      const { 0: client, 1: server } = new WebSocketPair();
-      const sessionId = crypto.randomUUID();
+    const { 0: client, 1: server } = new WebSocketPair();
+    const sessionId = crypto.randomUUID();
 
-      const agent: Agent = {
-        initialize: async () => ({ protocolVersion: PROTOCOL_VERSION }),
-        newSession: async () => ({ sessionId }),
-        authenticate: async () => ({}),
-        prompt: async () => {
-          prompts++;
+    const agent: Agent = {
+      initialize: async () => ({ protocolVersion: PROTOCOL_VERSION }),
+      newSession: async () => ({ sessionId }),
+      authenticate: async () => ({}),
+      prompt: async () => {
+        prompts++;
 
-          return await replacementPrompt.promise;
-        },
-        cancel: async (): Promise<void> => {},
-      };
+        return await replacementPrompt.promise;
+      },
+      cancel: async (): Promise<void> => {},
+    };
 
-      const connection = new AgentSideConnection(
-        () => agent,
-        websocketStream(server),
-      );
+    const connection = new AgentSideConnection(() => agent, websocketStream(server));
 
-      servers.push(connection);
-      server.accept();
-      sockets.push(server);
+    servers.push(connection);
+    server.accept();
+    sockets.push(server);
 
-      return new Response(null, {
-        status: SWITCHING_PROTOCOLS,
-        webSocket: client,
-      });
+    return new Response(null, {
+      status: SWITCHING_PROTOCOLS,
+      webSocket: client,
     });
+  });
 
   const peer = await connectPeer(stub);
 

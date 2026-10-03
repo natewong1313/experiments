@@ -36,9 +36,7 @@ function persistedState(store: HostStore): PersistedState {
 
 function appliedMigrations(state: DurableObjectState): number[] {
   return state.storage.sql
-    .exec<{ created_at: number }>(
-      "SELECT created_at FROM __drizzle_migrations ORDER BY created_at",
-    )
+    .exec<{ created_at: number }>("SELECT created_at FROM __drizzle_migrations ORDER BY created_at")
     .toArray()
     .map((row) => row.created_at);
 }
@@ -54,14 +52,10 @@ it("initializes a fresh database and applies generated migrations once", async (
       fromSeq: 0,
     });
     expect(store.list({ limit: 1 }).items).toEqual([]);
-    expect(appliedMigrations(state)).toEqual(
-      migrations.journal.entries.map((entry) => entry.when),
-    );
+    expect(appliedMigrations(state)).toEqual(migrations.journal.entries.map((entry) => entry.when));
     const reopened = new HostStore(state);
     expect(reopened.snapshot(ROOT)).toEqual(store.snapshot(ROOT));
-    expect(appliedMigrations(state)).toEqual(
-      migrations.journal.entries.map((entry) => entry.when),
-    );
+    expect(appliedMigrations(state)).toEqual(migrations.journal.entries.map((entry) => entry.when));
   });
 });
 
@@ -99,13 +93,9 @@ it("skips the original schema migration and preserves existing state", async () 
 
     const reopened = new HostStore(state);
     expect(persistedState(reopened)).toEqual(before);
-    expect(appliedMigrations(state)).toEqual(
-      migrations.journal.entries.map((entry) => entry.when),
-    );
+    expect(appliedMigrations(state)).toEqual(migrations.journal.entries.map((entry) => entry.when));
     const reopenedAgain = new HostStore(state);
     expect(persistedState(reopenedAgain)).toEqual(before);
-    expect(appliedMigrations(state)).toEqual(
-      migrations.journal.entries.map((entry) => entry.when),
-    );
+    expect(appliedMigrations(state)).toEqual(migrations.journal.entries.map((entry) => entry.when));
   });
 });

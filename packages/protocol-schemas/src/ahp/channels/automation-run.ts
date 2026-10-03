@@ -1,10 +1,5 @@
 import * as z from "zod";
-import {
-  ErrorInfoSchema,
-  UsageInfoSchema,
-  isoTimestampSchema,
-  uriSchema,
-} from "../common";
+import { ErrorInfoSchema, UsageInfoSchema, isoTimestampSchema, uriSchema } from "../common";
 
 const AutomationRunLifecycleSchema = z.discriminatedUnion("status", [
   z.strictObject({

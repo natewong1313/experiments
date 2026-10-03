@@ -43,15 +43,10 @@ function serveCatalogue(socket: WebSocket, defaultChat?: string): void {
     chats,
   };
 
-  const session = SessionStateSchema.parse(
-    defaultChat ? { ...input, defaultChat } : input,
-  );
+  const session = SessionStateSchema.parse(defaultChat ? { ...input, defaultChat } : input);
 
   const states: Record<string, ChatState | SessionState> = Object.fromEntries(
-    chats.map((chat) => [
-      chat.resource,
-      ChatStateSchema.parse({ ...chat, turns: [] }),
-    ]),
+    chats.map((chat) => [chat.resource, ChatStateSchema.parse({ ...chat, turns: [] })]),
   );
 
   states[SESSION_URI] = session;

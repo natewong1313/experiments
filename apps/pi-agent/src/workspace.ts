@@ -9,10 +9,7 @@ const REPLAY_SAFE = new Set(["read", "ls", "find", "grep", "write", "delete"]);
 function workspaceStorage(storage: DurableObjectStorage) {
   return {
     sql: {
-      exec: <Row extends object>(
-        query: string,
-        ...bindings: (SqlStorageValue | Uint8Array)[]
-      ) =>
+      exec: <Row extends object>(query: string, ...bindings: (SqlStorageValue | Uint8Array)[]) =>
         storage.sql.exec<Row & Record<string, SqlStorageValue>>(
           query,
           ...bindings.map((value) =>

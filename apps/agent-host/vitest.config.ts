@@ -6,10 +6,7 @@ export default defineConfig({
     {
       name: "sql-text",
       enforce: "pre",
-      transform(
-        source,
-        id,
-      ): { code: string; map: null; moduleType: "js" } | null {
+      transform(source, id): { code: string; map: null; moduleType: "js" } | null {
         if (id.endsWith(".sql")) {
           return {
             code: `export default ${JSON.stringify(source)};`,

@@ -112,9 +112,7 @@ it("keeps session and chat snapshots equal to reduced live and replayed actions"
 
     const actions = publications.flatMap((publication) => publication.actions);
     const sequences = actions.map((envelope) => envelope.serverSeq);
-    expect(sequences).toEqual(
-      sequences.toSorted((left, right) => left - right),
-    );
+    expect(sequences).toEqual(sequences.toSorted((left, right) => left - right));
 
     for (const envelope of actions) {
       if (envelope.channel === SESSION) {
@@ -127,9 +125,7 @@ it("keeps session and chat snapshots equal to reduced live and replayed actions"
     expect(store.snapshot(SESSION).state).toEqual(sessionMirror);
     expect(store.snapshot(chat).state).toEqual(chatMirror);
     expect(store.replay(cut, [SESSION, chat])).toEqual(actions);
-    expect(store.list({ limit: PAGE_SIZE }).items[0]?.status).toBe(
-      ERROR_STATUS | READ,
-    );
+    expect(store.list({ limit: PAGE_SIZE }).items[0]?.status).toBe(ERROR_STATUS | READ);
   });
 });
 
@@ -157,9 +153,7 @@ it("writes only bounded live chunks and emits no unchanged summary for a delta",
     });
 
     const writes = sql
-      .exec<{ scope: string; bytes: number }>(
-        "SELECT scope, bytes FROM chunk_writes",
-      )
+      .exec<{ scope: string; bytes: number }>("SELECT scope, bytes FROM chunk_writes")
       .toArray();
 
     expect(writes.length).toBeGreaterThan(0);
@@ -188,9 +182,7 @@ it("retains history larger than a SQL row across eviction without loading it int
     expect(store.hasTurn(chat, "first")).toBe(true);
 
     const { maximum } = state.storage.sql
-      .exec<{ maximum: number }>(
-        "SELECT MAX(LENGTH(data)) AS maximum FROM document_chunks",
-      )
+      .exec<{ maximum: number }>("SELECT MAX(LENGTH(data)) AS maximum FROM document_chunks")
       .one();
 
     expect(maximum).toBeLessThanOrEqual(CHUNK_BYTES);
@@ -275,18 +267,13 @@ it("paginates metadata without reading chats and rejects a chat URI as a session
     const chat = ready(store);
     const nextSession = `${SESSION}-next`;
     createSession(store, nextSession, "generation-2");
-    state.storage.sql.exec(
-      "DELETE FROM document_chunks WHERE scope = 'chat' AND id = ?",
-      chat,
-    );
+    state.storage.sql.exec("DELETE FROM document_chunks WHERE scope = 'chat' AND id = ?", chat);
     const first = store.list({ limit: 1 });
     expect(first.items.map((item) => item.resource)).toEqual([SESSION]);
     expect(first.nextCursor).toBe(SESSION);
     const next = store.list({ cursor: first.nextCursor, limit: 1 });
     expect(next.items.map((item) => item.resource)).toEqual([nextSession]);
     expect(next.nextCursor).toBeUndefined();
-    expect(() => store.list({ cursor: chat, limit: 1 })).toThrow(
-      "Invalid session cursor",
-    );
+    expect(() => store.list({ cursor: chat, limit: 1 })).toThrow("Invalid session cursor");
   });
 });

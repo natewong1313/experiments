@@ -10,8 +10,7 @@ export const noManualTagComparisonRule = defineRule({
   meta: {
     type: "problem",
     docs: {
-      description:
-        "Use Effect Match or Predicate helpers instead of manually branching on `_tag`.",
+      description: "Use Effect Match or Predicate helpers instead of manually branching on `_tag`.",
     },
     messages: {
       manualComparison:
@@ -23,19 +22,13 @@ export const noManualTagComparisonRule = defineRule({
   createOnce(context) {
     return {
       BinaryExpression(node) {
-        if (
-          tagMemberFromComparison(node) === undefined ||
-          isInsideBroadEffectHandler(node)
-        ) {
+        if (tagMemberFromComparison(node) === undefined || isInsideBroadEffectHandler(node)) {
           return;
         }
         context.report({ node, messageId: "manualComparison" });
       },
       SwitchStatement(node) {
-        if (
-          !isTagMember(node.discriminant) ||
-          isInsideBroadEffectHandler(node)
-        ) {
+        if (!isTagMember(node.discriminant) || isInsideBroadEffectHandler(node)) {
           return;
         }
         context.report({ node, messageId: "manualSwitch" });

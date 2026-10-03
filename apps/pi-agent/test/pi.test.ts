@@ -68,12 +68,10 @@ it("supports the SDK session builder and text collection", async () => {
   const client = await connect(crypto.randomUUID());
 
   try {
-    const text = await client.connection.agent
-      .buildSession(setup)
-      .withSession(async (session) => {
-        void session.prompt("session builder");
-        return session.readText();
-      });
+    const text = await client.connection.agent.buildSession(setup).withSession(async (session) => {
+      void session.prompt("session builder");
+      return session.readText();
+    });
 
     expect(text).toBe("echo: session builder");
   } finally {
@@ -94,10 +92,7 @@ describe("durable Pi ACP runtime", () => {
       });
 
       expect(duplicate.status).toBe(CONFLICT);
-      const session = await client.connection.agent.request(
-        methods.agent.session.new,
-        setup,
-      );
+      const session = await client.connection.agent.request(methods.agent.session.new, setup);
       expect(
         await client.connection.agent.request(methods.agent.session.prompt, {
           sessionId: session.sessionId,
@@ -107,8 +102,7 @@ describe("durable Pi ACP runtime", () => {
       expect(
         client.updates
           .flatMap((update) =>
-            update.sessionUpdate === "agent_message_chunk" &&
-            update.content.type === "text"
+            update.sessionUpdate === "agent_message_chunk" && update.content.type === "text"
               ? [update.content.text]
               : [],
           )
@@ -128,8 +122,7 @@ describe("durable Pi ACP runtime", () => {
         client.updates
           .slice(updates.length)
           .flatMap((update) =>
-            update.sessionUpdate === "agent_message_chunk" &&
-            update.content.type === "text"
+            update.sessionUpdate === "agent_message_chunk" && update.content.type === "text"
               ? [update.content.text]
               : [],
           )
@@ -153,26 +146,19 @@ describe("durable Pi ACP runtime", () => {
   it("retains sessions and workspace files across eviction", async () => {
     const name = crypto.randomUUID();
     const client = await connect(name);
-    const session = await client.connection.agent.request(
-      methods.agent.session.new,
-      setup,
-    );
+    const session = await client.connection.agent.request(methods.agent.session.new, setup);
 
     try {
       await client.connection.agent.request(methods.agent.session.prompt, {
         sessionId: session.sessionId,
         prompt: [{ type: "text", text: "save" }],
       });
-      expect(
-        client.updates.some((update) => update.sessionUpdate === "tool_call"),
-      ).toBe(true);
+      expect(client.updates.some((update) => update.sessionUpdate === "tool_call")).toBe(true);
       expect(client.updates).toContainEqual(
         expect.objectContaining({ sessionUpdate: "tool_call", kind: "edit" }),
       );
       expect(
-        client.updates.filter(
-          (update) => update.sessionUpdate === "tool_call_update",
-        ),
+        client.updates.filter((update) => update.sessionUpdate === "tool_call_update"),
       ).toEqual([
         expect.objectContaining({
           status: "completed",
@@ -212,13 +198,10 @@ describe("durable Pi ACP runtime", () => {
       expect(reconnected.updates).toEqual(updates);
       expect(await reconnected.object.readSavedFile()).toBe("durable data");
       expect(
-        await reconnected.connection.agent.request(
-          methods.agent.session.prompt,
-          {
-            sessionId: session.sessionId,
-            prompt: [{ type: "text", text: "again" }],
-          },
-        ),
+        await reconnected.connection.agent.request(methods.agent.session.prompt, {
+          sessionId: session.sessionId,
+          prompt: [{ type: "text", text: "again" }],
+        }),
       ).toEqual({ stopReason: "end_turn" });
     } finally {
       reconnected.socket.close();
@@ -241,10 +224,7 @@ describe("durable Pi ACP runtime", () => {
           sessionId: "99999",
         }),
       ).rejects.toThrow(/Invalid params/);
-      const session = await client.connection.agent.request(
-        methods.agent.session.new,
-        setup,
-      );
+      const session = await client.connection.agent.request(methods.agent.session.new, setup);
       await expect(
         client.connection.agent.request(methods.agent.session.prompt, {
           sessionId: session.sessionId,
@@ -261,10 +241,7 @@ it("executes JavaScript through the Dynamic Worker loader", async () => {
   const client = await connect(crypto.randomUUID());
 
   try {
-    const session = await client.connection.agent.request(
-      methods.agent.session.new,
-      setup,
-    );
+    const session = await client.connection.agent.request(methods.agent.session.new, setup);
     await client.connection.agent.request(methods.agent.session.prompt, {
       sessionId: session.sessionId,
       prompt: [{ type: "text", text: "exec" }],
@@ -272,14 +249,10 @@ it("executes JavaScript through the Dynamic Worker loader", async () => {
 
     const output = client.updates
       .flatMap((update) =>
-        update.sessionUpdate === "tool_call_update"
-          ? (update.content ?? [])
-          : [],
+        update.sessionUpdate === "tool_call_update" ? (update.content ?? []) : [],
       )
       .flatMap((part) =>
-        part.type === "content" && part.content.type === "text"
-          ? [part.content.text]
-          : [],
+        part.type === "content" && part.content.type === "text" ? [part.content.text] : [],
       )
       .join("");
 
@@ -294,24 +267,16 @@ it("cancels a running tool and rejects concurrent prompts", async () => {
   const client = await connect(crypto.randomUUID());
 
   try {
-    const session = await client.connection.agent.request(
-      methods.agent.session.new,
-      setup,
-    );
+    const session = await client.connection.agent.request(methods.agent.session.new, setup);
 
     const params = {
       sessionId: session.sessionId,
       prompt: [{ type: "text", text: "gate" }],
     } satisfies PromptRequest;
 
-    const running = client.connection.agent.request(
-      methods.agent.session.prompt,
-      params,
-    );
+    const running = client.connection.agent.request(methods.agent.session.prompt, params);
     await expect
-      .poll(() =>
-        client.updates.some((update) => update.sessionUpdate === "tool_call"),
-      )
+      .poll(() => client.updates.some((update) => update.sessionUpdate === "tool_call"))
       .toBe(true);
     await expect(
       client.connection.agent.request(methods.agent.session.prompt, params),

@@ -5,8 +5,7 @@ export type FunctionParameter = ESTree.ParamPattern;
 /** Return whether a type is or contains TypeScript's absorbing unknown top type. */
 export function containsUnknownType(type: ESTree.TSType): boolean {
   if (type.type === "TSUnknownKeyword") return true;
-  if (type.type === "TSParenthesizedType")
-    return containsUnknownType(type.typeAnnotation);
+  if (type.type === "TSParenthesizedType") return containsUnknownType(type.typeAnnotation);
   return type.type === "TSUnionType" && type.types.some(containsUnknownType);
 }
 
@@ -18,16 +17,10 @@ export function functionParameterTypeAnnotation(
     return functionParameterTypeAnnotation(parameter.parameter);
   }
   if (parameter.type === "RestElement") {
-    return (
-      parameter.typeAnnotation ??
-      functionParameterTypeAnnotation(parameter.argument)
-    );
+    return parameter.typeAnnotation ?? functionParameterTypeAnnotation(parameter.argument);
   }
   if (parameter.type === "AssignmentPattern") {
-    return (
-      parameter.typeAnnotation ??
-      functionParameterTypeAnnotation(parameter.left)
-    );
+    return parameter.typeAnnotation ?? functionParameterTypeAnnotation(parameter.left);
   }
   return parameter.typeAnnotation;
 }

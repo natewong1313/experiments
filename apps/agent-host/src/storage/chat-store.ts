@@ -93,20 +93,10 @@ class ChatStore {
       throw new ProtocolError(RpcCodes.params, "Invalid turn-history cursor");
     }
 
-    return this.page(
-      uri,
-      parsed.data.before,
-      HISTORY_PAGE_TURNS,
-      MAX_HISTORY_PAGE_BYTES,
-    );
+    return this.page(uri, parsed.data.before, HISTORY_PAGE_TURNS, MAX_HISTORY_PAGE_BYTES);
   }
 
-  private page(
-    uri: string,
-    before: number,
-    count: number,
-    budget: number,
-  ): HistoryPage {
+  private page(uri: string, before: number, count: number, budget: number): HistoryPage {
     const limit = Math.min(count, HISTORY_PAGE_TURNS);
     const history: Turn[] = [];
     let remaining = budget;
@@ -128,11 +118,7 @@ class ChatStore {
     for (const row of rows) {
       if (history.length >= limit || row.bytes > remaining) {
         if (history.length === 0 && limit > 0) {
-          checkBytes(
-            row.bytes,
-            remaining,
-            "Turn exceeds the history page memory budget",
-          );
+          checkBytes(row.bytes, remaining, "Turn exceeds the history page memory budget");
         }
 
         more = true;
@@ -156,11 +142,7 @@ class ChatStore {
   hasTurn(uri: string, turnId: string): boolean {
     const match = and(eq(turns.chatUri, uri), eq(turns.turnId, turnId));
 
-    const row = this.db
-      .select({ turnId: turns.turnId })
-      .from(turns)
-      .where(match)
-      .get();
+    const row = this.db.select({ turnId: turns.turnId }).from(turns).where(match).get();
 
     return row !== void 0;
   }
@@ -179,10 +161,7 @@ class ChatStore {
 
     for (const turn of chat.turns) {
       ordinal += 1;
-      this.db
-        .insert(turns)
-        .values({ chatUri: uri, turnId: turn.id, ordinal })
-        .run();
+      this.db.insert(turns).values({ chatUri: uri, turnId: turn.id, ordinal }).run();
       this.documents.write(uri, turn.id, turn);
     }
 
@@ -190,9 +169,7 @@ class ChatStore {
       "chat",
       uri,
       { ...chat, turns: [] },
-      chat.activeTurn
-        ? MAX_DOCUMENT_BYTES - COMPLETION_RESERVE_BYTES
-        : MAX_DOCUMENT_BYTES,
+      chat.activeTurn ? MAX_DOCUMENT_BYTES - COMPLETION_RESERVE_BYTES : MAX_DOCUMENT_BYTES,
     );
   }
 

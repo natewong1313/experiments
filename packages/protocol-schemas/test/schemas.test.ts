@@ -211,9 +211,7 @@ describe("command results", () => {
     const parsed = InitializeResultSchema.safeParse({
       protocolVersion: "0.9.0",
       serverSeq: 0,
-      snapshots: [
-        { resource: "ahp-root://", fromSeq: 0, state: { agents: [] } },
-      ],
+      snapshots: [{ resource: "ahp-root://", fromSeq: 0, state: { agents: [] } }],
       telemetry: { logs: "ahp-otlp:/logs" },
     });
 

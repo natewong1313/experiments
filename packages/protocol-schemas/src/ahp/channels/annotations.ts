@@ -1,10 +1,5 @@
 import * as z from "zod";
-import {
-  StringOrMarkdownSchema,
-  TextRangeSchema,
-  metaSchema,
-  uriSchema,
-} from "../common";
+import { StringOrMarkdownSchema, TextRangeSchema, metaSchema, uriSchema } from "../common";
 
 const AnnotationsSummarySchema = z.strictObject({
   resource: uriSchema,

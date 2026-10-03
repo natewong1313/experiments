@@ -1,8 +1,5 @@
 import { AgentHost as BaseAgentHost } from "@experiments/agent-host";
-import type {
-  AgentConfig,
-  AcpConnectionOptions,
-} from "@experiments/agent-host";
+import type { AgentConfig, AcpConnectionOptions } from "@experiments/agent-host";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
@@ -27,10 +24,7 @@ class AgentHost extends BaseAgentHost<Env> {
     let response: Response;
 
     if (this.env.ACP_URL === "") {
-      response = await this.env.PI_AGENT.getByName(sessionKey).fetch(
-        "https://agent/acp",
-        options,
-      );
+      response = await this.env.PI_AGENT.getByName(sessionKey).fetch("https://agent/acp", options);
     } else {
       const url = new URL(this.env.ACP_URL);
 

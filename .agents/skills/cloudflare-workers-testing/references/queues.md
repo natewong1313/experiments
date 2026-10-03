@@ -8,11 +8,7 @@ Use `createMessageBatch()` and `getQueueResult()` from `cloudflare:test` to call
 
 ```ts
 import { env } from "cloudflare:workers";
-import {
-  createExecutionContext,
-  createMessageBatch,
-  getQueueResult,
-} from "cloudflare:test";
+import { createExecutionContext, createMessageBatch, getQueueResult } from "cloudflare:test";
 import { expect, test } from "vitest";
 import worker from "../src/index";
 

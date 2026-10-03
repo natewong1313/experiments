@@ -20,18 +20,12 @@ type VisitorKeys = Readonly<Record<string, readonly string[]>>;
 
 function isNode(value: unknown): value is ESTree.Node {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    typeof value.type === "string"
+    typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
   );
 }
 
 /** Return the first inline object type literal within a type annotation subtree. */
-function findTypeLiteral(
-  node: ESTree.Node,
-  keys: VisitorKeys,
-): ESTree.TSTypeLiteral | null {
+function findTypeLiteral(node: ESTree.Node, keys: VisitorKeys): ESTree.TSTypeLiteral | null {
   if (node.type === "TSTypeLiteral") return node;
   for (const key of keys[node.type] ?? []) {
     const value: unknown = (node as Record<string, unknown>)[key];
@@ -51,10 +45,7 @@ function ownerName(node: ParameterOwner): string | null {
   }
   if (node.type === "ArrowFunctionExpression") {
     const parent = node.parent;
-    if (
-      parent.type === "VariableDeclarator" &&
-      parent.id.type === "Identifier"
-    ) {
+    if (parent.type === "VariableDeclarator" && parent.id.type === "Identifier") {
       return parent.id.name;
     }
     if (
@@ -62,9 +53,7 @@ function ownerName(node: ParameterOwner): string | null {
       parent.type === "PropertyDefinition" ||
       parent.type === "MethodDefinition"
     ) {
-      return parent.computed === true || parent.key.type !== "Identifier"
-        ? null
-        : parent.key.name;
+      return parent.computed === true || parent.key.type !== "Identifier" ? null : parent.key.name;
     }
     return null;
   }
@@ -105,10 +94,7 @@ export const noInlineObjectParametersRule = defineRule({
           node: typeLiteral,
           messageId: "inlineObjectParameter",
           data: {
-            parameter: functionParameterBindingName(
-              parameter,
-              context.sourceCode,
-            ),
+            parameter: functionParameterBindingName(parameter, context.sourceCode),
             suggested: suggestedParamsName(node),
           },
         });

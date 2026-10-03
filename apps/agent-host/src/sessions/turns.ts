@@ -56,18 +56,11 @@ class TurnExecution {
 
   recover(record: LiveSession): void {
     if (record.chat.activeTurn) {
-      this.failTurn(
-        record,
-        "The host restarted. This turn was interrupted.",
-        "interrupted",
-      );
+      this.failTurn(record, "The host restarted. This turn was interrupted.", "interrupted");
     }
   }
 
-  onAgentUpdate(
-    identity: SessionGeneration,
-    notification: SessionNotification,
-  ): void {
+  onAgentUpdate(identity: SessionGeneration, notification: SessionNotification): void {
     const record = this.store.lookup(identity.uri);
 
     if (
@@ -79,10 +72,7 @@ class TurnExecution {
     }
 
     try {
-      const actions = acpUpdateToChatActions(
-        record.chat.activeTurn,
-        notification,
-      );
+      const actions = acpUpdateToChatActions(record.chat.activeTurn, notification);
 
       for (const publication of this.store.updateChat(record, actions)) {
         this.clients.broadcast(publication);
@@ -97,11 +87,7 @@ class TurnExecution {
     }
   }
 
-  private failTurn(
-    record: LiveSession,
-    message: string,
-    errorType = "agent",
-  ): void {
+  private failTurn(record: LiveSession, message: string, errorType = "agent"): void {
     const turn = record.chat.activeTurn;
 
     if (!turn) {
@@ -128,21 +114,14 @@ class TurnExecution {
       const current = this.store.lookup(uri);
       const turn = current?.chat.activeTurn;
 
-      if (
-        !turn ||
-        turn.id !== turnId ||
-        current.sessionKey !== original.sessionKey
-      ) {
+      if (!turn || turn.id !== turnId || current.sessionKey !== original.sessionKey) {
         return;
       }
 
       const outcome = await agent.prompt(turn.message);
       const latest = this.store.lookup(uri);
 
-      if (
-        latest?.chat.activeTurn?.id !== turnId ||
-        latest.sessionKey !== original.sessionKey
-      ) {
+      if (latest?.chat.activeTurn?.id !== turnId || latest.sessionKey !== original.sessionKey) {
         return;
       }
 
@@ -167,15 +146,11 @@ class TurnExecution {
 
       this.publish(latest.chatUri, action);
     } catch (error) {
-      const failure =
-        error instanceof Error ? error : new Error("Agent operation failed");
+      const failure = error instanceof Error ? error : new Error("Agent operation failed");
 
       const record = this.store.lookup(uri);
 
-      if (
-        record?.chat.activeTurn?.id === turnId &&
-        record.sessionKey === original.sessionKey
-      ) {
+      if (record?.chat.activeTurn?.id === turnId && record.sessionKey === original.sessionKey) {
         this.failTurn(record, errorMessage(failure));
       }
 
@@ -198,8 +173,7 @@ class TurnExecution {
         });
       }
     } catch (error) {
-      const failure =
-        error instanceof Error ? error : new Error("Agent operation failed");
+      const failure = error instanceof Error ? error : new Error("Agent operation failed");
 
       console.error({
         event: "agent_cancel_failed",

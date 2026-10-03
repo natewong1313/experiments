@@ -42,9 +42,7 @@ async function openHost(): Promise<{
   return { stub, peer };
 }
 
-async function recordFor(
-  stub: DurableObjectStub,
-): Promise<ReturnType<HostStore["require"]>> {
+async function recordFor(stub: DurableObjectStub): Promise<ReturnType<HostStore["require"]>> {
   return await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
 
@@ -116,13 +114,9 @@ it("uses subclass metadata, credentials, session identity, and working directory
     await peer.request("subscribe", { channel: record.chatUri });
     prompt(peer, record.chatUri);
     await vi.waitFor(() => {
-      expect(
-        peer.actions.some(({ action }) => action.type === "chat/turnComplete"),
-      ).toBe(true);
+      expect(peer.actions.some(({ action }) => action.type === "chat/turnComplete")).toBe(true);
     });
-    expect(
-      await peer.request("subscribe", { channel: record.chatUri }),
-    ).toMatchObject({
+    expect(await peer.request("subscribe", { channel: record.chatUri })).toMatchObject({
       snapshot: {
         state: { turns: [{ responseParts: [{ content: "Custom reply" }] }] },
       },
@@ -163,10 +157,7 @@ it("reopens the same ACP conversation and session key after host eviction", asyn
       });
 
       const row = state.storage.sql
-        .exec<{ container: string }>(
-          "SELECT container FROM sessions WHERE uri = ?",
-          SESSION,
-        )
+        .exec<{ container: string }>("SELECT container FROM sessions WHERE uri = ?", SESSION)
         .one();
 
       expect(row.container).toBe(original.sessionKey);
@@ -174,9 +165,7 @@ it("reopens the same ACP conversation and session key after host eviction", asyn
     await peer.request("subscribe", { channel: original.chatUri });
     prompt(peer, original.chatUri, SECOND_SEQUENCE);
     await vi.waitFor(() => {
-      expect(
-        peer.actions.some(({ action }) => action.type === "chat/turnComplete"),
-      ).toBe(true);
+      expect(peer.actions.some(({ action }) => action.type === "chat/turnComplete")).toBe(true);
     });
     expect(await backend.events()).toEqual([
       { kind: "connect", sessionKey: original.sessionKey },
@@ -207,8 +196,7 @@ it("reports failure without creating a replacement conversation when loading is 
         peer.actions.some(
           ({ action }) =>
             action.type === "chat/error" &&
-            action.part.error.message ===
-              "Agent cannot reopen this conversation",
+            action.part.error.message === "Agent cannot reopen this conversation",
         ),
       ).toBe(true);
     });

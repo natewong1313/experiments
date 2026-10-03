@@ -33,10 +33,7 @@ export const noManualEffectErrorTagRule = defineRule({
         });
       },
       SwitchStatement(node) {
-        if (
-          !isTagMember(node.discriminant) ||
-          !isInsideBroadEffectHandler(node)
-        ) {
+        if (!isTagMember(node.discriminant) || !isInsideBroadEffectHandler(node)) {
           return;
         }
         context.report({

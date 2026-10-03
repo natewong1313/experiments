@@ -26,9 +26,7 @@ const AhpErrorDataSchema = z.union([
   PermissionDeniedDataSchema,
 ]);
 
-type UnsupportedProtocolVersionData = z.output<
-  typeof UnsupportedProtocolVersionDataSchema
->;
+type UnsupportedProtocolVersionData = z.output<typeof UnsupportedProtocolVersionDataSchema>;
 
 type AuthRequiredData = z.output<typeof AuthRequiredDataSchema>;
 

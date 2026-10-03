@@ -66,9 +66,7 @@ type ToolCallResponsePart = z.output<typeof ToolCallResponsePartSchema>;
 
 type ReasoningResponsePart = z.output<typeof ReasoningResponsePartSchema>;
 
-type SystemNotificationResponsePart = z.output<
-  typeof SystemNotificationResponsePartSchema
->;
+type SystemNotificationResponsePart = z.output<typeof SystemNotificationResponsePartSchema>;
 
 type InputRequestResponsePart = z.output<typeof InputRequestResponsePartSchema>;
 

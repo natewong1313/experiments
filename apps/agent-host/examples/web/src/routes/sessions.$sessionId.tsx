@@ -14,9 +14,7 @@ const FIRST_WORKING_DIRECTORY = 0;
 
 function Centered({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="flex h-full items-center justify-center p-6 text-kumo-subtle">
-      {children}
-    </div>
+    <div className="flex h-full items-center justify-center p-6 text-kumo-subtle">{children}</div>
   );
 }
 
@@ -74,11 +72,7 @@ function SessionDetail({ sessionId }: { sessionId: string }): JSX.Element {
         )}
         {connection.status === "error" && (
           <Centered>
-            <Banner
-              variant="error"
-              title="Connection lost"
-              description={connection.message}
-            />
+            <Banner variant="error" title="Connection lost" description={connection.message} />
           </Centered>
         )}
         {connection.status === "connected" && session.status === "loading" && (
@@ -88,11 +82,7 @@ function SessionDetail({ sessionId }: { sessionId: string }): JSX.Element {
         )}
         {session.status === "error" && (
           <Centered>
-            <Banner
-              variant="error"
-              title="Could not load session"
-              description={session.message}
-            />
+            <Banner variant="error" title="Could not load session" description={session.message} />
           </Centered>
         )}
         {session.status === "ready" && <Conversation view={view} />}

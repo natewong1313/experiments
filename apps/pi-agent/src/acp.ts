@@ -48,18 +48,12 @@ class AcpAgent {
     this.connection = agent({ name: "pi-durable" })
       .onRequest(methods.agent.initialize, () => this.initialize())
       .onRequest(methods.agent.authenticate, () => this.authenticate())
-      .onRequest(methods.agent.session.new, ({ params, client }) =>
-        this.newSession(params, client),
-      )
+      .onRequest(methods.agent.session.new, ({ params, client }) => this.newSession(params, client))
       .onRequest(methods.agent.session.load, ({ params, client }) =>
         this.loadSession(params, client),
       )
-      .onRequest(methods.agent.session.prompt, ({ params }) =>
-        this.prompt(params),
-      )
-      .onNotification(methods.agent.session.cancel, ({ params }) =>
-        this.cancel(params),
-      )
+      .onRequest(methods.agent.session.prompt, ({ params }) => this.prompt(params))
+      .onNotification(methods.agent.session.cancel, ({ params }) => this.cancel(params))
       .connect(websocketStream(socket));
 
     void this.cleanup();
@@ -119,10 +113,7 @@ class AcpAgent {
     const session = this.requireSession(params.sessionId);
 
     if (!params.prompt.every((part) => part.type === "text")) {
-      throw RequestError.invalidParams(
-        void 0,
-        "Only text prompts are supported",
-      );
+      throw RequestError.invalidParams(void 0, "Only text prompts are supported");
     }
 
     if (this.runningPrompts.has(session.id)) {
@@ -133,9 +124,7 @@ class AcpAgent {
 
     try {
       if (await session.busy()) {
-        throw RequestError.invalidRequest(
-          "Session already has a running prompt",
-        );
+        throw RequestError.invalidRequest("Session already has a running prompt");
       }
 
       const result = await session.prompt(
@@ -190,10 +179,7 @@ class AcpAgent {
     return attached.session;
   }
 
-  private async attachSession(
-    session: PiSession,
-    client: AgentContext,
-  ): Promise<void> {
+  private async attachSession(session: PiSession, client: AgentContext): Promise<void> {
     const previous = this.attachedSessions.get(session.id);
     const watch = await session.events();
     this.attachedSessions.set(session.id, { session, watch });
@@ -208,9 +194,7 @@ class AcpAgent {
 
   private async cleanup(): Promise<void> {
     await this.connection.closed;
-    await Promise.all(
-      [...this.attachedSessions.values()].map(({ watch }) => watch.stop()),
-    );
+    await Promise.all([...this.attachedSessions.values()].map(({ watch }) => watch.stop()));
     this.attachedSessions.clear();
   }
 }
@@ -234,11 +218,7 @@ function startSessionWatch({
         return;
       }
 
-      for (const update of eventUpdates(
-        event,
-        sentTextLengths,
-        currentToolOutputs,
-      )) {
+      for (const update of eventUpdates(event, sentTextLengths, currentToolOutputs)) {
         if (signal.aborted) {
           return;
         }
@@ -270,10 +250,7 @@ function startSessionWatch({
   });
 }
 
-async function replayHistory(
-  session: PiSession,
-  client: AgentContext,
-): Promise<void> {
+async function replayHistory(session: PiSession, client: AgentContext): Promise<void> {
   for (const entry of await session.messages()) {
     const message = entry.model?.[0];
 
@@ -294,10 +271,7 @@ async function replayHistory(
       await client.notify(methods.client.session.update, {
         sessionId: session.id,
         update: {
-          sessionUpdate:
-            message.role === "user"
-              ? "user_message_chunk"
-              : "agent_message_chunk",
+          sessionUpdate: message.role === "user" ? "user_message_chunk" : "agent_message_chunk",
           content: { type: "text", text: part.text },
         },
       });

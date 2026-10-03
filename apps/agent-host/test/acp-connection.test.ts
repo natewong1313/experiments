@@ -5,20 +5,14 @@ import { AgentConnections } from "../src/agent/acp";
 import { HostStore } from "../src/state/store";
 import { createSession } from "./config";
 
-import {
-  AgentSideConnection,
-  PROTOCOL_VERSION,
-  type Agent,
-} from "@agentclientprotocol/sdk";
+import { AgentSideConnection, PROTOCOL_VERSION, type Agent } from "@agentclientprotocol/sdk";
 import { websocketStream } from "../src/agent/websocket-stream";
 import { AGENT_IDLE_TIMEOUT_MS, MAX_AGENT_CONNECTIONS } from "../src/memory";
 import type { AgentBinding } from "../src/sessions/record";
 
 const CONNECT_TIMEOUT_MS = 30_000;
 
-async function connectionError(
-  operation: Promise<unknown>,
-): Promise<Error | null> {
+async function connectionError(operation: Promise<unknown>): Promise<Error | null> {
   try {
     await operation;
 
@@ -95,9 +89,7 @@ it("caps pending agent connections and frees capacity after a failed setup", asy
       binding(String(index)),
     );
 
-    const pending = records.map((record) =>
-      connectionError(agents.get(record)),
-    );
+    const pending = records.map((record) => connectionError(agents.get(record)));
 
     const overflow = binding("overflow");
 
@@ -105,9 +97,7 @@ it("caps pending agent connections and frees capacity after a failed setup", asy
     expect(signals).toHaveLength(MAX_AGENT_CONNECTIONS);
     await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
     const failures = await Promise.all(pending);
-    expect(
-      failures.every((error) => error?.message === "Agent operation timed out"),
-    ).toBe(true);
+    expect(failures.every((error) => error?.message === "Agent operation timed out")).toBe(true);
     const nextRecord = binding("next");
     const next = connectionError(agents.get(nextRecord));
     expect(signals).toHaveLength(MAX_AGENT_CONNECTIONS + 1);
@@ -234,9 +224,7 @@ it("removes remotely closed connections without waiting for another lookup of th
       binding(String(index)),
     );
 
-    const opened = await Promise.all(
-      records.map((record) => agents.get(record)),
-    );
+    const opened = await Promise.all(records.map((record) => agents.get(record)));
 
     const overflow = binding("overflow");
 

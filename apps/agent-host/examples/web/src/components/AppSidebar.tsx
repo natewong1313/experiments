@@ -22,10 +22,7 @@ export default function AppSidebar(): JSX.Element {
   }
 
   return (
-    <Sidebar
-      aria-label="Main navigation"
-      className="md:sticky md:top-0 md:h-svh"
-    >
+    <Sidebar aria-label="Main navigation" className="md:sticky md:top-0 md:h-svh">
       <Sidebar.Header>
         <img
           src="https://imagedelivery.net/HqFoVJao5LE850LIcBfxAQ/3f767dfc-8267-475e-fc66-642783920400/public"
@@ -84,9 +81,7 @@ export default function AppSidebar(): JSX.Element {
                           key={session.resource}
                           to="/sessions/$sessionId"
                           params={{
-                            sessionId: session.resource.slice(
-                              "ahp-session:/".length,
-                            ),
+                            sessionId: session.resource.slice("ahp-session:/".length),
                           }}
                           search={{ host }}
                           active={
@@ -96,9 +91,7 @@ export default function AppSidebar(): JSX.Element {
                           title={session.title || "Untitled session"}
                           onClick={closeMobile}
                         >
-                          <span className="truncate">
-                            {session.title || "Untitled session"}
-                          </span>
+                          <span className="truncate">{session.title || "Untitled session"}</span>
                         </SessionLink>
                       ))}
                     {(view.status !== "connected" || !view.sessions.length) && (

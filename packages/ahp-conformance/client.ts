@@ -98,24 +98,15 @@ function expectRootState(snapshot: Snapshot | undefined): RootState {
   return expectState(snapshot, ROOT, RootStateSchema);
 }
 
-function expectSessionState(
-  snapshot: Snapshot | undefined,
-  resource: string,
-): SessionState {
+function expectSessionState(snapshot: Snapshot | undefined, resource: string): SessionState {
   return expectState(snapshot, resource, SessionStateSchema);
 }
 
-function expectChatState(
-  snapshot: Snapshot | undefined,
-  resource: string,
-): ChatState {
+function expectChatState(snapshot: Snapshot | undefined, resource: string): ChatState {
   return expectState(snapshot, resource, ChatStateSchema);
 }
 
-async function expectRpcError<T>(
-  run: () => Promise<T>,
-  code: number,
-): Promise<RpcError> {
+async function expectRpcError<T>(run: () => Promise<T>, code: number): Promise<RpcError> {
   try {
     await run();
   } catch (error) {

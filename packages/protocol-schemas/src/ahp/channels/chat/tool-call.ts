@@ -1,10 +1,5 @@
 import * as z from "zod";
-import {
-  ContentRefSchema,
-  FileEditSchema,
-  StringOrMarkdownSchema,
-  uriSchema,
-} from "../../common";
+import { ContentRefSchema, FileEditSchema, StringOrMarkdownSchema, uriSchema } from "../../common";
 import { McpAuthRequirementSchema } from "../../primitives";
 import { MessageSchema } from "./message";
 
@@ -82,9 +77,7 @@ const ToolCallResultSchema = z.strictObject({
   pastTenseMessage: StringOrMarkdownSchema,
   content: z.array(ToolResultContentSchema).optional(),
   structuredContent: z.record(z.string(), z.unknown()).optional(),
-  error: z
-    .strictObject({ message: z.string(), code: z.string().optional() })
-    .optional(),
+  error: z.strictObject({ message: z.string(), code: z.string().optional() }).optional(),
 });
 
 const toolCallPostConfirmationFields = {
@@ -177,13 +170,9 @@ type ToolCallState = z.output<typeof ToolCallStateSchema>;
 
 type ToolCallRunningState = z.output<typeof ToolCallRunningStateSchema>;
 
-type ToolCallAuthRequiredState = z.output<
-  typeof ToolCallAuthRequiredStateSchema
->;
+type ToolCallAuthRequiredState = z.output<typeof ToolCallAuthRequiredStateSchema>;
 
-type ToolCallPendingConfirmationState = z.output<
-  typeof ToolCallPendingConfirmationStateSchema
->;
+type ToolCallPendingConfirmationState = z.output<typeof ToolCallPendingConfirmationStateSchema>;
 
 type ToolCallPendingResultConfirmationState = z.output<
   typeof ToolCallPendingResultConfirmationStateSchema

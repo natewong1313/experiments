@@ -1,10 +1,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
-import {
-  InitializeResultSchema,
-  ReconnectResultSchema,
-} from "@experiments/protocol-schemas/ahp";
+import { InitializeResultSchema, ReconnectResultSchema } from "@experiments/protocol-schemas/ahp";
 import { expect, it, vi } from "vitest";
 import { ConnectionSchema } from "../src/ahp/protocol";
 import { HostStore } from "../src/state/store";
@@ -69,17 +66,13 @@ it.each([true, false])(
       );
 
       expect(result.protocolVersion).toBe(PROTOCOL_VERSION);
-      expect(result.snapshots.map((snapshot) => snapshot.resource)).toEqual(
-        available,
-      );
+      expect(result.snapshots.map((snapshot) => snapshot.resource)).toEqual(available);
       await runInDurableObject(stub, (instance, ctx) => {
         expect(instance).toBeDefined();
         expect(ctx.getWebSockets()).toHaveLength(1);
 
         for (const socket of ctx.getWebSockets()) {
-          const connection = ConnectionSchema.parse(
-            socket.deserializeAttachment(),
-          );
+          const connection = ConnectionSchema.parse(socket.deserializeAttachment());
 
           expect(connection).toEqual({
             phase: "ready",
@@ -88,14 +81,12 @@ it.each([true, false])(
           });
         }
       });
-      expect(
-        await peer.request("listSessions", { channel: ROOT }),
-      ).toMatchObject({
+      expect(await peer.request("listSessions", { channel: ROOT })).toMatchObject({
         items: [{ resource: SESSION }],
       });
-      await expect(
-        peer.request("subscribe", { channel: missing }),
-      ).rejects.toThrow("Session does not exist");
+      await expect(peer.request("subscribe", { channel: missing })).rejects.toThrow(
+        "Session does not exist",
+      );
     } finally {
       peer.close();
     }
@@ -128,8 +119,7 @@ it.each(["replay", "snapshot"])(
         await peer.request("reconnect", {
           channel: ROOT,
           clientId: "resume-client",
-          lastSeenServerSeq:
-            recovery === "replay" ? sequence : sequence + SECOND_SEQUENCE,
+          lastSeenServerSeq: recovery === "replay" ? sequence : sequence + SECOND_SEQUENCE,
           subscriptions: [SESSION, missing],
         }),
       );
@@ -151,9 +141,7 @@ it.each(["replay", "snapshot"])(
             }
           : {
               type: "snapshot",
-              snapshots: [
-                { resource: SESSION, state: { title: "Before reconnect" } },
-              ],
+              snapshots: [{ resource: SESSION, state: { title: "Before reconnect" } }],
             };
 
       expect(result).toMatchObject(expected);
@@ -162,9 +150,7 @@ it.each(["replay", "snapshot"])(
         expect(instance).toBeDefined();
 
         for (const socket of ctx.getWebSockets()) {
-          const connection = ConnectionSchema.parse(
-            socket.deserializeAttachment(),
-          );
+          const connection = ConnectionSchema.parse(socket.deserializeAttachment());
 
           expect(connection).toEqual({
             phase: "ready",
@@ -265,18 +251,16 @@ it("delivers duplicate acknowledgements only to their origin and removes dispose
       expect(instance).toBeDefined();
 
       for (const socket of ctx.getWebSockets()) {
-        const connection = ConnectionSchema.parse(
-          socket.deserializeAttachment(),
-        );
+        const connection = ConnectionSchema.parse(socket.deserializeAttachment());
 
         expect(connection).toMatchObject({ phase: "ready", subscriptions: [] });
       }
 
       expect(new HostStore(ctx).lookup(SESSION)).toBeNull();
     });
-    await expect(
-      sender.request("subscribe", { channel: chat }),
-    ).rejects.toThrow("Session does not exist");
+    await expect(sender.request("subscribe", { channel: chat })).rejects.toThrow(
+      "Session does not exist",
+    );
   } finally {
     sender.close();
     observer.close();
@@ -297,9 +281,9 @@ it("routes reconnect through replay or snapshots and enforces the connection pha
 
   try {
     expect(await replay.request("ping", { channel: ROOT })).toBeNull();
-    await expect(
-      replay.request("listSessions", { channel: ROOT }),
-    ).rejects.toThrow("Initialize the connection first");
+    await expect(replay.request("listSessions", { channel: ROOT })).rejects.toThrow(
+      "Initialize the connection first",
+    );
     const missing = "ahp-session:/missing";
     expect(
       await replay.request("reconnect", {

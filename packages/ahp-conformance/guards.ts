@@ -1,5 +1,4 @@
-type WireValue =
-  null | boolean | number | string | readonly WireValue[] | WireRecord;
+type WireValue = null | boolean | number | string | readonly WireValue[] | WireRecord;
 
 type WireRecord = { readonly [key: string]: WireValue };
 
@@ -16,11 +15,7 @@ function isWireValue(value: unknown): value is WireValue {
     return true;
   }
 
-  return (
-    typeof value === "boolean" ||
-    typeof value === "number" ||
-    typeof value === "string"
-  );
+  return typeof value === "boolean" || typeof value === "number" || typeof value === "string";
 }
 
 function isWireRecord(value: unknown): value is WireRecord {

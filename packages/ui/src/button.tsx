@@ -8,11 +8,7 @@ type ButtonProps = {
   appName: string;
 };
 
-export function Button({
-  children,
-  className,
-  appName,
-}: ButtonProps): JSX.Element {
+export function Button({ children, className, appName }: ButtonProps): JSX.Element {
   return (
     <button
       className={className}

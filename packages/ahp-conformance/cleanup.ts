@@ -1,7 +1,4 @@
-async function withCleanup<T>(
-  run: () => Promise<T>,
-  cleanup: () => Promise<void>,
-): Promise<T> {
+async function withCleanup<T>(run: () => Promise<T>, cleanup: () => Promise<void>): Promise<T> {
   let result!: T;
   let scenarioFailed = false;
   let scenarioError: unknown;
@@ -24,13 +21,9 @@ async function withCleanup<T>(
   }
 
   if (scenarioFailed && cleanupFailed) {
-    throw new AggregateError(
-      [scenarioError, cleanupError],
-      "Scenario and cleanup both failed",
-      {
-        cause: scenarioError,
-      },
-    );
+    throw new AggregateError([scenarioError, cleanupError], "Scenario and cleanup both failed", {
+      cause: scenarioError,
+    });
   }
 
   if (scenarioFailed) {

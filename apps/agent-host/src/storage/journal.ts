@@ -1,10 +1,6 @@
 import { and, asc, eq, gt, lte, min, sql, inArray } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
-import type {
-  ActionEnvelope,
-  ActionOrigin,
-  StateAction,
-} from "@experiments/protocol-schemas/ahp";
+import type { ActionEnvelope, ActionOrigin, StateAction } from "@experiments/protocol-schemas/ahp";
 import { host, actions, dispatches } from "./schema";
 import { MAX_REPLAY_BYTES, jsonSize } from "../memory";
 import { MAX_FRAME_BYTES } from "../ahp/protocol";
@@ -28,11 +24,7 @@ class ActionJournal {
     return this.checkpoint().seq;
   }
 
-  append(
-    channel: string,
-    action: StateAction,
-    origin?: ActionOrigin,
-  ): ActionEnvelope {
+  append(channel: string, action: StateAction, origin?: ActionOrigin): ActionEnvelope {
     const serverSeq = this.sequence + SEQUENCE_INCREMENT;
 
     const envelope: ActionEnvelope = { channel, action, serverSeq };
@@ -41,18 +33,10 @@ class ActionJournal {
       envelope.origin = origin;
     }
 
-    this.db
-      .update(host)
-      .set({ seq: serverSeq })
-      .where(eq(host.id, HOST_ID))
-      .run();
+    this.db.update(host).set({ seq: serverSeq }).where(eq(host.id, HOST_ID)).run();
 
     if (jsonSize(envelope) > MAX_FRAME_BYTES) {
-      this.db
-        .update(host)
-        .set({ replayFloor: serverSeq })
-        .where(eq(host.id, HOST_ID))
-        .run();
+      this.db.update(host).set({ replayFloor: serverSeq }).where(eq(host.id, HOST_ID)).run();
     } else {
       this.db.insert(actions).values({ seq: serverSeq, envelope }).run();
     }
@@ -88,10 +72,7 @@ class ActionJournal {
 
     const match = and(
       gt(actions.seq, since),
-      inArray(
-        sql<string>`json_extract(${actions.envelope}, '$.channel')`,
-        channels,
-      ),
+      inArray(sql<string>`json_extract(${actions.envelope}, '$.channel')`, channels),
     );
 
     const bytes =
@@ -116,9 +97,7 @@ class ActionJournal {
       .map((row) => row.envelope);
   }
 
-  previous(
-    origin: ActionOrigin,
-  ): { frame: string; envelope: ActionEnvelope } | null {
+  previous(origin: ActionOrigin): { frame: string; envelope: ActionEnvelope } | null {
     const match = and(
       eq(dispatches.clientId, origin.clientId),
       eq(dispatches.clientSeq, origin.clientSeq),

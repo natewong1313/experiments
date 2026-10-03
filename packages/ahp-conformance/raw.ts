@@ -8,10 +8,7 @@ import {
   type JsonRpcReply,
   type JsonRpcRequest,
 } from "@experiments/protocol-schemas";
-import {
-  JsonRpcErrorCodes,
-  PROTOCOL_VERSION,
-} from "@microsoft/agent-host-protocol";
+import { JsonRpcErrorCodes, PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { isWireRecord, isWireValue, type WireValue } from "./guards";
 
 const ROOT = "ahp-root://";
@@ -72,10 +69,9 @@ function decodeMessage(raw: string, index: number): ReceivedMessage {
   try {
     value = JSON.parse(raw);
   } catch (error) {
-    throw new Error(
-      `AHP WebSocket text frame at receive index ${index} was not JSON`,
-      { cause: error },
-    );
+    throw new Error(`AHP WebSocket text frame at receive index ${index} was not JSON`, {
+      cause: error,
+    });
   }
 
   const notification = JsonRpcNotificationSchema.safeParse(value);
@@ -88,9 +84,7 @@ function decodeMessage(raw: string, index: number): ReceivedMessage {
     const parsed = ActionEnvelopeSchema.safeParse(notification.data.params);
 
     if (!parsed.success) {
-      throw new Error(
-        `Malformed AHP action at receive index ${index}: ${parsed.error.message}`,
-      );
+      throw new Error(`Malformed AHP action at receive index ${index}: ${parsed.error.message}`);
     }
 
     const action = parsed.data;
@@ -113,9 +107,7 @@ function decodeMessage(raw: string, index: number): ReceivedMessage {
   const reply = JsonRpcReplySchema.safeParse(value);
 
   if (!reply.success) {
-    throw new Error(
-      `Malformed JSON-RPC message at receive index ${index}: ${reply.error.message}`,
-    );
+    throw new Error(`Malformed JSON-RPC message at receive index ${index}: ${reply.error.message}`);
   }
 
   return { index, raw, kind: "reply", message: reply.data };
@@ -169,8 +161,7 @@ class AhpConnection {
   private readonly transcript: ReceivedMessage[] = [];
   private readonly requests: Map<number, Pending<JsonRpcReply>> = new Map();
   private readonly actionWaits: Set<ActionWait> = new Set();
-  private readonly closeWaits: Map<(closed: boolean) => void, NodeJS.Timeout> =
-    new Map();
+  private readonly closeWaits: Map<(closed: boolean) => void, NodeJS.Timeout> = new Map();
   private opening?: Pending<void>;
   private failure?: Error;
   private closing?: Promise<void>;
@@ -225,9 +216,7 @@ class AhpConnection {
 
   private readonly onClose = (event: CloseEvent): void => {
     this.fail(
-      new Error(
-        `Connection closed (code ${event.code}${event.reason ? `: ${event.reason}` : ""})`,
-      ),
+      new Error(`Connection closed (code ${event.code}${event.reason ? `: ${event.reason}` : ""})`),
     );
     this.removeSocketListeners();
     this.settleCloseWaits(true);
@@ -321,9 +310,7 @@ class AhpConnection {
 
     try {
       if (text === null) {
-        throw new Error(
-          `AHP WebSocket message at receive index ${index} was not a text frame`,
-        );
+        throw new Error(`AHP WebSocket message at receive index ${index} was not a text frame`);
       }
 
       const received = decodeMessage(text, index);
@@ -389,9 +376,7 @@ class AhpConnection {
         this.actionWaits.delete(wait);
         clearTimeout(wait.timer);
         wait.reject(
-          error instanceof Error
-            ? error
-            : new Error("Action predicate failed", { cause: error }),
+          error instanceof Error ? error : new Error("Action predicate failed", { cause: error }),
         );
       }
     }
@@ -417,11 +402,7 @@ class AhpConnection {
       try {
         this.socket.send(frame);
       } catch (error) {
-        this.fail(
-          error instanceof Error
-            ? error
-            : new Error(`Failed to send ${method}`),
-        );
+        this.fail(error instanceof Error ? error : new Error(`Failed to send ${method}`));
       }
     });
   }
@@ -433,8 +414,7 @@ class AhpConnection {
     try {
       this.socket.send(frame);
     } catch (error) {
-      const failure =
-        error instanceof Error ? error : new Error(`Failed to send ${method}`);
+      const failure = error instanceof Error ? error : new Error(`Failed to send ${method}`);
 
       this.fail(failure);
       throw failure;

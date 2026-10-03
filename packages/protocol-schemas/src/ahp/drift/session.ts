@@ -29,10 +29,7 @@ import type {
   AnnotationsStateSchema,
   AnnotationsSummarySchema,
 } from "../channels/annotations";
-import type {
-  ResourceChangeSchema,
-  ResourceWatchStateSchema,
-} from "../channels/resource-watch";
+import type { ResourceChangeSchema, ResourceWatchStateSchema } from "../channels/resource-watch";
 import type { CustomizationSchema, McpServerStateSchema } from "../primitives";
 import type {
   SessionActiveClientSchema,
@@ -41,74 +38,39 @@ import type {
   SessionSummarySchema,
 } from "../channels/session/state";
 
-type SameKeys<T extends object, U extends object> = [
-  Exclude<keyof T, keyof U>,
-] extends [never]
+type SameKeys<T extends object, U extends object> = [Exclude<keyof T, keyof U>] extends [never]
   ? [Exclude<keyof U, keyof T>] extends [never]
     ? true
     : false
   : false;
 
-type Drift<Upstream extends object, Ours extends object> = SameKeys<
-  Upstream,
-  Ours
->;
+type Drift<Upstream extends object, Ours extends object> = SameKeys<Upstream, Ours>;
 
 type Expect<T extends true> = T;
 
 type ChangesetDrift = Drift<Changeset, z.output<typeof ChangesetSchema>>;
 
-type ChangesetFileDrift = Drift<
-  ChangesetFile,
-  z.output<typeof ChangesetFileSchema>
->;
+type ChangesetFileDrift = Drift<ChangesetFile, z.output<typeof ChangesetFileSchema>>;
 
-type ChangesetOperationDrift = Drift<
-  ChangesetOperation,
-  z.output<typeof ChangesetOperationSchema>
->;
+type ChangesetOperationDrift = Drift<ChangesetOperation, z.output<typeof ChangesetOperationSchema>>;
 
-type ChangesetStateDrift = Drift<
-  ChangesetState,
-  z.output<typeof ChangesetStateSchema>
->;
+type ChangesetStateDrift = Drift<ChangesetState, z.output<typeof ChangesetStateSchema>>;
 
-type AnnotationsSummaryDrift = Drift<
-  AnnotationsSummary,
-  z.output<typeof AnnotationsSummarySchema>
->;
+type AnnotationsSummaryDrift = Drift<AnnotationsSummary, z.output<typeof AnnotationsSummarySchema>>;
 
 type AnnotationDrift = Drift<Annotation, z.output<typeof AnnotationSchema>>;
 
-type AnnotationEntryDrift = Drift<
-  AnnotationEntry,
-  z.output<typeof AnnotationEntrySchema>
->;
+type AnnotationEntryDrift = Drift<AnnotationEntry, z.output<typeof AnnotationEntrySchema>>;
 
-type AnnotationsStateDrift = Drift<
-  AnnotationsState,
-  z.output<typeof AnnotationsStateSchema>
->;
+type AnnotationsStateDrift = Drift<AnnotationsState, z.output<typeof AnnotationsStateSchema>>;
 
-type ResourceChangeDrift = Drift<
-  ResourceChange,
-  z.output<typeof ResourceChangeSchema>
->;
+type ResourceChangeDrift = Drift<ResourceChange, z.output<typeof ResourceChangeSchema>>;
 
-type ResourceWatchStateDrift = Drift<
-  ResourceWatchState,
-  z.output<typeof ResourceWatchStateSchema>
->;
+type ResourceWatchStateDrift = Drift<ResourceWatchState, z.output<typeof ResourceWatchStateSchema>>;
 
-type CustomizationDrift = Drift<
-  Customization,
-  z.output<typeof CustomizationSchema>
->;
+type CustomizationDrift = Drift<Customization, z.output<typeof CustomizationSchema>>;
 
-type McpServerStateDrift = Drift<
-  McpServerState,
-  z.output<typeof McpServerStateSchema>
->;
+type McpServerStateDrift = Drift<McpServerState, z.output<typeof McpServerStateSchema>>;
 
 type SessionActiveClientDrift = Drift<
   SessionActiveClient,
@@ -120,15 +82,9 @@ type SessionInputRequestDrift = Drift<
   z.output<typeof SessionInputRequestSchema>
 >;
 
-type SessionStateDrift = Drift<
-  SessionState,
-  z.output<typeof SessionStateSchema>
->;
+type SessionStateDrift = Drift<SessionState, z.output<typeof SessionStateSchema>>;
 
-type SessionSummaryDrift = Drift<
-  SessionSummary,
-  z.output<typeof SessionSummarySchema>
->;
+type SessionSummaryDrift = Drift<SessionSummary, z.output<typeof SessionSummarySchema>>;
 
 type _Session = [
   Expect<ChangesetDrift>,

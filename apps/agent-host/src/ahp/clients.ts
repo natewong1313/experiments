@@ -11,16 +11,9 @@ import {
   RpcCodes,
   type Connection,
 } from "./protocol";
-import type {
-  ActionEnvelope,
-  SessionSummary,
-} from "@experiments/protocol-schemas/ahp";
+import type { ActionEnvelope, SessionSummary } from "@experiments/protocol-schemas/ahp";
 import type { Publication } from "../state/store";
-import {
-  MAX_SNAPSHOT_BYTES,
-  RESPONSE_RESERVE_BYTES,
-  checkBytes,
-} from "../memory";
+import { MAX_SNAPSHOT_BYTES, RESPONSE_RESERVE_BYTES, checkBytes } from "../memory";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
@@ -62,10 +55,7 @@ type AhpClientsParams = {
 };
 
 class AhpClients {
-  private readonly ctx: Pick<
-    DurableObjectState,
-    "acceptWebSocket" | "getWebSockets"
-  >;
+  private readonly ctx: Pick<DurableObjectState, "acceptWebSocket" | "getWebSockets">;
 
   constructor({ ctx }: AhpClientsParams) {
     this.ctx = ctx;
@@ -89,10 +79,7 @@ class AhpClients {
   }
 
   close(socket: WebSocket, code: number, reason: string): void {
-    socket.close(
-      code === NO_CLOSE_STATUS || code === ABNORMAL_CLOSE ? NORMAL_CLOSE : code,
-      reason,
-    );
+    socket.close(code === NO_CLOSE_STATUS || code === ABNORMAL_CLOSE ? NORMAL_CLOSE : code, reason);
   }
 
   error(socket: WebSocket): void {
@@ -174,14 +161,8 @@ class AhpClients {
     const unique = AttachmentLimitSchema.parse([...new Set(subscriptions)]);
     const attachment = { phase: "ready", clientId, subscriptions: unique };
 
-    if (
-      new TextEncoder().encode(JSON.stringify(attachment)).byteLength >
-      MAX_ATTACHMENT_BYTES
-    ) {
-      throw new ProtocolError(
-        RpcCodes.params,
-        "Subscriptions exceed the connection storage limit",
-      );
+    if (new TextEncoder().encode(JSON.stringify(attachment)).byteLength > MAX_ATTACHMENT_BYTES) {
+      throw new ProtocolError(RpcCodes.params, "Subscriptions exceed the connection storage limit");
     }
 
     return unique;
@@ -193,11 +174,7 @@ class AhpClients {
     for (const existing of this.ctx.getWebSockets()) {
       const client = this.connection(existing);
 
-      if (
-        existing !== socket &&
-        client.phase === "ready" &&
-        client.clientId === clientId
-      ) {
+      if (existing !== socket && client.phase === "ready" && client.clientId === clientId) {
         existing.close(VERSION_REJECT_CLOSE, "Client reconnected elsewhere");
       }
     }
@@ -227,9 +204,7 @@ class AhpClients {
       if (client.phase === "ready") {
         socket.serializeAttachment({
           ...client,
-          subscriptions: client.subscriptions.filter(
-            (uri) => !channels.includes(uri),
-          ),
+          subscriptions: client.subscriptions.filter((uri) => !channels.includes(uri)),
         });
       }
     }

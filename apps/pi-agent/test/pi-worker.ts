@@ -59,9 +59,7 @@ export class TestHarness extends PiAgent {
 
         if (last?.role === "user") {
           text = Array.isArray(last.content)
-            ? last.content
-                .flatMap((part) => (part.type === "text" ? [part.text] : []))
-                .join("")
+            ? last.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("")
             : last.content;
         }
 

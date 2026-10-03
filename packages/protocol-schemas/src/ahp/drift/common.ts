@@ -24,30 +24,19 @@ import type {
   UsageInfoSchema,
 } from "../common";
 
-type SameKeys<T extends object, U extends object> = [
-  Exclude<keyof T, keyof U>,
-] extends [never]
+type SameKeys<T extends object, U extends object> = [Exclude<keyof T, keyof U>] extends [never]
   ? [Exclude<keyof U, keyof T>] extends [never]
     ? true
     : false
   : false;
 
-type Drift<Upstream extends object, Ours extends object> = SameKeys<
-  Upstream,
-  Ours
->;
+type Drift<Upstream extends object, Ours extends object> = SameKeys<Upstream, Ours>;
 
 type Expect<T extends true> = T;
 
-type ConfigPropertyDrift = Drift<
-  UpstreamConfigProperty,
-  z.output<typeof ConfigPropertySchema>
->;
+type ConfigPropertyDrift = Drift<UpstreamConfigProperty, z.output<typeof ConfigPropertySchema>>;
 
-type ConfigSchemaDrift = Drift<
-  ConfigSchema,
-  z.output<typeof ConfigSchemaSchema>
->;
+type ConfigSchemaDrift = Drift<ConfigSchema, z.output<typeof ConfigSchemaSchema>>;
 
 type ContentRefDrift = Drift<ContentRef, z.output<typeof ContentRefSchema>>;
 
@@ -64,10 +53,7 @@ type ProtectedResourceMetadataDrift = Drift<
 
 type TextRangeDrift = Drift<TextRange, z.output<typeof TextRangeSchema>>;
 
-type TextSelectionDrift = Drift<
-  TextSelection,
-  z.output<typeof TextSelectionSchema>
->;
+type TextSelectionDrift = Drift<TextSelection, z.output<typeof TextSelectionSchema>>;
 
 type UsageInfoDrift = Drift<UsageInfo, z.output<typeof UsageInfoSchema>>;
 

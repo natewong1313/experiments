@@ -36,13 +36,9 @@ describe("raw AHP connection over WebSocket", () => {
           }),
         );
         socket.on("message", (data) => {
-          const request = JsonRpcRequestSchema.parse(
-            JSON.parse(data.toString()),
-          );
+          const request = JsonRpcRequestSchema.parse(JSON.parse(data.toString()));
 
-          socket.send(
-            JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {} }),
-          );
+          socket.send(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {} }));
         });
       },
       async (url) => {
@@ -79,9 +75,7 @@ describe("raw AHP connection over WebSocket", () => {
     await withPeer(
       (socket) => {
         socket.on("message", (data) => {
-          const request = JsonRpcRequestSchema.parse(
-            JSON.parse(data.toString()),
-          );
+          const request = JsonRpcRequestSchema.parse(JSON.parse(data.toString()));
 
           const envelopes =
             request.method === "old"
@@ -112,9 +106,7 @@ describe("raw AHP connection over WebSocket", () => {
             );
           }
 
-          socket.send(
-            JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {} }),
-          );
+          socket.send(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {} }));
         });
       },
       async (url) => {
@@ -150,13 +142,9 @@ describe("raw AHP connection over WebSocket", () => {
     await withPeer(
       (socket) => {
         socket.on("message", (data) => {
-          const request = JsonRpcRequestSchema.parse(
-            JSON.parse(data.toString()),
-          );
+          const request = JsonRpcRequestSchema.parse(JSON.parse(data.toString()));
 
-          socket.send(
-            JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {} }),
-          );
+          socket.send(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {} }));
         });
       },
       async (url) => {
@@ -291,9 +279,7 @@ describe("raw AHP connection over WebSocket", () => {
             { index: 5, kind: "reply" },
           ]);
 
-          const reverse = connection.events.find(
-            (event) => event.kind === "request",
-          );
+          const reverse = connection.events.find((event) => event.kind === "request");
 
           expect(reverse).toMatchObject({
             message: {
@@ -343,67 +329,62 @@ describe("raw AHP connection failures", () => {
       frame: Buffer.from('{"jsonrpc":"2.0"}'),
       error: /not a text frame/,
     },
-  ])(
-    "fails pending and future operations on $name",
-    async ({ frame, error }) => {
-      await withPeer(
-        (socket) => {
-          let requests = 0;
-          socket.on("message", () => {
-            requests += 1;
+  ])("fails pending and future operations on $name", async ({ frame, error }) => {
+    await withPeer(
+      (socket) => {
+        let requests = 0;
+        socket.on("message", () => {
+          requests += 1;
 
-            if (requests === 2) {
-              socket.send(frame);
-            }
-          });
-        },
-        async (url) => {
-          const connection = await AhpConnection.open(url);
-
-          try {
-            const outcomes = await Promise.allSettled([
-              connection.waitForAction(CHAT, "chat/delta", {
-                after: 0,
-                timeoutMs: 1000,
-              }),
-              connection.request("first", {}),
-              connection.request("second", {}),
-            ]);
-
-            for (const outcome of outcomes) {
-              expect(outcome).toMatchObject({
-                status: "rejected",
-                reason: { message: expect.stringMatching(error) },
-              });
-            }
-
-            await expect(connection.request("later", {})).rejects.toThrow(
-              error,
-            );
-            await expect(
-              connection.waitForAction(CHAT, "chat/delta", {
-                after: 0,
-                timeoutMs: 1000,
-              }),
-            ).rejects.toThrow(error);
-            expect(() => {
-              connection.notify("dispatchAction", {});
-            }).toThrow(error);
-            expect(connection.events).toMatchObject([
-              {
-                index: 1,
-                kind: "invalid",
-                raw: Buffer.isBuffer(frame) ? "[non-text frame]" : frame,
-                error: { message: expect.stringMatching(error) },
-              },
-            ]);
-          } finally {
-            await connection.close();
+          if (requests === 2) {
+            socket.send(frame);
           }
-        },
-      );
-    },
-  );
+        });
+      },
+      async (url) => {
+        const connection = await AhpConnection.open(url);
+
+        try {
+          const outcomes = await Promise.allSettled([
+            connection.waitForAction(CHAT, "chat/delta", {
+              after: 0,
+              timeoutMs: 1000,
+            }),
+            connection.request("first", {}),
+            connection.request("second", {}),
+          ]);
+
+          for (const outcome of outcomes) {
+            expect(outcome).toMatchObject({
+              status: "rejected",
+              reason: { message: expect.stringMatching(error) },
+            });
+          }
+
+          await expect(connection.request("later", {})).rejects.toThrow(error);
+          await expect(
+            connection.waitForAction(CHAT, "chat/delta", {
+              after: 0,
+              timeoutMs: 1000,
+            }),
+          ).rejects.toThrow(error);
+          expect(() => {
+            connection.notify("dispatchAction", {});
+          }).toThrow(error);
+          expect(connection.events).toMatchObject([
+            {
+              index: 1,
+              kind: "invalid",
+              raw: Buffer.isBuffer(frame) ? "[non-text frame]" : frame,
+              error: { message: expect.stringMatching(error) },
+            },
+          ]);
+        } finally {
+          await connection.close();
+        }
+      },
+    );
+  });
 
   test.each(["normal", "abrupt"])(
     "settles pending and future operations after %s closure",
@@ -446,9 +427,7 @@ describe("raw AHP connection failures", () => {
             }
 
             expect(await closed).toBe(true);
-            await expect(connection.request("later", {})).rejects.toThrow(
-              /Connection closed/,
-            );
+            await expect(connection.request("later", {})).rejects.toThrow(/Connection closed/);
             await expect(
               connection.waitForAction(CHAT, "chat/delta", {
                 after: 0,
@@ -467,9 +446,7 @@ describe("raw AHP connection failures", () => {
     await withPeer(
       (socket) => {
         socket.on("message", (data) => {
-          const request = JsonRpcRequestSchema.parse(
-            JSON.parse(data.toString()),
-          );
+          const request = JsonRpcRequestSchema.parse(JSON.parse(data.toString()));
 
           socket.send(
             JSON.stringify({
@@ -496,9 +473,7 @@ describe("raw AHP connection failures", () => {
           expect(reply).toMatchObject({ error: { code: -32_005 } });
           expect(await connection.waitForClose(1000)).toBe(true);
           expect(await connection.waitForClose(1000)).toBe(true);
-          await expect(connection.request("ping", {})).rejects.toThrow(
-            /Connection closed/,
-          );
+          await expect(connection.request("ping", {})).rejects.toThrow(/Connection closed/);
         } finally {
           await connection.close();
         }
@@ -546,9 +521,7 @@ describe("raw AHP connection failures", () => {
             kind: "notification",
           });
           expect(connection.checkpoint).toBe(10_001);
-          await expect(connection.request("later", {})).rejects.toThrow(
-            /recorder overflow/,
-          );
+          await expect(connection.request("later", {})).rejects.toThrow(/recorder overflow/);
           await expect(
             connection.waitForAction(CHAT, "chat/delta", {
               after: 0,

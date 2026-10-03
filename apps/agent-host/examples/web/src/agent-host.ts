@@ -1,8 +1,5 @@
 import { AgentHost as BaseAgentHost } from "@experiments/agent-host";
-import type {
-  AgentConfig,
-  AcpConnectionOptions,
-} from "@experiments/agent-host";
+import type { AgentConfig, AcpConnectionOptions } from "@experiments/agent-host";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
@@ -23,10 +20,10 @@ class AgentHost extends BaseAgentHost<Env> {
     sessionKey,
     signal,
   }: AcpConnectionOptions): Promise<WebSocket> {
-    const response = await this.env.PI_AGENT.getByName(sessionKey).fetch(
-      "https://agent/acp",
-      { headers: { Upgrade: "websocket" }, signal },
-    );
+    const response = await this.env.PI_AGENT.getByName(sessionKey).fetch("https://agent/acp", {
+      headers: { Upgrade: "websocket" },
+      signal,
+    });
 
     const socket = response.webSocket;
 

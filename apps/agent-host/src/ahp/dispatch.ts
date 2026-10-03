@@ -67,10 +67,7 @@ class ActionDispatch {
       this.store.hasTurn(record.chatUri, turnId),
     );
 
-    if (
-      input.action.type === "chat/turnStarted" &&
-      this.turns.isRunning(record)
-    ) {
+    if (input.action.type === "chat/turnStarted" && this.turns.isRunning(record)) {
       reason = "The previous agent turn is still stopping";
     }
 

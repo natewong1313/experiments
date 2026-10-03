@@ -1,16 +1,5 @@
-import {
-  blob,
-  integer,
-  primaryKey,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
-import type {
-  ActionEnvelope,
-  RootState,
-  SessionState,
-} from "@experiments/protocol-schemas/ahp";
+import { blob, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import type { ActionEnvelope, RootState, SessionState } from "@experiments/protocol-schemas/ahp";
 
 const host = sqliteTable("host", {
   id: integer("id").primaryKey(),
@@ -31,9 +20,7 @@ const sessions = sqliteTable("sessions", {
 
 const actions = sqliteTable("actions", {
   seq: integer("seq").primaryKey(),
-  envelope: text("envelope", { mode: "json" })
-    .$type<ActionEnvelope>()
-    .notNull(),
+  envelope: text("envelope", { mode: "json" }).$type<ActionEnvelope>().notNull(),
 });
 
 const dispatches = sqliteTable(
@@ -42,9 +29,7 @@ const dispatches = sqliteTable(
     clientId: text("client_id").notNull(),
     clientSeq: integer("client_seq").notNull(),
     frame: text("frame").notNull(),
-    envelope: text("envelope", { mode: "json" })
-      .$type<ActionEnvelope>()
-      .notNull(),
+    envelope: text("envelope", { mode: "json" }).$type<ActionEnvelope>().notNull(),
   },
   (table) => [primaryKey({ columns: [table.clientId, table.clientSeq] })],
 );
@@ -58,10 +43,7 @@ const turns = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.chatUri, table.turnId] }),
-    uniqueIndex("turns_chat_uri_ordinal_unique").on(
-      table.chatUri,
-      table.ordinal,
-    ),
+    uniqueIndex("turns_chat_uri_ordinal_unique").on(table.chatUri, table.ordinal),
   ],
 );
 

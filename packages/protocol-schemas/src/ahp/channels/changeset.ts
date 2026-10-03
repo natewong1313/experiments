@@ -1,9 +1,5 @@
 import * as z from "zod";
-import {
-  ErrorInfoSchema,
-  FileEditSchema,
-  StringOrMarkdownSchema,
-} from "../common";
+import { ErrorInfoSchema, FileEditSchema, StringOrMarkdownSchema } from "../common";
 
 const ChangesetSchema = z.strictObject({
   label: z.string(),

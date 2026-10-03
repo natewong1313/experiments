@@ -34,10 +34,7 @@ an `X-Session-Key` header to route back to the same backend after reconnecting:
 
 ```ts
 import { AgentHost } from "@experiments/agent-host";
-import type {
-  AgentConfig,
-  AcpConnectionOptions,
-} from "@experiments/agent-host";
+import type { AgentConfig, AcpConnectionOptions } from "@experiments/agent-host";
 
 type Env = {
   ACP_ENDPOINT: string;

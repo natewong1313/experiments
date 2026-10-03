@@ -40,10 +40,7 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => {
   ]);
 });
 
-const StringOrMarkdownSchema = z.union([
-  z.string(),
-  z.strictObject({ markdown: z.string() }),
-]);
+const StringOrMarkdownSchema = z.union([z.string(), z.strictObject({ markdown: z.string() })]);
 
 const IconSchema = z.strictObject({
   src: uriSchema,
@@ -177,9 +174,7 @@ type StringOrMarkdown = z.output<typeof StringOrMarkdownSchema>;
 
 type Icon = z.output<typeof IconSchema>;
 
-type ProtectedResourceMetadata = z.output<
-  typeof ProtectedResourceMetadataSchema
->;
+type ProtectedResourceMetadata = z.output<typeof ProtectedResourceMetadataSchema>;
 
 type TextPosition = z.output<typeof TextPositionSchema>;
 

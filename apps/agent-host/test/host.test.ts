@@ -59,9 +59,7 @@ async function chatSnapshot({
   peer: Peer;
   chat: string;
 }): Promise<ReturnType<typeof ChatStateSchema.parse>> {
-  const result = SubscribeResultSchema.parse(
-    await peer.request("subscribe", { channel: chat }),
-  );
+  const result = SubscribeResultSchema.parse(await peer.request("subscribe", { channel: chat }));
 
   return ChatStateSchema.parse(result.snapshot?.state);
 }
@@ -149,11 +147,7 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
         message: { text: "Read the file", origin: { kind: "user" } },
       });
       await vi.waitFor(() => {
-        expect(
-          peer.actions.some(
-            ({ action }) => action.type === "chat/turnComplete",
-          ),
-        ).toBe(true);
+        expect(peer.actions.some(({ action }) => action.type === "chat/turnComplete")).toBe(true);
       });
       const state = await chatSnapshot({ peer, chat });
       expect(state.activeTurn).toBeUndefined();
@@ -191,9 +185,7 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
         },
       ]);
       expect(
-        peer.actions
-          .map(({ action }) => action)
-          .filter((action) => action.type === "chat/delta"),
+        peer.actions.map(({ action }) => action).filter((action) => action.type === "chat/delta"),
       ).toEqual([
         {
           type: "chat/delta",
@@ -257,9 +249,7 @@ it.each([
         });
         const state = await chatSnapshot({ peer, chat });
         expect(state.activeTurn).toBeUndefined();
-        expect(state.turns).toMatchObject([
-          { id: "mapped-turn", state: "error" },
-        ]);
+        expect(state.turns).toMatchObject([{ id: "mapped-turn", state: "error" }]);
       },
     });
   },
@@ -271,9 +261,7 @@ it("declines ACP permission requests and publishes agent cancellation", async ()
       const permission = await connection.requestPermission({
         sessionId: request.sessionId,
         toolCall: { toolCallId: "read-file", title: "Read file", kind: "read" },
-        options: [
-          { optionId: "allow-read", name: "Allow reading", kind: "allow_once" },
-        ],
+        options: [{ optionId: "allow-read", name: "Allow reading", kind: "allow_once" }],
       });
 
       expect(permission.outcome).toEqual({ outcome: "cancelled" });
@@ -287,16 +275,10 @@ it("declines ACP permission requests and publishes agent cancellation", async ()
         message: { text: "Hello", origin: { kind: "user" } },
       });
       await vi.waitFor(() => {
-        expect(
-          peer.actions.some(
-            ({ action }) => action.type === "chat/turnCancelled",
-          ),
-        ).toBe(true);
+        expect(peer.actions.some(({ action }) => action.type === "chat/turnCancelled")).toBe(true);
       });
       const state = await chatSnapshot({ peer, chat });
-      expect(state.turns).toMatchObject([
-        { id: "mapped-turn", state: "cancelled" },
-      ]);
+      expect(state.turns).toMatchObject([{ id: "mapped-turn", state: "cancelled" }]);
     },
   });
 });
@@ -347,9 +329,7 @@ it("sends client cancellation to the ACP agent", async () => {
           expect(cancelled).toBe(true);
         });
         const state = await chatSnapshot({ peer, chat });
-        expect(state.turns).toMatchObject([
-          { id: "mapped-turn", state: "cancelled" },
-        ]);
+        expect(state.turns).toMatchObject([{ id: "mapped-turn", state: "cancelled" }]);
       },
     });
   } finally {
@@ -358,9 +338,9 @@ it("sends client cancellation to the ACP agent", async () => {
 });
 
 it("rejects attachments through the prompt mapper before invoking ACP", async () => {
-  const prompt = vi.fn<() => Promise<PromptResponse>>(
-    async (): Promise<PromptResponse> => ({ stopReason: "end_turn" }),
-  );
+  const prompt = vi.fn<() => Promise<PromptResponse>>(async (): Promise<PromptResponse> => ({
+    stopReason: "end_turn",
+  }));
 
   await withAcpAgent({
     prompt,
@@ -419,16 +399,10 @@ it("ignores unsupported updates and chunks for another ACP session", async () =>
         message: { text: "Hello", origin: { kind: "user" } },
       });
       await vi.waitFor(() => {
-        expect(
-          peer.actions.some(
-            ({ action }) => action.type === "chat/turnComplete",
-          ),
-        ).toBe(true);
+        expect(peer.actions.some(({ action }) => action.type === "chat/turnComplete")).toBe(true);
       });
       const state = await chatSnapshot({ peer, chat });
-      expect(state.turns).toMatchObject([
-        { state: "complete", responseParts: [] },
-      ]);
+      expect(state.turns).toMatchObject([{ state: "complete", responseParts: [] }]);
     },
   });
 });
@@ -453,11 +427,7 @@ it("loads the bound ACP session without publishing its historical updates", asyn
         message: { text: "First", origin: { kind: "user" } },
       });
       await vi.waitFor(() => {
-        expect(
-          peer.actions.some(
-            ({ action }) => action.type === "chat/turnComplete",
-          ),
-        ).toBe(true);
+        expect(peer.actions.some(({ action }) => action.type === "chat/turnComplete")).toBe(true);
       });
       await disconnect();
       dispatchTurn({
@@ -470,9 +440,7 @@ it("loads the bound ACP session without publishing its historical updates", asyn
       await vi.waitFor(() => {
         expect(
           peer.actions.some(
-            ({ action }) =>
-              action.type === "chat/turnComplete" &&
-              action.turnId === "next-turn",
+            ({ action }) => action.type === "chat/turnComplete" && action.turnId === "next-turn",
           ),
         ).toBe(true);
       });
@@ -522,9 +490,7 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
     await vi.waitFor(() => {
       expect(peer.actions).toHaveLength(1);
     });
-    expect(peer.actions[0]?.rejectionReason).toBe(
-      "Turn requires a valid start time",
-    );
+    expect(peer.actions[0]?.rejectionReason).toBe("Turn requires a valid start time");
     peer.notify("dispatchAction", params);
     await vi.waitFor(() => {
       expect(peer.actions).toHaveLength(CREATION_LIMIT);
@@ -549,38 +515,33 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
   const sockets: WebSocket[] = [];
   const servers: AgentSideConnection[] = [];
 
-  const fetchSpy = vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async (): Promise<Response> => {
-      const { 0: client, 1: server } = new WebSocketPair();
-      const sessionId = crypto.randomUUID();
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (): Promise<Response> => {
+    const { 0: client, 1: server } = new WebSocketPair();
+    const sessionId = crypto.randomUUID();
 
-      const agent: Agent = {
-        initialize: async () => ({
-          protocolVersion: PROTOCOL_VERSION,
-          agentCapabilities: { loadSession: true },
-        }),
-        newSession: async () => ({ sessionId }),
-        authenticate: async () => ({}),
-        loadSession: async () => ({}),
-        prompt: async () => ({ stopReason: "end_turn" }),
-        cancel: async (): Promise<void> => {},
-      };
+    const agent: Agent = {
+      initialize: async () => ({
+        protocolVersion: PROTOCOL_VERSION,
+        agentCapabilities: { loadSession: true },
+      }),
+      newSession: async () => ({ sessionId }),
+      authenticate: async () => ({}),
+      loadSession: async () => ({}),
+      prompt: async () => ({ stopReason: "end_turn" }),
+      cancel: async (): Promise<void> => {},
+    };
 
-      const connection = new AgentSideConnection(
-        () => agent,
-        websocketStream(server),
-      );
+    const connection = new AgentSideConnection(() => agent, websocketStream(server));
 
-      server.accept();
-      sockets.push(server);
-      servers.push(connection);
+    server.accept();
+    sockets.push(server);
+    servers.push(connection);
 
-      return new Response(null, {
-        status: SWITCHING_PROTOCOLS,
-        webSocket: client,
-      });
+    return new Response(null, {
+      status: SWITCHING_PROTOCOLS,
+      webSocket: client,
     });
+  });
 
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
 
@@ -656,8 +617,7 @@ it("ends an oversized streamed turn with a durable error and releases the agent"
         expect(
           peer.actions.some(
             ({ action }) =>
-              action.type === "chat/error" &&
-              action.part.error.errorType === "resource-limit",
+              action.type === "chat/error" && action.part.error.errorType === "resource-limit",
           ),
         ).toBe(true);
       });
@@ -670,9 +630,7 @@ it("ends an oversized streamed turn with a durable error and releases the agent"
       expect(state.activeTurn).toBeUndefined();
       expect(state.turns).toHaveLength(1);
       expect(state.turns[0]?.state).toBe("error");
-      expect(
-        peer.actions.some(({ action }) => action.type === "chat/turnComplete"),
-      ).toBe(false);
+      expect(peer.actions.some(({ action }) => action.type === "chat/turnComplete")).toBe(false);
     },
   });
 });

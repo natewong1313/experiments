@@ -10,9 +10,7 @@ function Sessions(): JSX.Element {
         <Text as="h1" variant="heading" size="lg">
           Sessions
         </Text>
-        <Text variant="secondary">
-          View and create sessions on your selected agent host.
-        </Text>
+        <Text variant="secondary">View and create sessions on your selected agent host.</Text>
       </div>
       <SessionList />
     </main>

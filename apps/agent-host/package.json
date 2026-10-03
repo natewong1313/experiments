@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "oxfmt --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "db:generate": "drizzle-kit generate",
     "check-types": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "lint": "oxlint --deny-warnings --type-aware src test vitest.config.ts drizzle.config.ts",

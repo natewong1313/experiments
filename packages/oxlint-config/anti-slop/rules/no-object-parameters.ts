@@ -55,10 +55,7 @@ export const noObjectParametersRule = defineRule({
           node: annotation.typeAnnotation,
           messageId: "objectParameter",
           data: {
-            parameter: functionParameterBindingName(
-              parameter,
-              context.sourceCode,
-            ),
+            parameter: functionParameterBindingName(parameter, context.sourceCode),
           },
         });
       }
@@ -66,10 +63,7 @@ export const noObjectParametersRule = defineRule({
 
     return {
       Program(node) {
-        environment = createTypeAliasEnvironment(
-          node,
-          context.sourceCode.visitorKeys,
-        );
+        environment = createTypeAliasEnvironment(node, context.sourceCode.visitorKeys);
       },
       ArrowFunctionExpression: checkParameters,
       FunctionDeclaration: checkParameters,

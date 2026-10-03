@@ -1,26 +1,11 @@
 import * as z from "zod";
 import { seqSchema, uriSchema } from "./common";
 import { TerminalActionSchema, TerminalStateSchema } from "./channels/terminal";
-import {
-  ChangesetActionSchema,
-  ChangesetStateSchema,
-} from "./channels/changeset";
-import {
-  ResourceWatchActionSchema,
-  ResourceWatchStateSchema,
-} from "./channels/resource-watch";
-import {
-  AnnotationsActionSchema,
-  AnnotationsStateSchema,
-} from "./channels/annotations";
-import {
-  AutomationActionSchema,
-  AutomationStateSchema,
-} from "./channels/automation";
-import {
-  AutomationRunActionSchema,
-  AutomationRunStateSchema,
-} from "./channels/automation-run";
+import { ChangesetActionSchema, ChangesetStateSchema } from "./channels/changeset";
+import { ResourceWatchActionSchema, ResourceWatchStateSchema } from "./channels/resource-watch";
+import { AnnotationsActionSchema, AnnotationsStateSchema } from "./channels/annotations";
+import { AutomationActionSchema, AutomationStateSchema } from "./channels/automation";
+import { AutomationRunActionSchema, AutomationRunStateSchema } from "./channels/automation-run";
 import { ChatActionSchema } from "./channels/chat/actions";
 import { ChatStateSchema } from "./channels/chat/state";
 import { RootActionSchema, RootStateSchema } from "./channels/root";

@@ -48,13 +48,8 @@ describe("ACP event conversion", () => {
       [{ trimStart: 6, append: " third" }, "second third"],
       [{ set: "replacement" }, "replacement"],
       [{ set: "" }, ""],
-    ] satisfies [
-      Extract<AgentEvent, { type: "tool_execution_update" }>["output"],
-      string,
-    ][]) {
-      expect(
-        update({ type: "tool_execution_update", ...tool, output }),
-      ).toMatchObject([
+    ] satisfies [Extract<AgentEvent, { type: "tool_execution_update" }>["output"], string][]) {
+      expect(update({ type: "tool_execution_update", ...tool, output })).toMatchObject([
         {
           status: "in_progress",
           content: [{ content: { type: "text", text } }],

@@ -1,7 +1,4 @@
-import type {
-  CreateSessionParams,
-  StateAction,
-} from "@experiments/protocol-schemas/ahp";
+import type { CreateSessionParams, StateAction } from "@experiments/protocol-schemas/ahp";
 import { ROOT, ProtocolError, RpcCodes, errorMessage } from "../ahp/protocol";
 import { workingDirectory, type AgentConfig } from "../host-config";
 import type { AhpClients } from "../ahp/clients";
@@ -28,14 +25,7 @@ class SessionLifecycle {
   private readonly config: AgentConfig;
   private readonly waitUntil: WaitUntil;
 
-  constructor({
-    store,
-    agents,
-    clients,
-    hostId,
-    config,
-    waitUntil,
-  }: SessionLifecycleParams) {
+  constructor({ store, agents, clients, hostId, config, waitUntil }: SessionLifecycleParams) {
     this.store = store;
     this.agents = agents;
     this.clients = clients;
@@ -49,16 +39,10 @@ class SessionLifecycle {
     const directory = workingDirectory(this.config.cwd);
 
     if ((input.provider ?? provider) !== provider) {
-      throw new ProtocolError(
-        RpcCodes.providerMissing,
-        "Provider does not exist",
-      );
+      throw new ProtocolError(RpcCodes.providerMissing, "Provider does not exist");
     }
 
-    if (
-      input.workingDirectories?.some((candidate) => candidate !== directory) ===
-      true
-    ) {
+    if (input.workingDirectories?.some((candidate) => candidate !== directory) === true) {
       throw new ProtocolError(RpcCodes.params, `This agent uses ${directory}`);
     }
 
@@ -126,8 +110,7 @@ class SessionLifecycle {
       await this.agents.idle(original);
     } catch (error) {
       if (this.store.lookup(uri)?.sessionKey === original.sessionKey) {
-        const failure =
-          error instanceof Error ? error : new Error("Agent operation failed");
+        const failure = error instanceof Error ? error : new Error("Agent operation failed");
 
         this.publish(uri, {
           type: "session/creationFailed",

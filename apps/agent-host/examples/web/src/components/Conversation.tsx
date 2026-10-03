@@ -2,17 +2,8 @@ import * as z from "zod";
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import { Badge, Banner, Button } from "@cloudflare/kumo";
-import {
-  ArrowUpIcon,
-  RobotIcon,
-  StopIcon,
-  WrenchIcon,
-} from "@phosphor-icons/react";
-import type {
-  ActiveTurn,
-  ResponsePart,
-  Turn,
-} from "@experiments/protocol-schemas/ahp";
+import { ArrowUpIcon, RobotIcon, StopIcon, WrenchIcon } from "@phosphor-icons/react";
+import type { ActiveTurn, ResponsePart, Turn } from "@experiments/protocol-schemas/ahp";
 import type { useAhpSession } from "../hooks/use-ahp-session";
 
 const ABSENT = void 0;
@@ -30,34 +21,20 @@ const NotificationMarkdownSchema = z.object({ markdown: z.string() });
 function ResponseContent({ part }: { part: ResponsePart }): JSX.Element {
   switch (part.kind) {
     case "markdown": {
-      return (
-        <p className="m-0 whitespace-pre-wrap leading-relaxed">
-          {part.content}
-        </p>
-      );
+      return <p className="m-0 whitespace-pre-wrap leading-relaxed">{part.content}</p>;
     }
 
     case "reasoning": {
       return (
         <details className="text-sm">
-          <summary className="cursor-pointer text-kumo-subtle">
-            Reasoning
-          </summary>
-          <p className="mb-0 mt-2 whitespace-pre-wrap text-kumo-subtle">
-            {part.content}
-          </p>
+          <summary className="cursor-pointer text-kumo-subtle">Reasoning</summary>
+          <p className="mb-0 mt-2 whitespace-pre-wrap text-kumo-subtle">{part.content}</p>
         </details>
       );
     }
 
     case "error": {
-      return (
-        <Banner
-          variant="error"
-          title="Agent error"
-          description={part.error.message}
-        />
-      );
+      return <Banner variant="error" title="Agent error" description={part.error.message} />;
     }
 
     case "toolCall": {
@@ -72,9 +49,7 @@ function ResponseContent({ part }: { part: ResponsePart }): JSX.Element {
     }
 
     case "contentRef": {
-      return (
-        <p className="m-0 text-sm text-kumo-subtle">Resource: {part.uri}</p>
-      );
+      return <p className="m-0 text-sm text-kumo-subtle">Resource: {part.uri}</p>;
     }
 
     case "systemNotification": {
@@ -84,18 +59,13 @@ function ResponseContent({ part }: { part: ResponsePart }): JSX.Element {
         ? text.data
         : NotificationMarkdownSchema.parse(part.content).markdown;
 
-      return (
-        <p className="m-0 whitespace-pre-wrap text-sm text-kumo-subtle">
-          {content}
-        </p>
-      );
+      return <p className="m-0 whitespace-pre-wrap text-sm text-kumo-subtle">{content}</p>;
     }
 
     case "inputRequest": {
       return (
         <p className="m-0 text-sm text-kumo-subtle">
-          The agent requested input. Interactive input is not available in this
-          example.
+          The agent requested input. Interactive input is not available in this example.
         </p>
       );
     }
@@ -111,9 +81,7 @@ function UserMessage({ turn }: { turn: Turn | ActiveTurn }): JSX.Element {
   return (
     <div className="flex justify-end">
       <div className="max-w-[85%] rounded-2xl rounded-br-md bg-kumo-tint px-4 py-2.5">
-        <p className="m-0 whitespace-pre-wrap leading-relaxed">
-          {turn.message.text}
-        </p>
+        <p className="m-0 whitespace-pre-wrap leading-relaxed">{turn.message.text}</p>
       </div>
     </div>
   );
@@ -148,9 +116,7 @@ function AgentResponse({
             Agent is thinking…
           </p>
         ) : (
-          turn.responseParts.map((part, index) => (
-            <ResponseContent key={index} part={part} />
-          ))
+          turn.responseParts.map((part, index) => <ResponseContent key={index} part={part} />)
         )}
       </div>
     </div>
@@ -165,10 +131,7 @@ function ConversationTurn({
   streaming: boolean;
 }): JSX.Element {
   return (
-    <article
-      className="grid gap-4"
-      aria-label={streaming ? "Active turn" : "Completed turn"}
-    >
+    <article className="grid gap-4" aria-label={streaming ? "Active turn" : "Completed turn"}>
       <UserMessage turn={turn} />
       <AgentResponse turn={turn} streaming={streaming} />
     </article>
@@ -194,11 +157,7 @@ function EmptyState(): JSX.Element {
   );
 }
 
-function Conversation({
-  view,
-}: {
-  view: ReturnType<typeof useAhpSession>;
-}): JSX.Element {
+function Conversation({ view }: { view: ReturnType<typeof useAhpSession> }): JSX.Element {
   const [draft, setDraft] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -206,16 +165,13 @@ function Conversation({
 
   const { chat, session } = view;
 
-  const lifecycle =
-    session.status === "ready" ? session.state.lifecycle : ABSENT;
+  const lifecycle = session.status === "ready" ? session.state.lifecycle : ABSENT;
 
   const activeTurn = chat.status === "ready" ? chat.state.activeTurn : ABSENT;
 
-  const turnCount =
-    chat.status === "ready" ? chat.state.turns.length : NO_TURNS;
+  const turnCount = chat.status === "ready" ? chat.state.turns.length : NO_TURNS;
 
-  const activePartCount =
-    activeTurn === ABSENT ? NO_TURNS : activeTurn.responseParts.length;
+  const activePartCount = activeTurn === ABSENT ? NO_TURNS : activeTurn.responseParts.length;
 
   useEffect(() => {
     const transcript = transcriptRef.current;
@@ -229,10 +185,7 @@ function Conversation({
     const transcript = transcriptRef.current;
 
     if (transcript) {
-      const distance =
-        transcript.scrollHeight -
-        transcript.scrollTop -
-        transcript.clientHeight;
+      const distance = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
 
       stickToBottomRef.current = distance < SCROLL_STICK_THRESHOLD_PX;
     }
@@ -289,8 +242,7 @@ function Conversation({
               title="Session creation failed"
               description={
                 view.session.status === "ready"
-                  ? (view.session.state.creationError?.message ??
-                    "The agent could not start.")
+                  ? (view.session.state.creationError?.message ?? "The agent could not start.")
                   : "The agent could not start."
               }
             />
@@ -331,10 +283,7 @@ function Conversation({
               const field = event.target;
 
               field.style.height = "auto";
-              field.style.height = `${Math.min(
-                field.scrollHeight,
-                COMPOSER_MAX_HEIGHT_PX,
-              )}px`;
+              field.style.height = `${Math.min(field.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -356,10 +305,7 @@ function Conversation({
               icon={StopIcon}
               className="size-10 shrink-0 rounded-full p-0"
               aria-label="Stop response"
-              disabled={
-                view.connection !== "connected" ||
-                view.command.status === "pending"
-              }
+              disabled={view.connection !== "connected" || view.command.status === "pending"}
               onClick={() => {
                 void cancel();
               }}
@@ -382,11 +328,7 @@ function Conversation({
         </div>
         {formError !== null && (
           <div className="mx-auto mt-2 w-full max-w-3xl" role="alert">
-            <Banner
-              variant="error"
-              title="Message failed"
-              description={formError}
-            />
+            <Banner variant="error" title="Message failed" description={formError} />
           </div>
         )}
       </form>

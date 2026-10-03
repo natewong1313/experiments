@@ -100,13 +100,7 @@ class HostStore {
   exists(channel: string): boolean {
     const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
 
-    return (
-      this.db
-        .select({ uri: sessions.uri })
-        .from(sessions)
-        .where(match)
-        .get() !== void 0
-    );
+    return this.db.select({ uri: sessions.uri }).from(sessions).where(match).get() !== void 0;
   }
 
   list(input: { cursor?: string; limit: number }): SessionPage {
@@ -176,10 +170,7 @@ class HostStore {
     const record = this.lookup(channel);
 
     if (!record) {
-      throw new ProtocolError(
-        RpcCodes.sessionMissing,
-        "Session does not exist",
-      );
+      throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
     }
 
     return record;
@@ -189,10 +180,7 @@ class HostStore {
     const row = this.entry(channel);
 
     if (!row) {
-      throw new ProtocolError(
-        RpcCodes.sessionMissing,
-        "Session does not exist",
-      );
+      throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
     }
 
     return row;
@@ -241,10 +229,7 @@ class HostStore {
       .get();
 
     if (!row) {
-      throw new ProtocolError(
-        RpcCodes.sessionMissing,
-        "Session does not exist",
-      );
+      throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
     }
 
     return channel === row.uri ? row.bytes : this.chats.size(channel);
@@ -259,14 +244,10 @@ class HostStore {
       const row = this.entry(channel);
 
       if (!row) {
-        throw new ProtocolError(
-          RpcCodes.sessionMissing,
-          "Session does not exist",
-        );
+        throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
       }
 
-      state =
-        row.uri === channel ? row.session : this.chats.snapshot(channel, turns);
+      state = row.uri === channel ? row.session : this.chats.snapshot(channel, turns);
     }
 
     return { resource: channel, state, fromSeq: this.sequence };
@@ -295,10 +276,7 @@ class HostStore {
   }): Publication {
     return this.storage.transactionSync(() => {
       if (this.entry(uri)) {
-        throw new ProtocolError(
-          RpcCodes.sessionExists,
-          "Session already exists",
-        );
+        throw new ProtocolError(RpcCodes.sessionExists, "Session already exists");
       }
 
       const now = new Date().toISOString();
@@ -363,33 +341,19 @@ class HostStore {
         .get();
 
       if (!row) {
-        throw new ProtocolError(
-          RpcCodes.sessionMissing,
-          "Session does not exist",
-        );
+        throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
       }
 
-      this.db
-        .update(sessions)
-        .set({ acpSession })
-        .where(eq(sessions.uri, uri))
-        .run();
+      this.db.update(sessions).set({ acpSession }).where(eq(sessions.uri, uri)).run();
     });
   }
 
   remove(uri: string): Publication {
     return this.storage.transactionSync(() => {
-      const row = this.db
-        .select()
-        .from(sessions)
-        .where(eq(sessions.uri, uri))
-        .get();
+      const row = this.db.select().from(sessions).where(eq(sessions.uri, uri)).get();
 
       if (!row) {
-        throw new ProtocolError(
-          RpcCodes.sessionMissing,
-          "Session does not exist",
-        );
+        throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
       }
 
       this.db.delete(sessions).where(eq(sessions.uri, uri)).run();
@@ -408,8 +372,7 @@ class HostStore {
         return { actions: [this.journal.append(channel, action)] };
       }
 
-      return this.transition(this.require(channel), channel, action)
-        .publication;
+      return this.transition(this.require(channel), channel, action).publication;
     });
   }
 
@@ -444,13 +407,13 @@ class HostStore {
     }
 
     return this.storage.transactionSync(() => {
-      const page: Pick<ChatState, "turns" | "turnsNextCursor"> =
-        this.chats.fetchTurns(channel, cursor);
+      const page: Pick<ChatState, "turns" | "turnsNextCursor"> = this.chats.fetchTurns(
+        channel,
+        cursor,
+      );
 
       return {
-        actions: [
-          this.journal.append(channel, { type: "chat/turnsLoaded", ...page }),
-        ],
+        actions: [this.journal.append(channel, { type: "chat/turnsLoaded", ...page })],
       };
     });
   }
@@ -459,9 +422,7 @@ class HostStore {
     return this.journal.replay(since, channels);
   }
 
-  previous(
-    origin: ActionOrigin,
-  ): { frame: string; envelope: ActionEnvelope } | null {
+  previous(origin: ActionOrigin): { frame: string; envelope: ActionEnvelope } | null {
     return this.journal.previous(origin);
   }
 

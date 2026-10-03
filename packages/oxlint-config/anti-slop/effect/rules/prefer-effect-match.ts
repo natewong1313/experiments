@@ -6,24 +6,18 @@ export const preferEffectMatchRule = defineRule({
   meta: {
     type: "problem",
     docs: {
-      description:
-        "Use Match from Effect for chained literal ternaries over the same value.",
+      description: "Use Match from Effect for chained literal ternaries over the same value.",
     },
     messages: {
-      preferMatch:
-        "Use Match from Effect instead of a chained literal ternary.",
+      preferMatch: "Use Match from Effect instead of a chained literal ternary.",
     },
   },
   createOnce(context) {
     const isLiteral = (node: ESTree.Node): boolean =>
-      node.type === "Literal" ||
-      (node.type === "TemplateLiteral" && node.expressions.length === 0);
+      node.type === "Literal" || (node.type === "TemplateLiteral" && node.expressions.length === 0);
 
     const comparedValue = (node: ESTree.Expression): string | undefined => {
-      if (
-        node.type !== "BinaryExpression" ||
-        !equalityOperators.has(node.operator)
-      ) {
+      if (node.type !== "BinaryExpression" || !equalityOperators.has(node.operator)) {
         return undefined;
       }
       if (isLiteral(node.left)) return context.sourceCode.getText(node.right);

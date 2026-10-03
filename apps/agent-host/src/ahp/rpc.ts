@@ -50,13 +50,7 @@ class AhpRpc {
   private readonly dispatcher: ActionDispatch;
   private readonly defaultDirectory: string;
 
-  constructor({
-    store,
-    clients,
-    sessions,
-    dispatcher,
-    defaultDirectory,
-  }: AhpRpcParams) {
+  constructor({ store, clients, sessions, dispatcher, defaultDirectory }: AhpRpcParams) {
     this.store = store;
     this.clients = clients;
     this.sessions = sessions;
@@ -64,10 +58,7 @@ class AhpRpc {
     this.defaultDirectory = defaultDirectory;
   }
 
-  async message(
-    socket: WebSocket,
-    message: string | ArrayBuffer,
-  ): Promise<void> {
+  async message(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const text = z.string().safeParse(message);
 
     if (
@@ -115,31 +106,22 @@ class AhpRpc {
         this.clients.send(socket, { jsonrpc: "2.0", id: frame.id, result });
       }
     } catch (error) {
-      const normalized =
-        error instanceof Error ? error : new Error("Unknown error");
+      const normalized = error instanceof Error ? error : new Error("Unknown error");
 
       this.respondError(socket, frame, normalized);
     }
   }
 
-  private respondError(
-    socket: WebSocket,
-    frame: JsonRpcCall,
-    error: Error,
-  ): void {
+  private respondError(socket: WebSocket, frame: JsonRpcCall, error: Error): void {
     let code = RpcCodes.internal;
 
     if (error instanceof ProtocolError) {
       ({ code } = error);
-    } else if (
-      error instanceof z.ZodError ||
-      error instanceof MemoryLimitError
-    ) {
+    } else if (error instanceof z.ZodError || error instanceof MemoryLimitError) {
       code = RpcCodes.params;
     }
 
-    const message =
-      code === RpcCodes.internal ? "Host request failed" : errorMessage(error);
+    const message = code === RpcCodes.internal ? "Host request failed" : errorMessage(error);
 
     const data = error instanceof ProtocolError ? error.data : void 0;
 
@@ -178,25 +160,17 @@ class AhpRpc {
     return response;
   }
 
-  private initialize(
-    socket: WebSocket,
-    params: JsonRpcCall["params"],
-  ): RpcResult {
+  private initialize(socket: WebSocket, params: JsonRpcCall["params"]): RpcResult {
     if (this.clients.connection(socket).phase !== "new") {
-      throw new ProtocolError(
-        RpcCodes.request,
-        "Connection is already initialized",
-      );
+      throw new ProtocolError(RpcCodes.request, "Connection is already initialized");
     }
 
     const input = parseHostParams(InitializeParamsSchema, params);
 
     if (!input.protocolVersions.includes(PROTOCOL_VERSION)) {
-      throw new ProtocolError(
-        RpcCodes.version,
-        "Unsupported protocol version",
-        { supportedVersions: [PROTOCOL_VERSION] },
-      );
+      throw new ProtocolError(RpcCodes.version, "Unsupported protocol version", {
+        supportedVersions: [PROTOCOL_VERSION],
+      });
     }
 
     const subscriptions = this.clients.validateSubscriptions(
@@ -219,17 +193,12 @@ class AhpRpc {
     };
   }
 
-  private reconnect(
-    socket: WebSocket,
-    params: JsonRpcCall["params"],
-  ): RpcResult {
+  private reconnect(socket: WebSocket, params: JsonRpcCall["params"]): RpcResult {
     const input = parseHostParams(ReconnectParamsSchema, params);
 
     const available = this.clients.validateSubscriptions(
       input.clientId,
-      input.subscriptions.filter(
-        (channel) => channel === ROOT || this.store.exists(channel),
-      ),
+      input.subscriptions.filter((channel) => channel === ROOT || this.store.exists(channel)),
     );
 
     const actions = this.store.replay(input.lastSeenServerSeq, available);
@@ -243,9 +212,7 @@ class AhpRpc {
         : {
             type: "replay",
             actions,
-            missing: input.subscriptions.filter(
-              (channel) => !available.includes(channel),
-            ),
+            missing: input.subscriptions.filter((channel) => !available.includes(channel)),
           };
 
     this.clients.attach(socket, input.clientId, available);
@@ -253,10 +220,7 @@ class AhpRpc {
     return result;
   }
 
-  private async command(
-    socket: WebSocket,
-    frame: JsonRpcCall,
-  ): Promise<RpcResult> {
+  private async command(socket: WebSocket, frame: JsonRpcCall): Promise<RpcResult> {
     const { method, params } = frame;
 
     if (method === "ping") {
@@ -276,23 +240,17 @@ class AhpRpc {
     const client = this.clients.connection(socket);
 
     if (client.phase !== "ready") {
-      throw new ProtocolError(
-        RpcCodes.request,
-        "Initialize the connection first",
-      );
+      throw new ProtocolError(RpcCodes.request, "Initialize the connection first");
     }
 
     switch (method) {
       case "subscribe": {
-        const { channel, view } = parseHostParams(
-          SubscribeParamsSchema,
-          params,
-        );
+        const { channel, view } = parseHostParams(SubscribeParamsSchema, params);
 
-        const subscriptions = this.clients.validateSubscriptions(
-          client.clientId,
-          [...client.subscriptions, channel],
-        );
+        const subscriptions = this.clients.validateSubscriptions(client.clientId, [
+          ...client.subscriptions,
+          channel,
+        ]);
 
         const snapshot = this.store.snapshot(channel, view?.turns);
         this.clients.attach(socket, client.clientId, subscriptions);
@@ -312,9 +270,7 @@ class AhpRpc {
       }
 
       case "createSession": {
-        this.sessions.create(
-          parseHostParams(CreateSessionParamsSchema, params),
-        );
+        this.sessions.create(parseHostParams(CreateSessionParamsSchema, params));
 
         return null;
       }

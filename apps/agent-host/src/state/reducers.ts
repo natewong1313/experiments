@@ -1,8 +1,4 @@
-import {
-  chatReducer,
-  rootReducer,
-  sessionReducer,
-} from "@microsoft/agent-host-protocol";
+import { chatReducer, rootReducer, sessionReducer } from "@microsoft/agent-host-protocol";
 import type {
   ChatState,
   RootState,

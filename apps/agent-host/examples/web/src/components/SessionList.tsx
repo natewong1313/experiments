@@ -1,14 +1,6 @@
 import { useState } from "react";
 import type { JSX } from "react";
-import {
-  Badge,
-  Banner,
-  Button,
-  Empty,
-  LayerCard,
-  Table,
-  Text,
-} from "@cloudflare/kumo";
+import { Badge, Banner, Button, Empty, LayerCard, Table, Text } from "@cloudflare/kumo";
 import { PlusIcon, StackIcon } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import type { SessionStatus } from "@microsoft/agent-host-protocol";
@@ -45,11 +37,7 @@ type CreationState =
   | { status: "creating" }
   | { status: "error"; message: string };
 
-function CreateSessionButton({
-  createSession,
-}: {
-  createSession: CreateSession;
-}): JSX.Element {
+function CreateSessionButton({ createSession }: { createSession: CreateSession }): JSX.Element {
   const [creation, setCreation] = useState<CreationState>({ status: "idle" });
 
   async function create(): Promise<void> {
@@ -82,11 +70,7 @@ function CreateSessionButton({
       </Button>
       {creation.status === "error" && (
         <div role="alert" className="max-w-sm">
-          <Banner
-            variant="error"
-            title="Could not create session"
-            description={creation.message}
-          />
+          <Banner variant="error" title="Could not create session" description={creation.message} />
         </div>
       )}
     </div>
@@ -104,8 +88,7 @@ function SessionList(): JSX.Element {
             Sessions for {host}
           </Text>
           <div role="status" className="text-kumo-subtle">
-            {view.status === "connected" &&
-              `Connected · ${view.sessions.length} sessions`}
+            {view.status === "connected" && `Connected · ${view.sessions.length} sessions`}
             {view.status === "connecting" && "Connecting…"}
             {view.status === "error" && "Disconnected · retrying automatically"}
           </div>
@@ -122,11 +105,7 @@ function SessionList(): JSX.Element {
         )}
         {view.status === "error" && (
           <div className="mx-6 mb-5" role="alert">
-            <Banner
-              variant="error"
-              title="Connection lost"
-              description={view.message}
-            />
+            <Banner variant="error" title="Connection lost" description={view.message} />
           </div>
         )}
         {view.status === "connected" && !view.sessions.length && (
@@ -139,9 +118,7 @@ function SessionList(): JSX.Element {
         {view.status === "connected" && Boolean(view.sessions.length) && (
           <div className="overflow-x-auto">
             <Table>
-              <caption className="sr-only">
-                Current AHP sessions for {host}
-              </caption>
+              <caption className="sr-only">Current AHP sessions for {host}</caption>
               <Table.Header>
                 <Table.Row>
                   <Table.Head>Session</Table.Head>
@@ -159,9 +136,7 @@ function SessionList(): JSX.Element {
                         <Link
                           to="/sessions/$sessionId"
                           params={{
-                            sessionId: session.resource.slice(
-                              "ahp-session:/".length,
-                            ),
+                            sessionId: session.resource.slice("ahp-session:/".length),
                           }}
                           search={{ host }}
                           className="text-kumo-link underline underline-offset-4"
@@ -169,13 +144,9 @@ function SessionList(): JSX.Element {
                           {session.title || "Untitled session"}
                         </Link>
                       </p>
-                      <code className="text-[0.9em] text-kumo-subtle">
-                        {session.resource}
-                      </code>
+                      <code className="text-[0.9em] text-kumo-subtle">{session.resource}</code>
                       {session.activity !== ABSENT && (
-                        <p className="mb-0 mt-1 text-kumo-subtle">
-                          {session.activity}
-                        </p>
+                        <p className="mb-0 mt-1 text-kumo-subtle">{session.activity}</p>
                       )}
                     </Table.Cell>
                     <Table.Cell>{session.provider}</Table.Cell>
@@ -184,14 +155,10 @@ function SessionList(): JSX.Element {
                         {sessionStatus(session.status)}
                       </Badge>
                       {Boolean(session.status & SESSION_STATUS.archived) && (
-                        <span className="mt-1 block text-kumo-subtle">
-                          Archived
-                        </span>
+                        <span className="mt-1 block text-kumo-subtle">Archived</span>
                       )}
                     </Table.Cell>
-                    <Table.Cell>
-                      {session.workingDirectories?.join(", ") ?? "—"}
-                    </Table.Cell>
+                    <Table.Cell>{session.workingDirectories?.join(", ") ?? "—"}</Table.Cell>
                     <Table.Cell className="whitespace-nowrap">
                       <time dateTime={session.modifiedAt}>
                         {new Date(session.modifiedAt).toLocaleString()}

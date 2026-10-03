@@ -21,11 +21,7 @@ class JsonDocuments {
       throw new Error(`Missing stored document: ${scope}/${id}`);
     }
 
-    checkBytes(
-      size,
-      MAX_DOCUMENT_BYTES,
-      "Stored document exceeds the memory budget",
-    );
+    checkBytes(size, MAX_DOCUMENT_BYTES, "Stored document exceeds the memory budget");
 
     const bytes = new Uint8Array(size);
     let offset = 0;
@@ -43,12 +39,7 @@ class JsonDocuments {
     return JSON.parse(new TextDecoder().decode(bytes)) as T;
   }
 
-  write(
-    scope: string,
-    id: string,
-    value: JsonDocument,
-    limit = MAX_DOCUMENT_BYTES,
-  ): void {
+  write(scope: string, id: string, value: JsonDocument, limit = MAX_DOCUMENT_BYTES): void {
     const text = JSON.stringify(value);
     const message = "Turn exceeds the memory budget";
     checkBytes(text.length, limit, message);
@@ -68,8 +59,7 @@ class JsonDocuments {
         )
         .next().value;
 
-      const previous =
-        existing === void 0 ? void 0 : new Uint8Array(existing.data);
+      const previous = existing === void 0 ? void 0 : new Uint8Array(existing.data);
 
       const unchanged =
         previous !== void 0 &&
@@ -98,11 +88,7 @@ class JsonDocuments {
   }
 
   remove(scope: string, id: string): void {
-    this.sql.exec(
-      "DELETE FROM document_chunks WHERE scope = ? AND id = ?",
-      scope,
-      id,
-    );
+    this.sql.exec("DELETE FROM document_chunks WHERE scope = ? AND id = ?", scope, id);
   }
 
   removeScope(scope: string): void {

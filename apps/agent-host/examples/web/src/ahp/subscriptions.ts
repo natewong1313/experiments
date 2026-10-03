@@ -1,16 +1,10 @@
-import type {
-  AhpClient,
-  Subscription,
-} from "@microsoft/agent-host-protocol/client";
+import type { AhpClient, Subscription } from "@microsoft/agent-host-protocol/client";
 
 type SharedSubscription = {
   users: number;
 };
 
-const channels: WeakMap<
-  AhpClient,
-  Map<string, SharedSubscription>
-> = new WeakMap();
+const channels: WeakMap<AhpClient, Map<string, SharedSubscription>> = new WeakMap();
 
 type ReleaseChannel = () => void;
 

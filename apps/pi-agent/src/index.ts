@@ -8,11 +8,7 @@ import { PiHarness, type PiHarnessOptions } from "agents/harnesses/pi";
 import { Lifecycle } from "agents/lifecycle";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 import { connectAcp } from "./acp";
-import {
-  createWorkspaceTools,
-  JAVASCRIPT_BACKEND,
-  workspaceStorage,
-} from "./workspace";
+import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 
 // Hardcoded env since this class is extendable.
 export type PiAgentEnv = {
@@ -22,9 +18,7 @@ export type PiAgentEnv = {
 
 const WORKSPACE_DIR = "/workspace";
 
-export class PiAgent<
-  Env extends PiAgentEnv = PiAgentEnv,
-> extends DurableObject<Env> {
+export class PiAgent<Env extends PiAgentEnv = PiAgentEnv> extends DurableObject<Env> {
   readonly workspace = new Workspace({
     storage: workspaceStorage(this.ctx.storage),
     git: createGitClient(),
@@ -59,11 +53,7 @@ export class PiAgent<
         }
       });
 
-      return Harness.open(
-        storage,
-        { models, registry: this.registry },
-        context,
-      );
+      return Harness.open(storage, { models, registry: this.registry }, context);
     },
     defaults: this.getSessionDefaults(),
   });
@@ -91,19 +81,13 @@ export class PiAgent<
   }
 
   override async fetch(request: Request): Promise<Response> {
-    if (
-      request.method !== "GET" ||
-      request.headers.get("Upgrade")?.toLowerCase() !== "websocket"
-    ) {
+    if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected a WebSocket upgrade", { status: 426 });
     }
 
     await this.lifecycle.start();
 
-    if (
-      this.connectedSocket !== null &&
-      this.connectedSocket.readyState === WebSocket.OPEN
-    ) {
+    if (this.connectedSocket !== null && this.connectedSocket.readyState === WebSocket.OPEN) {
       return new Response("Agent already has a connection", { status: 409 });
     }
 

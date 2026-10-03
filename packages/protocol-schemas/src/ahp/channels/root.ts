@@ -1,9 +1,5 @@
 import * as z from "zod";
-import {
-  ConfigSchemaSchema,
-  ProtectedResourceMetadataSchema,
-  metaSchema,
-} from "../common";
+import { ConfigSchemaSchema, ProtectedResourceMetadataSchema, metaSchema } from "../common";
 import { CustomizationSchema } from "../primitives";
 import { TerminalInfoSchema } from "./terminal";
 

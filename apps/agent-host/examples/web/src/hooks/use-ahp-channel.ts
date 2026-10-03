@@ -54,9 +54,7 @@ function useAhpChannel<State>({
         const { snapshot } = result;
 
         if (!snapshot || snapshot.resource !== resource) {
-          throw new Error(
-            "The host did not return a snapshot for this resource.",
-          );
+          throw new Error("The host did not return a snapshot for this resource.");
         }
 
         let state = parse(snapshot.state);

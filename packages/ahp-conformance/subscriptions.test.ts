@@ -48,9 +48,7 @@ describe("subscriptions and reconnection", () => {
     expectRootState(subscribed.result.snapshot);
   });
 
-  test("exposes the same agents to two simultaneous subscribers", async ({
-    client,
-  }) => {
+  test("exposes the same agents to two simultaneous subscribers", async ({ client }) => {
     const first = await initialized(client, [ROOT]);
     const firstState = expectRootState(first.snapshots[0]);
     await withClient(async (second) => {
@@ -78,9 +76,7 @@ describe("subscriptions and reconnection", () => {
       expect(missing).not.toContain(ROOT);
 
       if (result.type === "snapshot") {
-        expectRootState(
-          result.snapshots.find((snapshot) => snapshot.resource === ROOT),
-        );
+        expectRootState(result.snapshots.find((snapshot) => snapshot.resource === ROOT));
       }
 
       await fresh.ping();
@@ -115,17 +111,13 @@ describe("subscriptions and reconnection", () => {
               action: { type: "session/titleChanged", title: changed },
             });
 
-            const accepted = await writer.waitForAction(
-              uri,
-              "session/titleChanged",
-              {
-                after,
-                predicate: (envelope) =>
-                  envelope.origin?.clientSeq === 1 &&
-                  envelope.action.type === "session/titleChanged" &&
-                  envelope.action.title === changed,
-              },
-            );
+            const accepted = await writer.waitForAction(uri, "session/titleChanged", {
+              after,
+              predicate: (envelope) =>
+                envelope.origin?.clientSeq === 1 &&
+                envelope.action.type === "session/titleChanged" &&
+                envelope.action.title === changed,
+            });
 
             expect(accepted.rejectionReason).toBeUndefined();
             await withClient(async (fresh) => {
@@ -140,17 +132,13 @@ describe("subscriptions and reconnection", () => {
               if (recovered.type === "replay") {
                 expectReplayRecovery(recovered, serverSeq, accepted);
               } else {
-                const recoveredSnapshot = recovered.snapshots.find(
-                  (item) => item.resource === uri,
-                );
+                const recoveredSnapshot = recovered.snapshots.find((item) => item.resource === uri);
 
                 expectSnapshotTitle(recoveredSnapshot, uri, changed);
               }
 
               const current = await fresh.subscribe(uri);
-              expect(
-                expectSessionState(current.result.snapshot, uri).title,
-              ).toBe(changed);
+              expect(expectSessionState(current.result.snapshot, uri).title).toBe(changed);
               await fresh.ping();
             });
           },
@@ -162,17 +150,13 @@ describe("subscriptions and reconnection", () => {
               action: { type: "session/titleChanged", title: original },
             });
 
-            const restored = await writer.waitForAction(
-              uri,
-              "session/titleChanged",
-              {
-                after,
-                predicate: (envelope) =>
-                  envelope.origin?.clientSeq === 2 &&
-                  envelope.action.type === "session/titleChanged" &&
-                  envelope.action.title === original,
-              },
-            );
+            const restored = await writer.waitForAction(uri, "session/titleChanged", {
+              after,
+              predicate: (envelope) =>
+                envelope.origin?.clientSeq === 2 &&
+                envelope.action.type === "session/titleChanged" &&
+                envelope.action.title === original,
+            });
 
             expect(restored.rejectionReason).toBeUndefined();
           },
@@ -194,10 +178,7 @@ describe("subscriptions and reconnection", () => {
   });
 });
 
-async function captureServerSeq(
-  clientId: string,
-  subscriptions: string[],
-): Promise<number> {
+async function captureServerSeq(clientId: string, subscriptions: string[]): Promise<number> {
   return await withClient(async (client) => {
     const result = InitializeResultSchema.parse(
       await client.initialize({
@@ -226,17 +207,12 @@ function expectReplayRecovery(
 
   const missed = result.actions.find(
     (envelope) =>
-      envelope.channel === accepted.channel &&
-      envelope.serverSeq === accepted.serverSeq,
+      envelope.channel === accepted.channel && envelope.serverSeq === accepted.serverSeq,
   );
 
   expect(missed).toEqual(accepted);
 }
 
-function expectSnapshotTitle(
-  snapshot: Snapshot | undefined,
-  uri: string,
-  title: string,
-): void {
+function expectSnapshotTitle(snapshot: Snapshot | undefined, uri: string, title: string): void {
   expect(expectSessionState(snapshot, uri).title).toBe(title);
 }

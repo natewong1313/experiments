@@ -7,10 +7,7 @@ import {
   type PromptRequest,
   type PromptResponse,
 } from "@agentclientprotocol/sdk";
-import {
-  SessionStateSchema,
-  SubscribeResultSchema,
-} from "@experiments/protocol-schemas/ahp";
+import { SessionStateSchema, SubscribeResultSchema } from "@experiments/protocol-schemas/ahp";
 import { expect, vi } from "vitest";
 import { websocketStream } from "../src/agent/websocket-stream";
 import { connectPeer, type Peer } from "./peer";
@@ -20,10 +17,7 @@ const SESSION = "ahp-session:/host-test";
 const SWITCHING_PROTOCOLS = 101;
 
 async function withAcpAgent(options: {
-  prompt(
-    connection: AgentSideConnection,
-    request: PromptRequest,
-  ): Promise<PromptResponse>;
+  prompt(connection: AgentSideConnection, request: PromptRequest): Promise<PromptResponse>;
   cancel?(): Promise<void>;
   run(peer: Peer, chat: string, disconnect: () => Promise<void>): Promise<void>;
 }): Promise<void> {
@@ -31,52 +25,50 @@ async function withAcpAgent(options: {
   const sockets: WebSocket[] = [];
   const servers: AgentSideConnection[] = [];
 
-  const fetchSpy = vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async () => {
-      const { 0: client, 1: server } = new WebSocketPair();
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const { 0: client, 1: server } = new WebSocketPair();
 
-      const connection = new AgentSideConnection(
-        (): Agent => ({
-          initialize: async () => ({
-            protocolVersion: PROTOCOL_VERSION,
-            agentCapabilities: { loadSession: true },
-          }),
-          newSession: async () => ({ sessionId: "conversation" }),
-          loadSession: async (request) => {
-            expect(request).toMatchObject({
-              sessionId: "conversation",
-              cwd: "/workspace",
-              mcpServers: [],
-            });
-            await connection.sessionUpdate({
-              sessionId: request.sessionId,
-              update: {
-                sessionUpdate: "agent_message_chunk",
-                content: { type: "text", text: "Old history" },
-              },
-            });
-
-            return {};
-          },
-          authenticate: async () => ({}),
-          prompt: async (request) => await options.prompt(connection, request),
-          cancel: async (): Promise<void> => {
-            await options.cancel?.();
-          },
+    const connection = new AgentSideConnection(
+      (): Agent => ({
+        initialize: async () => ({
+          protocolVersion: PROTOCOL_VERSION,
+          agentCapabilities: { loadSession: true },
         }),
-        websocketStream(server),
-      );
+        newSession: async () => ({ sessionId: "conversation" }),
+        loadSession: async (request) => {
+          expect(request).toMatchObject({
+            sessionId: "conversation",
+            cwd: "/workspace",
+            mcpServers: [],
+          });
+          await connection.sessionUpdate({
+            sessionId: request.sessionId,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "Old history" },
+            },
+          });
 
-      server.accept();
-      sockets.push(server);
-      servers.push(connection);
+          return {};
+        },
+        authenticate: async () => ({}),
+        prompt: async (request) => await options.prompt(connection, request),
+        cancel: async (): Promise<void> => {
+          await options.cancel?.();
+        },
+      }),
+      websocketStream(server),
+    );
 
-      return new Response(null, {
-        status: SWITCHING_PROTOCOLS,
-        webSocket: client,
-      });
+    server.accept();
+    sockets.push(server);
+    servers.push(connection);
+
+    return new Response(null, {
+      status: SWITCHING_PROTOCOLS,
+      webSocket: client,
     });
+  });
 
   async function disconnect(): Promise<void> {
     await runInDurableObject(stub, async (instance) => {

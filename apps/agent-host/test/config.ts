@@ -12,11 +12,7 @@ const TEST_CONFIG: AgentConfig = {
   cwd: "/workspace",
 };
 
-function createSession(
-  store: HostStore,
-  uri: string,
-  sessionKey: string,
-): Publication {
+function createSession(store: HostStore, uri: string, sessionKey: string): Publication {
   return store.create({
     uri,
     sessionKey,
