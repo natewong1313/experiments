@@ -6,17 +6,19 @@ const ABSENT = void 0;
 
 const ACK_TIMEOUT_MS = 15_000;
 
+type DispatchActionParams = {
+  client: AhpClient;
+  clientId: string;
+  channel: string;
+  action: StateAction;
+};
+
 async function dispatchAction({
   client,
   clientId,
   channel,
   action,
-}: {
-  client: AhpClient;
-  clientId: string;
-  channel: string;
-  action: StateAction;
-}): Promise<void> {
+}: DispatchActionParams): Promise<void> {
   const events = client.events();
   let timer: ReturnType<typeof setTimeout> | undefined;
 

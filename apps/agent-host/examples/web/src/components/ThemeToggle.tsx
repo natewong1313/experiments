@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button } from "@cloudflare/kumo";
+import { Button } from "./ui/button";
 import type { JSX } from "react";
 
 type ThemeMode = "light" | "dark" | "auto";

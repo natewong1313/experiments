@@ -40,7 +40,9 @@ function parseChat(value: Snapshot["state"]): ChatState {
   return ChatStateSchema.parse(value);
 }
 
-function useAhpSession({ sessionUri }: { sessionUri: string }): SessionView {
+type UseAhpSessionParams = { sessionUri: string };
+
+function useAhpSession({ sessionUri }: UseAhpSessionParams): SessionView {
   const { view } = useAgentHost();
   const client = view.status === "connected" ? view.client : ABSENT;
 

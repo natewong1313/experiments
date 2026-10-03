@@ -14,17 +14,19 @@ type ParseState<State> = (value: Snapshot["state"]) => State;
 
 type ReduceState<State> = (state: State, action: StateAction) => State;
 
+type UseAhpChannelParams<State> = {
+  client: AhpClient | undefined;
+  uri: string | undefined;
+  parse: ParseState<State>;
+  reduce: ReduceState<State>;
+};
+
 function useAhpChannel<State>({
   client,
   uri,
   parse,
   reduce,
-}: {
-  client: AhpClient | undefined;
-  uri: string | undefined;
-  parse: ParseState<State>;
-  reduce: ReduceState<State>;
-}): ChannelView<State> {
+}: UseAhpChannelParams<State>): ChannelView<State> {
   const [current, setCurrent] = useState<{
     client: AhpClient;
     uri: string;

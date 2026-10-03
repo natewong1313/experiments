@@ -1,24 +1,38 @@
 import type { JSX, ReactNode } from "react";
-import { Badge, Banner, Text } from "@cloudflare/kumo";
-import { CaretLeftIcon } from "@phosphor-icons/react";
+import { Badge } from "../components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "../components/ui/breadcrumb";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useAhpSession } from "../hooks/use-ahp-session";
-import { useAgentHost } from "../hooks/use-agent-host";
-import { Conversation } from "../components/Conversation";
+import { useAhpSession } from "../lib/hooks/use-ahp-session";
+import { useAgentHost } from "../lib/hooks/use-agent-host";
+import { Conversation } from "../features/sessions/Conversation";
+import { PageHeader } from "../components/page-header";
+import ThemeToggle from "../components/ThemeToggle";
 
 const ABSENT = void 0;
 
-const APP_HEADER_HEIGHT_PX = "58px";
-
 const FIRST_WORKING_DIRECTORY = 0;
 
-function Centered({ children }: { children: ReactNode }): JSX.Element {
+type CenteredParams = { children: ReactNode };
+
+function Centered({ children }: CenteredParams): JSX.Element {
   return (
-    <div className="flex h-full items-center justify-center p-6 text-kumo-subtle">{children}</div>
+    <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
+      {children}
+    </div>
   );
 }
 
-function SessionDetail({ sessionId }: { sessionId: string }): JSX.Element {
+type SessionDetailParams = { sessionId: string };
+
+function SessionDetail({ sessionId }: SessionDetailParams): JSX.Element {
   const { host, view: connection } = useAgentHost();
   const sessionUri = `ahp-session:/${sessionId}`;
   const view = useAhpSession({ sessionUri });
@@ -34,27 +48,31 @@ function SessionDetail({ sessionId }: { sessionId: string }): JSX.Element {
     ? (session.state.workingDirectories?.[FIRST_WORKING_DIRECTORY] ?? ABSENT)
     : ABSENT;
 
+  const details = `${provider} · ${host}${workspace === ABSENT ? "" : ` · ${workspace}`}`;
+
   return (
-    <main
-      className="flex min-w-0 flex-col"
-      style={{ height: `calc(100svh - ${APP_HEADER_HEIGHT_PX})` }}
-    >
-      <header className="flex items-center gap-2 border-b border-kumo-line bg-kumo-base px-3 py-2.5 sm:px-6">
-        <Link
-          to="/sessions"
-          search={{ host }}
-          aria-label="Back to sessions"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-kumo-subtle hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-kumo-focus"
-        >
-          <CaretLeftIcon size={18} />
-        </Link>
-        <div className="grid min-w-0 flex-1">
-          <p className="m-0 truncate text-sm font-medium">{title}</p>
-          <p className="m-0 truncate text-xs text-kumo-subtle">
-            {provider} · {host}
-            {workspace === ABSENT ? "" : ` · ${workspace}`}
-          </p>
-        </div>
+    <div className="flex h-svh min-w-0 flex-1 flex-col">
+      <PageHeader
+        className="sticky top-0 z-10 shrink-0 border-b border-border bg-background px-4 sm:px-6"
+        breadcrumbs={
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link to="/sessions" search={{ host }}>
+                    Sessions
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{title}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        }
+        description={details}
+      >
         {connection.status === "connecting" && <Badge>Connecting…</Badge>}
         {connection.status === "error" && <Badge>Offline</Badge>}
         {connection.status === "connected" &&
@@ -63,31 +81,38 @@ function SessionDetail({ sessionId }: { sessionId: string }): JSX.Element {
         {connection.status === "connected" &&
           session.status === "ready" &&
           lifecycle === "failed" && <Badge>Failed</Badge>}
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col">
+        <ThemeToggle />
+      </PageHeader>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {connection.status === "connecting" && (
           <Centered>
-            <Text variant="secondary">Connecting to host…</Text>
+            <p className="m-0 text-sm">Connecting to host…</p>
           </Centered>
         )}
         {connection.status === "error" && (
           <Centered>
-            <Banner variant="error" title="Connection lost" description={connection.message} />
+            <Alert variant="destructive">
+              <AlertTitle>Connection lost</AlertTitle>
+              <AlertDescription>{connection.message}</AlertDescription>
+            </Alert>
           </Centered>
         )}
         {connection.status === "connected" && session.status === "loading" && (
           <Centered>
-            <Text variant="secondary">Loading session…</Text>
+            <p className="m-0 text-sm">Loading session…</p>
           </Centered>
         )}
         {session.status === "error" && (
           <Centered>
-            <Banner variant="error" title="Could not load session" description={session.message} />
+            <Alert variant="destructive">
+              <AlertTitle>Could not load session</AlertTitle>
+              <AlertDescription>{session.message}</AlertDescription>
+            </Alert>
           </Centered>
         )}
         {session.status === "ready" && <Conversation view={view} />}
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
 

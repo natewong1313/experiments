@@ -9,14 +9,16 @@ import appCss from "../styles.css?url";
 
 const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'auto';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);if(mode==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',mode)}root.setAttribute("data-mode",resolved);root.style.colorScheme=resolved;}catch(e){}})();`;
 
-function RootDocument({ children }: { children: ReactNode }): JSX.Element {
+type RootDocumentParams = { children: ReactNode };
+
+function RootDocument({ children }: RootDocumentParams): JSX.Element {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
-      <body className="font-sans antialiased [overflow-wrap:anywhere] bg-kumo-base text-sm text-kumo-default">
+      <body className="font-sans antialiased [overflow-wrap:anywhere] bg-background text-sm text-foreground">
         <div id="app" className="isolate">
           {children}
         </div>

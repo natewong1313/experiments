@@ -1,8 +1,11 @@
 import { useState } from "react";
 import type { JSX } from "react";
-import { Button, Input, LayerCard, Text } from "@cloudflare/kumo";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardDescription, CardTitle } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useAgentHost } from "../hooks/use-agent-host";
+import { useAgentHost } from "../lib/hooks/use-agent-host";
 
 const HOST_ID = /^[a-zA-Z0-9_-]{1,64}$/;
 
@@ -13,10 +16,10 @@ function App(): JSX.Element {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
       <div className="mb-6 grid gap-2">
-        <Text as="h1" variant="heading" size="lg">
-          Home
-        </Text>
-        <Text variant="secondary">Choose an agent host to view and create sessions.</Text>
+        <h1 className="m-0 font-heading text-xl font-semibold tracking-wider uppercase">Home</h1>
+        <p className="m-0 text-sm text-muted-foreground">
+          Choose an agent host to view and create sessions.
+        </p>
       </div>
       <form
         className="flex flex-wrap items-end gap-3 text-sm"
@@ -29,8 +32,8 @@ function App(): JSX.Element {
         }}
       >
         <div className="grid gap-1.5">
+          <Label htmlFor="host-id">Host ID</Label>
           <Input
-            label="Host ID"
             id="host-id"
             name="host"
             value={hostInput}
@@ -38,7 +41,7 @@ function App(): JSX.Element {
               setHostInput(event.target.value);
             }}
             required
-            pattern={"[a-zA-Z0-9_\\-]{1,64}"}
+            pattern="[a-zA-Z0-9_\\-]{1,64}"
             maxLength={64}
             aria-describedby="host-help"
           />
@@ -47,26 +50,27 @@ function App(): JSX.Element {
           Connect to host
         </Button>
       </form>
-      <p id="host-help" className="mt-2 text-sm text-kumo-subtle">
+      <p id="host-help" className="mt-2 text-sm text-muted-foreground">
         Use 1–64 letters, digits, underscores, or hyphens. Clients using the same host ID share
         sessions.
       </p>
-      <LayerCard className="mt-8 grid gap-4 px-6 py-5">
-        <div className="grid gap-1.5">
-          <Text as="h2" variant="heading">
-            Sessions
-          </Text>
-          <Text variant="secondary">View live sessions for {host}, or create a new session.</Text>
-        </div>
-        <Link
-          to="/sessions"
-          search={{ host }}
-
-          className="w-fit font-medium text-kumo-link underline underline-offset-4"
-        >
-          View sessions
-        </Link>
-      </LayerCard>
+      <Card className="mt-8 py-5!">
+        <CardContent className="grid gap-4 px-6">
+          <div className="grid gap-1.5">
+            <CardTitle>Sessions</CardTitle>
+            <CardDescription>
+              View live sessions for {host}, or create a new session.
+            </CardDescription>
+          </div>
+          <Link
+            to="/sessions"
+            search={{ host }}
+            className="w-fit font-medium text-primary underline underline-offset-4"
+          >
+            View sessions
+          </Link>
+        </CardContent>
+      </Card>
     </main>
   );
 }

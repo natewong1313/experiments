@@ -15,17 +15,17 @@ type AgentHostContextValue = {
 
 const AgentHostContext = createContext<AgentHostContextValue | undefined>(ABSENT);
 
-function HostConnection({
-  host,
-  setHost,
-  children,
-}: Omit<AgentHostContextValue, "view"> & { children: ReactNode }): JSX.Element {
+type AgentHostProviderParams = { children: ReactNode };
+
+type HostConnectionParams = Omit<AgentHostContextValue, "view"> & AgentHostProviderParams;
+
+function HostConnection({ host, setHost, children }: HostConnectionParams): JSX.Element {
   const view = useSessions(host);
 
   return <AgentHostContext value={{ host, setHost, view }}>{children}</AgentHostContext>;
 }
 
-function AgentHostProvider({ children }: { children: ReactNode }): JSX.Element {
+function AgentHostProvider({ children }: AgentHostProviderParams): JSX.Element {
   const search = useSearch({ from: "__root__" });
   const navigate = useNavigate();
   const host = search.host ?? "example";

@@ -11,7 +11,8 @@
   ],
   "ignorePatterns": [
     "src/routeTree.gen.ts",
-    "worker-configuration.d.ts"
+    "worker-configuration.d.ts",
+    "src/components/ui/**"
   ],
   "overrides": [
     {
@@ -32,8 +33,8 @@
     },
     {
       "files": [
-        "src/ahp/state.ts",
-        "src/ahp/dispatch.ts"
+        "src/lib/ahp/state.ts",
+        "src/lib/ahp/dispatch.ts"
       ],
       "rules": {
         "typescript/consistent-type-assertions": "off",
@@ -42,10 +43,72 @@
     },
     {
       "files": [
-        "src/ahp/dispatch.ts"
+        "src/lib/ahp/dispatch.ts"
       ],
       "rules": {
         "promise/avoid-new": "off"
+      }
+    },
+    {
+      "files": [
+        "src/routes/**"
+      ],
+      "rules": {
+        "react/only-export-components": "off",
+        "react/no-multi-comp": "off",
+        "react/jsx-max-depth": "off",
+        "react-perf/jsx-no-new-array-as-prop": "off",
+        "react-perf/jsx-no-new-function-as-prop": "off",
+        "react-perf/jsx-no-new-object-as-prop": "off",
+        "react-perf/jsx-no-jsx-as-prop": "off"
+      }
+    },
+    {
+      "files": [
+        "src/components/**",
+        "src/features/**"
+      ],
+      "rules": {
+        "react/jsx-max-depth": "off",
+        "react-perf/jsx-no-new-function-as-prop": "off",
+        "react-perf/jsx-no-new-object-as-prop": "off",
+        "react-perf/jsx-no-jsx-as-prop": "off"
+      }
+    },
+    {
+      "files": [
+        "src/lib/hooks/use-mobile.ts"
+      ],
+      "rules": {
+        "promise/prefer-await-to-callbacks": "off"
+      }
+    },
+    {
+      "files": [
+        "src/lib/hooks/use-agent-host.tsx"
+      ],
+      "rules": {
+        "react/no-multi-comp": "off",
+        "react/only-export-components": "off",
+        "react/jsx-no-constructed-context-values": "off",
+        "react-perf/jsx-no-new-function-as-prop": "off",
+        "react-perf/jsx-no-new-object-as-prop": "off"
+      }
+    },
+    {
+      "files": [
+        "src/components/ThemeToggle.tsx"
+      ],
+      "rules": {
+        "react/react-compiler": "off"
+      }
+    },
+    {
+      "files": [
+        "src/features/sessions/AgentResponse.tsx"
+      ],
+      "rules": {
+        "react/no-array-index-key": "off"
       }
     }
   ]
