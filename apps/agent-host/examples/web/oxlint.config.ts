@@ -1,0 +1,101 @@
+import reactInternal from "@experiments/oxlint-config/react-internal";
+import { defineConfig } from "oxlint";
+
+export default defineConfig({
+  extends: [reactInternal],
+  jsPlugins: [
+    {
+      name: "anti-slop",
+      specifier: "./node_modules/@experiments/oxlint-config/anti-slop/index.ts",
+    },
+  ],
+  ignorePatterns: ["src/routeTree.gen.ts", "worker-configuration.d.ts", "src/components/ui/**"],
+  overrides: [
+    {
+      files: ["src/router.tsx"],
+      rules: {
+        "typescript/consistent-type-definitions": "off",
+      },
+    },
+    {
+      files: ["src/routes/__root.tsx"],
+      rules: {
+        "import/extensions": "off",
+      },
+    },
+    {
+      files: ["src/lib/ahp/state.ts", "src/lib/ahp/dispatch.ts"],
+      rules: {
+        "typescript/consistent-type-assertions": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+      },
+    },
+    {
+      files: ["src/lib/ahp/dispatch.ts"],
+      rules: {
+        "promise/avoid-new": "off",
+      },
+    },
+    {
+      files: ["src/pi-agent.ts"],
+      rules: {
+        "eslint/no-magic-numbers": [
+          "error",
+          {
+            ignore: [0, 1],
+            ignoreArrayIndexes: true,
+          },
+        ],
+      },
+    },
+    {
+      files: ["src/routes/**"],
+      rules: {
+        "react/only-export-components": "off",
+        "react/no-multi-comp": "off",
+        "react/jsx-max-depth": "off",
+        "react-perf/jsx-no-new-array-as-prop": "off",
+        "react-perf/jsx-no-new-function-as-prop": "off",
+        "react-perf/jsx-no-new-object-as-prop": "off",
+        "react-perf/jsx-no-jsx-as-prop": "off",
+      },
+    },
+    {
+      files: ["src/components/**", "src/features/**"],
+      rules: {
+        "react/jsx-max-depth": "off",
+        "react-perf/jsx-no-new-function-as-prop": "off",
+        "react-perf/jsx-no-new-object-as-prop": "off",
+        "react-perf/jsx-no-jsx-as-prop": "off",
+      },
+    },
+    {
+      files: ["src/lib/hooks/use-mobile.ts"],
+      rules: {
+        "promise/prefer-await-to-callbacks": "off",
+      },
+    },
+    {
+      files: ["src/lib/hooks/use-agent-host.tsx"],
+      rules: {
+        "react/no-multi-comp": "off",
+        "react/only-export-components": "off",
+        "react/jsx-no-constructed-context-values": "off",
+        "react-perf/jsx-no-new-function-as-prop": "off",
+        "react-perf/jsx-no-new-object-as-prop": "off",
+      },
+    },
+    {
+      files: ["src/components/ThemeToggle.tsx"],
+      rules: {
+        "react/react-compiler": "off",
+      },
+    },
+    {
+      files: ["src/features/sessions/AgentResponse.tsx"],
+      rules: {
+        "react/no-array-index-key": "off",
+      },
+    },
+  ],
+});

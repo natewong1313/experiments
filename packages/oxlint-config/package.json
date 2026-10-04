@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./base": "./base.json",
-    "./drizzle": "./drizzle.json",
-    "./next-js": "./next-js.json",
-    "./react-internal": "./react-internal.json"
+    "./base": "./base.ts",
+    "./drizzle": "./drizzle.ts",
+    "./next-js": "./next-js.ts",
+    "./react-internal": "./react-internal.ts"
   },
   "devDependencies": {
     "@oxlint/plugins": "1.78.0",

@@ -1,2 +1,3 @@
 - Always run oxlint against your changes, run `pnpm run lint`
 - Always run formatting after your changes, run `pnpm run format`
+- Oxlint configs are TypeScript: one `oxlint.config.ts` per workspace, extending config objects from `@experiments/oxlint-config`. Never create `.oxlintrc.json` / `oxlintrc.json` (banned in pre-commit)

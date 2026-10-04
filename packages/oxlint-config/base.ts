@@ -1,30 +1,28 @@
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "jsPlugins": [
+import { defineConfig } from "oxlint";
+import { fileURLToPath } from "node:url";
+
+// Relative JS plugin specifiers are not allowed in configs consumed via
+// `extends`, so resolve the vendored plugin to an absolute path up front.
+const antiSlopPlugin = fileURLToPath(new URL("./anti-slop/index.ts", import.meta.url));
+
+export default defineConfig({
+  jsPlugins: [
     "eslint-plugin-zod",
     {
-      "name": "anti-slop",
-      "specifier": "./anti-slop/index.ts"
-    }
+      name: "anti-slop",
+      specifier: antiSlopPlugin,
+    },
   ],
-  "plugins": [
-    "typescript",
-    "unicorn",
-    "promise",
-    "import",
-    "node",
-    "oxc",
-    "vitest"
-  ],
-  "categories": {
-    "correctness": "error"
+  plugins: ["typescript", "unicorn", "promise", "import", "node", "oxc", "vitest"],
+  categories: {
+    correctness: "error",
   },
-  "rules": {
+  rules: {
     "zod/array-style": [
       "error",
       {
-        "style": "function"
-      }
+        style: "function",
+      },
     ],
     "zod/consistent-import": "error",
     "zod/consistent-import-source": "error",
@@ -32,14 +30,14 @@
     "zod/consistent-schema-output-type-style": [
       "error",
       {
-        "style": "output"
-      }
+        style: "output",
+      },
     ],
     "zod/consistent-schema-var-name": [
       "error",
       {
-        "after": "Schema"
-      }
+        after: "Schema",
+      },
     ],
     "zod/no-any-schema": "error",
     "zod/no-coerce-boolean": "error",
@@ -74,56 +72,44 @@
     "zod/require-error-message": "error",
     "eslint/array-callback-return": "error",
     "eslint/capitalized-comments": "error",
-    "eslint/curly": [
-      "error",
-      "all"
-    ],
+    "eslint/curly": ["error", "all"],
     "eslint/default-case-last": "error",
     "eslint/default-param-last": "error",
     "eslint/eqeqeq": "error",
-    "eslint/func-style": [
-      "error",
-      "declaration"
-    ],
+    "eslint/func-style": ["error", "declaration"],
     "eslint/grouped-accessor-pairs": "error",
     "eslint/max-classes-per-file": [
       "error",
       {
-        "max": 1
-      }
+        max: 1,
+      },
     ],
     "eslint/max-depth": [
       "error",
       {
-        "max": 3
-      }
+        max: 3,
+      },
     ],
     "eslint/max-lines": [
       "error",
       {
-        "max": 750
-      }
+        max: 750,
+      },
     ],
     "eslint/max-lines-per-function": [
       "error",
       {
-        "max": 200
-      }
+        max: 200,
+      },
     ],
     "eslint/max-nested-callbacks": [
       "error",
       {
-        "max": 2
-      }
+        max: 2,
+      },
     ],
-    "eslint/max-params": [
-      "error",
-      4
-    ],
-    "eslint/max-statements": [
-      "error",
-      100
-    ],
+    "eslint/max-params": ["error", 4],
+    "eslint/max-statements": ["error", 100],
     "eslint/new-cap": "error",
     "eslint/no-array-constructor": "error",
     "eslint/no-await-in-loop": "error",
@@ -132,8 +118,8 @@
     "eslint/no-else-return": [
       "error",
       {
-        "allowElseIf": false
-      }
+        allowElseIf: false,
+      },
     ],
     "eslint/no-eq-null": "error",
     "eslint/no-extra-bind": "error",
@@ -168,22 +154,13 @@
     "eslint/prefer-promise-reject-errors": "error",
     "eslint/prefer-template": "error",
     "eslint/preserve-caught-error": "error",
-    "import/consistent-type-specifier-style": [
-      "error",
-      "prefer-top-level-if-only-type-imports"
-    ],
+    "import/consistent-type-specifier-style": ["error", "prefer-top-level-if-only-type-imports"],
     "import/export": "error",
     "import/exports-last": "error",
-    "import/extensions": [
-      "error",
-      "never"
-    ],
+    "import/extensions": ["error", "never"],
     "import/first": "error",
     "import/group-exports": "error",
-    "import/max-dependencies": [
-      "error",
-      15
-    ],
+    "import/max-dependencies": ["error", 15],
     "import/named": "error",
     "import/newline-after-import": "error",
     "import/no-duplicates": "error",
@@ -195,16 +172,11 @@
     "import/no-unassigned-import": [
       "error",
       {
-        "allow": [
-          "**/*.css"
-        ]
-      }
+        allow: ["**/*.css"],
+      },
     ],
     "node/callback-return": "error",
-    "node/exports-style": [
-      "error",
-      "exports"
-    ],
+    "node/exports-style": ["error", "exports"],
     "oxc/branches-sharing-code": "error",
     "oxc/no-accumulating-spread": "error",
     "oxc/no-barrel-file": "error",
@@ -224,31 +196,19 @@
     "typescript/array-type": [
       "error",
       {
-        "default": "array"
-      }
+        default: "array",
+      },
     ],
-    "typescript/class-literal-property-style": [
-      "error",
-      "getters"
-    ],
-    "typescript/consistent-generic-constructors": [
-      "error",
-      "type-annotation"
-    ],
-    "typescript/consistent-indexed-object-style": [
-      "error",
-      "record"
-    ],
+    "typescript/class-literal-property-style": ["error", "getters"],
+    "typescript/consistent-generic-constructors": ["error", "type-annotation"],
+    "typescript/consistent-indexed-object-style": ["error", "record"],
     "typescript/consistent-type-assertions": [
       "error",
       {
-        "assertionStyle": "never"
-      }
+        assertionStyle: "never",
+      },
     ],
-    "typescript/consistent-type-definitions": [
-      "error",
-      "type"
-    ],
+    "typescript/consistent-type-definitions": ["error", "type"],
     "typescript/consistent-type-exports": "error",
     "typescript/consistent-type-imports": "error",
     "typescript/dot-notation": "error",
@@ -256,14 +216,11 @@
     "typescript/explicit-member-accessibility": [
       "error",
       {
-        "accessibility": "no-public"
-      }
+        accessibility: "no-public",
+      },
     ],
     "typescript/explicit-module-boundary-types": "error",
-    "typescript/method-signature-style": [
-      "error",
-      "method"
-    ],
+    "typescript/method-signature-style": ["error", "method"],
     "typescript/no-confusing-non-null-assertion": "error",
     "typescript/no-confusing-void-expression": "error",
     "typescript/no-empty-object-type": "error",
@@ -310,8 +267,8 @@
     "unicorn/max-nested-calls": [
       "error",
       {
-        "max": 2
-      }
+        max: 2,
+      },
     ],
     "unicorn/new-for-builtins": "error",
     "unicorn/no-anonymous-default-export": "error",
@@ -358,10 +315,7 @@
     "unicorn/prefer-string-replace-all": "error",
     "unicorn/prefer-string-trim-start-end": "error",
     "unicorn/prefer-structured-clone": "error",
-    "unicorn/prefer-ternary": [
-      "error",
-      "only-single-line"
-    ],
+    "unicorn/prefer-ternary": ["error", "only-single-line"],
     "unicorn/prefer-top-level-await": "error",
     "unicorn/require-module-specifiers": "error",
     "unicorn/switch-case-braces": "error",
@@ -372,10 +326,7 @@
     "vitest/no-identical-title": "error",
     "vitest/no-interpolation-in-snapshots": "error",
     "vitest/no-standalone-expect": "error",
-    "vitest/prefer-snapshot-hint": [
-      "error",
-      "multi"
-    ],
+    "vitest/prefer-snapshot-hint": ["error", "multi"],
     "vitest/require-awaited-expect-poll": "error",
     "vitest/require-local-test-context-for-concurrent-snapshots": "error",
     "vitest/valid-expect": "error",
@@ -390,7 +341,12 @@
     "anti-slop/no-object-parameters": "error",
     "anti-slop/no-reflect-apply": "error",
     "anti-slop/no-reflect-get": "error",
-    "anti-slop/no-runtime-typeof": ["error", { "allowInTypeGuards": true }],
+    "anti-slop/no-runtime-typeof": [
+      "error",
+      {
+        allowInTypeGuards: true,
+      },
+    ],
     "anti-slop/no-shape-in-symbol-names": "error",
     "anti-slop/no-unknown-parameters": "error",
     "anti-slop/no-unknown-returns": "error",
@@ -398,6 +354,6 @@
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-widen-then-assert": "error",
     "anti-slop/require-readable-spacing": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
-  }
-}
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+  },
+});

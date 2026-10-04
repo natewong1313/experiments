@@ -4,47 +4,56 @@
 # https://lefthook.dev
 pre-commit:
   commands:
+    # Lint configs must be oxlint.config.ts (TypeScript). This guards against
+    # reintroducing the legacy .oxlintrc.json format.
+    no-oxlintrc-json:
+      run: |
+        if git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)\.?oxlintrc\.json(c)?$'; then
+          echo "ERROR: oxlintrc JSON configs are banned; use oxlint.config.ts instead (files listed above)." >&2
+          exit 1
+        fi
+
     oxfmt:
       glob: "*.{ts,tsx,md}"
-      run: oxfmt --write {staged_files}
+      run: pnpm exec oxfmt --write {staged_files}
       stage_fixed: true
 
     oxlint-agent-host:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/src apps/agent-host/test apps/agent-host/vitest.config.ts apps/agent-host/drizzle.config.ts
-      run: oxlint --deny-warnings --type-aware {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
     oxlint-agent-host-basic:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/basic/src apps/agent-host/examples/basic/client
-      run: oxlint --deny-warnings --type-aware {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
     oxlint-agent-host-web:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/web/src apps/agent-host/examples/web/vite.config.ts
-      run: oxlint --deny-warnings --type-aware {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
     oxlint-pi-acp:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- apps/pi-acp/src apps/pi-acp/test apps/pi-acp/vitest.config.ts
-      run: oxlint --deny-warnings --type-aware {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
     oxlint-protocol-schemas:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- packages/protocol-schemas
-      run: oxlint --deny-warnings {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern {files}
 
     oxlint-scripts:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- packages/scripts
-      run: oxlint --deny-warnings --type-aware {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
     oxlint-ui:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- packages/ui
-      run: oxlint --deny-warnings --type-aware {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
     oxlint-ahp-conformance:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- packages/ahp-conformance
-      run: oxlint --deny-warnings {files}
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern {files}

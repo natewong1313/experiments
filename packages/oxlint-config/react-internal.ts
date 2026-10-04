@@ -1,17 +1,34 @@
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "extends": ["./base.json"],
-  "plugins": ["typescript", "react", "react-hooks", "react-perf", "unicorn", "promise", "import", "node", "oxc", "vitest"],
-  "env": { "builtin": true, "browser": true },
-  "rules": {
+import { defineConfig } from "oxlint";
+
+import base from "@experiments/oxlint-config/base";
+
+export default defineConfig({
+  extends: [base],
+
+  plugins: [
+    "typescript",
+    "react",
+    "react-perf",
+    "unicorn",
+    "promise",
+    "import",
+    "node",
+    "oxc",
+    "vitest",
+  ],
+  env: {
+    builtin: true,
+    browser: true,
+  },
+  rules: {
     "react-hooks/exhaustive-deps": "error",
     "react-hooks/rules-of-hooks": "error",
     "react/checked-requires-onchange-or-readonly": "error",
     "react/function-component-definition": [
       "error",
       {
-        "namedComponents": "function-declaration"
-      }
+        namedComponents: "function-declaration",
+      },
     ],
     "react/hook-use-state": "error",
     "react/jsx-boolean-value": ["error", "never"],
@@ -22,8 +39,8 @@
     "react/jsx-max-depth": [
       "error",
       {
-        "max": 3
-      }
+        max: 3,
+      },
     ],
     "react/jsx-no-comment-textnodes": "error",
     "react/jsx-no-constructed-context-values": "error",
@@ -46,6 +63,6 @@
     "react-perf/jsx-no-jsx-as-prop": "error",
     "react-perf/jsx-no-new-array-as-prop": "error",
     "react-perf/jsx-no-new-function-as-prop": "error",
-    "react-perf/jsx-no-new-object-as-prop": "error"
-  }
-}
+    "react-perf/jsx-no-new-object-as-prop": "error",
+  },
+});
