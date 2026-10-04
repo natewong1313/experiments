@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { Outlet, useLocation } from "@tanstack/react-router";
 import { SidebarProvider } from "./ui/sidebar";
-import { AgentHostProvider } from "../lib/hooks/use-agent-host";
+import { AgentHostProvider } from "../lib/hooks/AgentHostProvider";
 import AppSidebar from "./AppSidebar";
 import ThemeToggle from "./ThemeToggle";
 

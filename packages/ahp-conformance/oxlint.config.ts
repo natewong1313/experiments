@@ -6,18 +6,19 @@ export default defineConfig({
   ignorePatterns: ["oxlint.config.ts"],
   overrides: [
     {
+      // These modules adapt WebSocket events and callbacks into promises.
       files: ["raw.ts", "test-peer.ts"],
       rules: {
         "promise/avoid-new": "off",
-        "promise/no-multiple-resolved": "off",
       },
     },
     {
       files: ["*.test.ts"],
       rules: {
         "eslint/no-magic-numbers": "off",
-        "eslint/max-nested-callbacks": "off",
+        "eslint/max-nested-callbacks": ["error", { max: 4 }],
         "unicorn/max-nested-calls": "off",
+        // Oxlint does not recognize all callbacks under our extended test fixture.
         "vitest/no-standalone-expect": "off",
         "vitest/expect-expect": [
           "error",

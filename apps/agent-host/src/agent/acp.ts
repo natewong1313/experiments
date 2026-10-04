@@ -211,25 +211,25 @@ class AgentConnections {
 
       console.log("Initializing", record.acpSession);
 
-      const initialized = InitializeResponseSchema.parse(
-        await withDeadline(
-          connection.agent.request(
-            methods.agent.initialize,
-            InitializeRequestOutboundSchema.parse({
-              protocolVersion: PROTOCOL_VERSION,
-              clientCapabilities: {
-                session: { compaction: {}, notices: {}, configOptions: { boolean: {} } },
-                subagents: {},
-                plan: {},
-              },
-            }),
-          ),
-          CONNECT_TIMEOUT_MS,
-          () => {
-            socket.close();
-          },
-        ),
+      const initializeParams = InitializeRequestOutboundSchema.parse({
+        protocolVersion: PROTOCOL_VERSION,
+        clientCapabilities: {
+          session: { compaction: {}, notices: {}, configOptions: { boolean: {} } },
+          subagents: {},
+          plan: {},
+        },
+      });
+
+      const initializeRequest = connection.agent.request(
+        methods.agent.initialize,
+        initializeParams,
       );
+
+      const initializeResult = await withDeadline(initializeRequest, CONNECT_TIMEOUT_MS, () => {
+        socket.close();
+      });
+
+      const initialized = InitializeResponseSchema.parse(initializeResult);
 
       if (initialized.protocolVersion !== PROTOCOL_VERSION) {
         throw new Error("Unsupported agent protocol version");
@@ -249,15 +249,13 @@ class AgentConnections {
       if (sessionId === null) {
         console.log("new session", record.acpSession);
 
-        const session = NewSessionResponseSchema.parse(
-          await withDeadline(
-            connection.agent.request(methods.agent.session.new, options),
-            CONNECT_TIMEOUT_MS,
-            () => {
-              socket.close();
-            },
-          ),
-        );
+        const sessionRequest = connection.agent.request(methods.agent.session.new, options);
+
+        const sessionResult = await withDeadline(sessionRequest, CONNECT_TIMEOUT_MS, () => {
+          socket.close();
+        });
+
+        const session = NewSessionResponseSchema.parse(sessionResult);
 
         ({ sessionId } = session);
       } else {
@@ -267,18 +265,14 @@ class AgentConnections {
 
         console.log("loading session", record.acpSession);
 
-        LoadSessionResponseSchema.parse(
-          await withDeadline(
-            connection.agent.request(
-              methods.agent.session.load,
-              LoadSessionRequestOutboundSchema.parse({ ...options, sessionId }),
-            ),
-            CONNECT_TIMEOUT_MS,
-            () => {
-              socket.close();
-            },
-          ),
-        );
+        const loadParams = LoadSessionRequestOutboundSchema.parse({ ...options, sessionId });
+        const loadRequest = connection.agent.request(methods.agent.session.load, loadParams);
+
+        const loadResult = await withDeadline(loadRequest, CONNECT_TIMEOUT_MS, () => {
+          socket.close();
+        });
+
+        LoadSessionResponseSchema.parse(loadResult);
       }
 
       return new AgentConversation({

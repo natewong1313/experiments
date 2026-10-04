@@ -1,3 +1,4 @@
+import type * as z from "zod";
 import type { ChatState, Turn } from "@experiments/protocol-schemas/ahp";
 import { MAX_DOCUMENT_BYTES, checkBytes } from "../memory";
 
@@ -14,7 +15,7 @@ class JsonDocuments {
     this.sql = sql;
   }
 
-  read<T extends JsonDocument>(scope: string, id: string): T {
+  read<T extends JsonDocument>(scope: string, id: string, schema: z.ZodType<T>): T {
     const size = this.size(scope, id);
 
     if (size === 0) {
@@ -35,8 +36,9 @@ class JsonDocuments {
       offset += row.data.byteLength;
     }
 
-    // SAFETY: Every stored document is produced by write<T> from the same typed owner.
-    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+    const text = new TextDecoder().decode(bytes);
+
+    return schema.parse(JSON.parse(text));
   }
 
   write(scope: string, id: string, value: JsonDocument, limit = MAX_DOCUMENT_BYTES): void {

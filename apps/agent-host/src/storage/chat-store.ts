@@ -3,7 +3,12 @@ import * as z from "zod";
 import { turns } from "./schema";
 import type { JsonDocuments } from "./json-documents";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
-import type { ChatState, Turn } from "@experiments/protocol-schemas/ahp";
+import {
+  ChatStateSchema,
+  TurnSchema,
+  type ChatState,
+  type Turn,
+} from "@experiments/protocol-schemas/ahp";
 import { ProtocolError, RpcCodes } from "../ahp/protocol";
 import {
   MAX_DOCUMENT_BYTES,
@@ -39,7 +44,7 @@ class ChatStore {
   }
 
   live(uri: string): ChatState {
-    return this.documents.read<ChatState>("chat", uri);
+    return this.documents.read("chat", uri, ChatStateSchema);
   }
 
   liveSize(uri: string): number {
@@ -180,7 +185,7 @@ class ChatStore {
   }
 
   private readTurn(uri: string, turnId: string): Turn {
-    return this.documents.read<Turn>(uri, turnId);
+    return this.documents.read(uri, turnId, TurnSchema);
   }
 }
 

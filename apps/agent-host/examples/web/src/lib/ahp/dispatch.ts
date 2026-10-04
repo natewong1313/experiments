@@ -24,6 +24,7 @@ async function dispatchAction({
 
   try {
     // SAFETY: StateActionSchema validates the wire values used by the SDK's nominal action enums.
+    // oxlint-disable-next-line typescript/consistent-type-assertions, typescript/no-unsafe-type-assertion
     const validated = StateActionSchema.parse(action) as SdkAction;
     const { clientSeq } = client.dispatch(channel, validated);
 

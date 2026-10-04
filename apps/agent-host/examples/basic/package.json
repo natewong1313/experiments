@@ -17,6 +17,7 @@
     "@earendil-works/pi-durable": "catalog:",
     "@experiments/agent-host": "workspace:*",
     "@experiments/pi-acp": "workspace:*",
+    "@experiments/protocol-schemas": "workspace:*",
     "@microsoft/agent-host-protocol": "catalog:",
     "agents": "catalog:",
     "zod": "catalog:"

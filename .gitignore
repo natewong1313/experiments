@@ -31,3 +31,6 @@ dist
 npm-debug.log*
 
 docs/
+
+# Codex
+core.[0-9]*

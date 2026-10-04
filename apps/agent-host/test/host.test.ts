@@ -349,11 +349,9 @@ it("sends client cancellation to the ACP agent", async () => {
 });
 
 it("rejects attachments through the prompt mapper before invoking ACP", async () => {
-  const prompt = vi.fn<() => Promise<PromptResponse>>(
-    async (): Promise<PromptResponse> => ({
-      stopReason: "end_turn",
-    }),
-  );
+  const prompt = vi.fn<() => Promise<PromptResponse>>(async (): Promise<PromptResponse> => ({
+    stopReason: "end_turn",
+  }));
 
   await withAcpAgent({
     prompt,

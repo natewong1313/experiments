@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Button } from "./ui/button";
 import type { JSX } from "react";
 
@@ -18,11 +18,7 @@ const MODE_LABEL: Record<ThemeMode, string> = {
   auto: "Auto",
 };
 
-function getInitialMode(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "auto";
-  }
-
+function getSnapshot(): ThemeMode {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
 
   if (stored === "light" || stored === "dark" || stored === "auto") {
@@ -49,14 +45,32 @@ function applyThemeMode(mode: ThemeMode): void {
   document.documentElement.style.colorScheme = resolved;
 }
 
+function getServerSnapshot(): ThemeMode {
+  return "auto";
+}
+
+function subscribe(onStoreChange: () => void): () => void {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener("theme-change", onStoreChange);
+
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("theme-change", onStoreChange);
+  };
+}
+
+function toggleMode(): void {
+  const nextMode: ThemeMode = NEXT_MODE[getSnapshot()];
+  window.localStorage.setItem(THEME_STORAGE_KEY, nextMode);
+  window.dispatchEvent(new Event("theme-change"));
+}
+
 export default function ThemeToggle(): JSX.Element {
-  const [mode, setMode] = useState<ThemeMode>("auto");
+  const mode = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect((): void => {
-    const initialMode = getInitialMode();
-    setMode(initialMode);
-    applyThemeMode(initialMode);
-  }, []);
+    applyThemeMode(mode);
+  }, [mode]);
 
   useEffect((): (() => void) | undefined => {
     if (mode !== "auto") {
@@ -76,28 +90,13 @@ export default function ThemeToggle(): JSX.Element {
     };
   }, [mode]);
 
-  function toggleMode(): void {
-    const nextMode: ThemeMode = NEXT_MODE[mode];
-    setMode(nextMode);
-    applyThemeMode(nextMode);
-    window.localStorage.setItem(THEME_STORAGE_KEY, nextMode);
-  }
-
   const label =
     mode === "auto"
       ? `Theme mode: auto (system). Click to switch to ${NEXT_MODE[mode]} mode.`
       : `Theme mode: ${mode}. Click to switch mode.`;
 
   return (
-    <Button
-      variant="secondary"
-      type="button"
-      onClick={() => {
-        toggleMode();
-      }}
-      aria-label={label}
-      title={label}
-    >
+    <Button variant="secondary" type="button" onClick={toggleMode} aria-label={label} title={label}>
       {MODE_LABEL[mode]}
     </Button>
   );

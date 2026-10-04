@@ -1,5 +1,6 @@
 import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import * as z from "zod";
+import { ChatActionSchema, SessionActionSchema } from "@experiments/protocol-schemas/ahp";
 import type { Subscription } from "@microsoft/agent-host-protocol/client";
 import { AhpClient } from "@microsoft/agent-host-protocol/client";
 import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
@@ -8,10 +9,12 @@ const ARGUMENT_OFFSET = 2;
 
 const TIMEOUT_MS = 120_000;
 
+const CreationErrorSchema = z.object({ message: z.string() });
+
 const SessionPreviewSchema = z.object({
   lifecycle: z.enum(["creating", "ready", "failed"]),
   defaultChat: z.string(),
-  creationError: z.object({ message: z.string() }).optional(),
+  creationError: CreationErrorSchema.optional(),
 });
 
 const [endpoint, prompt = "Say hello in one sentence."] = process.argv.slice(ARGUMENT_OFFSET);
@@ -45,7 +48,7 @@ async function waitUntilReady(
       continue;
     }
 
-    const { action } = event.params;
+    const action = SessionActionSchema.parse(event.params.action);
 
     if (action.type === "session/ready") {
       return;
@@ -62,22 +65,24 @@ async function waitUntilReady(
 async function runPrompt(chat: string, text: string): Promise<void> {
   const { subscription } = await client.subscribe(chat);
   const turnId = crypto.randomUUID();
-  transport.send(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      method: "dispatchAction",
-      params: {
-        channel: chat,
-        clientSeq: 1,
-        action: {
-          type: "chat/turnStarted",
-          turnId,
-          startedAt: new Date().toISOString(),
-          message: { text, origin: { kind: "user" } },
-        },
+  const startedAt = new Date().toISOString();
+
+  const request = JSON.stringify({
+    jsonrpc: "2.0",
+    method: "dispatchAction",
+    params: {
+      channel: chat,
+      clientSeq: 1,
+      action: {
+        type: "chat/turnStarted",
+        turnId,
+        startedAt,
+        message: { text, origin: { kind: "user" } },
       },
-    }),
-  );
+    },
+  });
+
+  transport.send(request);
 
   for await (const event of subscription) {
     if (event.type !== "action") {
@@ -88,7 +93,7 @@ async function runPrompt(chat: string, text: string): Promise<void> {
       throw new Error(event.params.rejectionReason);
     }
 
-    const { action } = event.params;
+    const action = ChatActionSchema.parse(event.params.action);
 
     if (!("turnId" in action) || action.turnId !== turnId) {
       continue;

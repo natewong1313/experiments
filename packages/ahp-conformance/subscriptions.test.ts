@@ -129,13 +129,7 @@ describe("subscriptions and reconnection", () => {
                 }),
               );
 
-              if (recovered.type === "replay") {
-                expectReplayRecovery(recovered, serverSeq, accepted);
-              } else {
-                const recoveredSnapshot = recovered.snapshots.find((item) => item.resource === uri);
-
-                expectSnapshotTitle(recoveredSnapshot, uri, changed);
-              }
+              expectRecovery({ recovered, since: serverSeq, accepted, uri, title: changed });
 
               const current = await fresh.subscribe(uri);
               expect(expectSessionState(current.result.snapshot, uri).title).toBe(changed);
@@ -192,8 +186,27 @@ async function captureServerSeq(clientId: string, subscriptions: string[]): Prom
   });
 }
 
+type ExpectRecoveryParams = {
+  recovered: ReconnectResult;
+  since: number;
+  accepted: ActionEnvelope;
+  uri: string;
+  title: string;
+};
+
+function expectRecovery({ recovered, since, accepted, uri, title }: ExpectRecoveryParams): void {
+  if (recovered.type === "replay") {
+    expectReplayRecovery(recovered, since, accepted);
+  } else {
+    const snapshot = recovered.snapshots.find((item) => item.resource === uri);
+    expectSnapshotTitle(snapshot, uri, title);
+  }
+}
+
+type ReplayRecovery = Extract<ReconnectResult, { type: "replay" }>;
+
 function expectReplayRecovery(
-  result: Extract<ReconnectResult, { type: "replay" }>,
+  result: ReplayRecovery,
   since: number,
   accepted: ActionEnvelope,
 ): void {

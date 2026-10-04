@@ -5,12 +5,9 @@ import * as z from "zod";
 
 const JsonObjectSchema = z.record(z.string(), z.unknown());
 
-const document = JSON.parse(
-  await readFile(
-    new URL(import.meta.resolve("@agentclientprotocol/sdk/schema/schema.json")),
-    "utf8",
-  ),
-);
+const schemaUrl = new URL(import.meta.resolve("@agentclientprotocol/sdk/schema/schema.json"));
+
+const document = JSON.parse(await readFile(schemaUrl, "utf8"));
 
 const definitions = document.$defs;
 
@@ -21,6 +18,8 @@ const check = process.argv.includes("--check");
 const names = Object.keys(definitions);
 
 const output = new Map();
+
+const ZOD_LITERAL_PREFIX_LENGTH = "z.literal(".length;
 
 function refs(value) {
   if (Array.isArray(value)) {
@@ -88,7 +87,7 @@ function objectVariants(value) {
 
 function union(values) {
   const literals = values.map((value) =>
-    /^z\.literal\(".*"\)$/.test(value) ? JSON.parse(value.slice(10, -1)) : null,
+    /^z\.literal\(".*"\)$/.test(value) ? JSON.parse(value.slice(ZOD_LITERAL_PREFIX_LENGTH, -1)) : null,
   );
 
   if (literals.every((value) => value !== null)) {

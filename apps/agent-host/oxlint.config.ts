@@ -18,35 +18,22 @@ export default defineConfig({
       },
     },
     {
-      files: ["src/state/reducers.ts"],
-      rules: {
-        "typescript/consistent-type-assertions": "off",
-        "typescript/no-unsafe-type-assertion": "off",
-        "eslint/no-magic-numbers": "off",
-      },
-    },
-    {
-      files: ["src/storage/json-documents.ts"],
-      rules: {
-        "typescript/no-unnecessary-type-parameters": "off",
-        "typescript/consistent-type-assertions": "off",
-        "typescript/no-unsafe-type-assertion": "off",
-      },
-    },
-    {
+      // Timer APIs need an executor to reject the deadline promise.
       files: ["src/deadline.ts"],
       rules: {
         "promise/avoid-new": "off",
       },
     },
     {
-      files: ["src/ahp/protocol.ts", "src/agent/acp.ts"],
+      // Schema composition nests calls; subscription arrays have variable length.
+      files: ["src/ahp/protocol.ts"],
       rules: {
         "unicorn/max-nested-calls": "off",
         "zod/prefer-tuple-over-array-length": "off",
       },
     },
     {
+      // This array has an upper bound rather than fixed tuple positions.
       files: ["src/ahp/clients.ts"],
       rules: {
         "zod/prefer-tuple-over-array-length": "off",
@@ -64,6 +51,7 @@ export default defineConfig({
       },
     },
     {
+      // Cloudflare environment types require declaration merging.
       files: ["test/env.d.ts"],
       rules: {
         "typescript/consistent-type-definitions": "off",

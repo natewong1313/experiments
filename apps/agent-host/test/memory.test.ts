@@ -6,6 +6,7 @@ import {
   ChatStateSchema,
   InitializeResultSchema,
   SubscribeResultSchema,
+  TurnSchema,
 } from "@experiments/protocol-schemas/ahp";
 import { HostStore } from "../src/state/store";
 import { JsonDocuments } from "../src/storage/json-documents";
@@ -285,7 +286,9 @@ it("bounds legacy document reads before allocating and rolls back oversized live
     }
 
     const documents = new JsonDocuments(state.storage.sql);
-    expect(() => documents.read("legacy", "huge")).toThrow("Stored document exceeds");
+    expect(() => documents.read("legacy", "huge", ChatStateSchema)).toThrow(
+      "Stored document exceeds",
+    );
   });
 });
 
@@ -342,5 +345,28 @@ it("recovers only interrupted sessions and preserves oversized legacy data witho
     expect(store.requireMetadata(active).chatUri).toBe(live.chatUri);
     store.remove(active);
     expect(documents.size("chat", live.chatUri)).toBe(0);
+  });
+});
+
+it("validates stored documents against the requested schema", async () => {
+  const { stub, chat } = await populatedHost();
+
+  await runInDurableObject(stub, (instance, state) => {
+    expect(instance).toBeDefined();
+    const store = new HostStore(state);
+    const documents = new JsonDocuments(state.storage.sql);
+    const expected = store.require(chat).chat;
+
+    expect(documents.read("chat", chat, ChatStateSchema)).toEqual(expected);
+    expect(() => documents.read("chat", chat, TurnSchema)).toThrow(/Invalid input/);
+
+    const invalid = new TextEncoder().encode("{}");
+    state.storage.sql.exec(
+      "UPDATE document_chunks SET data = ? WHERE scope = 'chat' AND id = ?",
+      invalid,
+      chat,
+    );
+
+    expect(() => documents.read("chat", chat, ChatStateSchema)).toThrow(/Invalid input/);
   });
 });

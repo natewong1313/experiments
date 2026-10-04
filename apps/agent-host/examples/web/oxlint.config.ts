@@ -3,15 +3,19 @@ import { defineConfig } from "oxlint";
 
 export default defineConfig({
   extends: [reactInternal],
-  jsPlugins: [
-    {
-      name: "anti-slop",
-      specifier: "./node_modules/@experiments/oxlint-config/anti-slop/index.ts",
-    },
-  ],
+  // The UI directory contains the vendored shadcn components.
   ignorePatterns: ["src/routeTree.gen.ts", "worker-configuration.d.ts", "src/components/ui/**"],
+  rules: {
+    "react/jsx-max-depth": [
+      "error",
+      {
+        max: 8,
+      },
+    ],
+  },
   overrides: [
     {
+      // Register is a module augmentation interface.
       files: ["src/router.tsx"],
       rules: {
         "typescript/consistent-type-definitions": "off",
@@ -20,14 +24,13 @@ export default defineConfig({
     {
       files: ["src/routes/__root.tsx"],
       rules: {
-        "import/extensions": "off",
-      },
-    },
-    {
-      files: ["src/lib/ahp/state.ts", "src/lib/ahp/dispatch.ts"],
-      rules: {
-        "typescript/consistent-type-assertions": "off",
-        "typescript/no-unsafe-type-assertion": "off",
+        "import/extensions": [
+          "error",
+          "never",
+          {
+            css: "always",
+          },
+        ],
       },
     },
     {
@@ -49,52 +52,71 @@ export default defineConfig({
       },
     },
     {
+      // Route modules export route objects rather than component-only modules.
       files: ["src/routes/**"],
       rules: {
         "react/only-export-components": "off",
-        "react/no-multi-comp": "off",
-        "react/jsx-max-depth": "off",
-        "react-perf/jsx-no-new-array-as-prop": "off",
-        "react-perf/jsx-no-new-function-as-prop": "off",
-        "react-perf/jsx-no-new-object-as-prop": "off",
-        "react-perf/jsx-no-jsx-as-prop": "off",
       },
     },
     {
-      files: ["src/components/**", "src/features/**"],
+      // Private components stay beside their sole callers.
+      files: ["src/routes/sessions.$sessionId.tsx", "src/lib/hooks/AgentHostProvider.tsx"],
       rules: {
-        "react/jsx-max-depth": "off",
-        "react-perf/jsx-no-new-function-as-prop": "off",
-        "react-perf/jsx-no-new-object-as-prop": "off",
-        "react-perf/jsx-no-jsx-as-prop": "off",
+        "react/no-multi-comp": "off",
       },
     },
     {
+      // useSyncExternalStore requires a subscription callback.
       files: ["src/lib/hooks/use-mobile.ts"],
       rules: {
         "promise/prefer-await-to-callbacks": "off",
       },
     },
     {
-      files: ["src/lib/hooks/use-agent-host.tsx"],
-      rules: {
-        "react/no-multi-comp": "off",
-        "react/only-export-components": "off",
-        "react/jsx-no-constructed-context-values": "off",
-        "react-perf/jsx-no-new-function-as-prop": "off",
-        "react-perf/jsx-no-new-object-as-prop": "off",
-      },
-    },
-    {
-      files: ["src/components/ThemeToggle.tsx"],
-      rules: {
-        "react/react-compiler": "off",
-      },
-    },
-    {
+      // The SDK appends response parts or updates them in their existing positions.
       files: ["src/features/sessions/AgentResponse.tsx"],
       rules: {
         "react/no-array-index-key": "off",
+      },
+    },
+    {
+      // PageHeader accepts JSX through its breadcrumbs slot.
+      files: ["src/routes/sessions.$sessionId.tsx"],
+      rules: {
+        "react-perf/jsx-no-jsx-as-prop": "off",
+      },
+    },
+    {
+      // The devtools API accepts plugin descriptors with JSX render values.
+      files: ["src/routes/__root.tsx"],
+      rules: {
+        "react-perf/jsx-no-new-array-as-prop": "off",
+      },
+    },
+    {
+      // These handlers capture row values or invoke ordinary DOM/UI actions.
+      files: [
+        "src/components/SidebarNavigation.tsx",
+        "src/features/sessions/Conversation.tsx",
+        "src/features/sessions/CreateSessionButton.tsx",
+        "src/features/sessions/SessionList.tsx",
+        "src/routes/index.tsx",
+      ],
+      rules: {
+        "react-perf/jsx-no-new-function-as-prop": "off",
+      },
+    },
+    {
+      // Router search/params and DOM style props are value objects, not memoization contracts.
+      files: [
+        "src/components/SidebarNavigation.tsx",
+        "src/features/sessions/SessionList.tsx",
+        "src/routes/__root.tsx",
+        "src/routes/index.tsx",
+        "src/routes/sessions.$sessionId.tsx",
+      ],
+      rules: {
+        "react-perf/jsx-no-new-object-as-prop": "off",
       },
     },
   ],

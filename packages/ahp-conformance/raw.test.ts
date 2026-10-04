@@ -177,7 +177,9 @@ describe("raw AHP connection over WebSocket", () => {
       },
     );
   });
+});
 
+describe("raw AHP request multiplexing", () => {
   test("demultiplexes reverse requests, notifications, actions and out-of-order replies", async () => {
     const reverseReply = Promise.withResolvers<unknown>();
     await withPeer(
@@ -441,7 +443,9 @@ describe("raw AHP connection failures", () => {
       );
     },
   );
+});
 
+describe("raw AHP closure and transcript limits", () => {
   test("observes closure even after receiving an unsupported-version error reply", async () => {
     await withPeer(
       (socket) => {
