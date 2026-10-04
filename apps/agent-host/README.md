@@ -101,10 +101,10 @@ AHP client → consumer Worker → AgentHost DO → ACP WebSocket → consumer's
 
 ## Pi backend
 
-The Pi backend lives in [`apps/pi-agent`](../pi-agent/README.md). Its
-`@experiments/pi-agent` package exports `PiAgent` and `PiAgentEnv`; both
-examples extend that Durable Object. The main package entrypoint remains
-independent of the Pi backend.## Code organization
+The examples roll their own `PiAgent` Durable Objects that mount `PiHarness`
+from the Agents SDK and connect over ACP with the [`apps/pi-acp`](../pi-acp/README.md)
+conversion layer. The main package entrypoint remains independent of the Pi
+backend.## Code organization
 
 `src/agent-host.ts` constructs the host components and delegates Durable Object
 callbacks. The implementation is grouped by responsibility:

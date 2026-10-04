@@ -16,8 +16,11 @@
     "lint": "oxlint --deny-warnings --type-aware src vite.config.ts"
   },
   "dependencies": {
+    "@cloudflare/computer": "catalog:",
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-durable": "catalog:",
     "@experiments/agent-host": "workspace:*",
-    "@experiments/pi-agent": "workspace:*",
+    "@experiments/pi-acp": "workspace:*",
     "@experiments/protocol-schemas": "workspace:*",
     "@fontsource-variable/outfit": "^5.3.0",
     "@microsoft/agent-host-protocol": "catalog:",
@@ -28,6 +31,7 @@
     "@tanstack/react-router": "1.170.41",
     "@tanstack/react-router-devtools": "1.167.2",
     "@tanstack/react-start": "1.168.60",
+    "agents": "catalog:",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "radix-ui": "^1.6.7",

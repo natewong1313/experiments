@@ -1,9 +1,10 @@
 # Self-hosting example
 
 This Worker exports an `AgentHost` and a `PiAgent` Durable Object. The host opens
-an ACP WebSocket to the named Pi agent for each session. `PiAgent` uses
-`PiHarness` from the Agents SDK and stores conversations and workspace files in
-SQLite. `WORKSPACE_DIR` sets the working directory.
+an ACP WebSocket to the named Pi agent for each session. `PiAgent` rolls its own
+Durable Object, mounts `PiHarness` from the Agents SDK, and serves ACP with the
+`@experiments/pi-acp` conversion layer; conversations and workspace files are
+stored in SQLite. `WORKSPACE_DIR` sets the working directory.
 
 The Worker routes `/hosts/<host-id>/ahp` to a named host. Clients using the same
 host ID share sessions. IDs contain 1–64 letters, digits, underscores, or hyphens.
@@ -52,7 +53,7 @@ session methods used by the host.
 
 ## Deploy your own Worker
 
-Keep the dependencies and export both subclasses from the entrypoint. Match
+Keep the dependencies and export both classes from the entrypoint. Match
 class names in `durable_objects.bindings` and `exports`, retain SQLite storage,
 `nodejs_compat`, `AI`, and `LOADER`, and set your Worker name before deploying:
 

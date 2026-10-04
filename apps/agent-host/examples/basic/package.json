@@ -12,9 +12,13 @@
     "prompt": "node --experimental-strip-types client/prompt.ts"
   },
   "dependencies": {
+    "@cloudflare/computer": "catalog:",
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-durable": "catalog:",
     "@experiments/agent-host": "workspace:*",
-    "@experiments/pi-agent": "workspace:*",
+    "@experiments/pi-acp": "workspace:*",
     "@microsoft/agent-host-protocol": "catalog:",
+    "agents": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

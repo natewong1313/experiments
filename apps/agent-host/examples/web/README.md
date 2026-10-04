@@ -2,8 +2,9 @@
 
 This TanStack Start app runs an `AgentHost` and a `PiAgent` Durable Object in the
 same Worker. Each session opens an ACP WebSocket through `PI_AGENT`. The agent
-uses `PiHarness` and a durable SQLite workspace. `WORKSPACE_DIR` configures its
-working directory.
+rolls its own Durable Object, mounts `PiHarness` from the Agents SDK, and serves
+ACP with the `@experiments/pi-acp` conversion layer, using a durable SQLite
+workspace. `WORKSPACE_DIR` configures its working directory.
 
 The app connects to `/hosts/<host-id>/ahp` with the AHP TypeScript SDK.
 Home selects the host. The Sessions page lists and creates sessions. The sidebar

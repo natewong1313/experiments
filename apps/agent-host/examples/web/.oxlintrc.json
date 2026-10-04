@@ -51,6 +51,23 @@
     },
     {
       "files": [
+        "src/pi-agent.ts"
+      ],
+      "rules": {
+        "eslint/no-magic-numbers": [
+          "error",
+          {
+            "ignore": [
+              0,
+              1
+            ],
+            "ignoreArrayIndexes": true
+          }
+        ]
+      }
+    },
+    {
+      "files": [
         "src/routes/**"
       ],
       "rules": {
