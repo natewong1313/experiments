@@ -110,6 +110,15 @@ catalogs:
     '@agentclientprotocol/sdk':
       specifier: 1.7.0
       version: 1.7.0
+    '@cloudflare/computer':
+      specifier: 0.4.0
+      version: 0.4.0
+    '@earendil-works/pi-ai':
+      specifier: 0.99.2
+      version: 0.99.2
+    '@earendil-works/pi-durable':
+      specifier: 0.99.2
+      version: 0.99.2
     '@microsoft/agent-host-protocol':
       specifier: 0.9.0
       version: 0.9.0
@@ -207,13 +216,13 @@ importers:
   apps/agent-host/examples/basic:
     dependencies:
       '@cloudflare/computer':
-        specifier: 0.4.0
+        specifier: 'catalog:'
         version: 0.4.0(@cloudflare/workers-types@5.20260819.1)(@platformatic/vfs@0.4.0)(supports-color@10.2.2)(zod@4.6.5)
       '@earendil-works/pi-ai':
-        specifier: 0.99.2
+        specifier: 'catalog:'
         version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-durable':
-        specifier: 0.99.2
+        specifier: 'catalog:'
         version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@experiments/agent-host':
         specifier: workspace:*
@@ -241,14 +250,14 @@ importers:
   apps/agent-host/examples/web:
     dependencies:
       '@cloudflare/computer':
-        specifier: 0.4.0
+        specifier: 'catalog:'
         version: 0.4.0(@cloudflare/workers-types@5.20260819.1)(@platformatic/vfs@0.4.0)(supports-color@10.2.2)(zod@4.6.5)
       '@earendil-works/pi-ai':
-        specifier: 0.99.2
-        version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+        specifier: 'catalog:'
+        version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-durable':
-        specifier: 0.99.2
-        version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+        specifier: 'catalog:'
+        version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@experiments/agent-host':
         specifier: workspace:*
         version: link:../..
@@ -353,7 +362,7 @@ importers:
         specifier: 'catalog:'
         version: 1.7.0(zod@4.6.5)
       '@earendil-works/pi-durable':
-        specifier: 0.99.2
+        specifier: 'catalog:'
         version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@experiments/protocol-schemas':
         specifier: workspace:*
@@ -365,14 +374,8 @@ importers:
         specifier: 'catalog:'
         version: 4.6.5
     devDependencies:
-      '@cloudflare/computer':
-        specifier: 0.4.0
-        version: 0.4.0(@cloudflare/workers-types@5.20260819.1)(@platformatic/vfs@0.4.0)(supports-color@10.2.2)(zod@4.6.5)
-      '@cloudflare/vitest-plugin':
-        specifier: 1.3.4
-        version: 1.3.4(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))
       '@earendil-works/pi-ai':
-        specifier: 0.99.2
+        specifier: 'catalog:'
         version: 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@experiments/oxlint-config':
         specifier: workspace:*
@@ -7243,6 +7246,31 @@ snapshots:
     dependencies:
       esbuild: 0.28.2
 
+  '@earendil-works/pi-ai@0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.124.0(zod@4.6.5)
+      '@aws-sdk/client-bedrock-runtime': 3.1127.0
+      '@earendil-works/pi-telemetry': 0.99.2
+      '@google/genai': 2.21.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(supports-color@10.2.2)
+      '@smithy/node-http-handler': 4.12.1
+      http-proxy-agent: 9.1.0(supports-color@10.2.2)
+      https-proxy-agent: 9.1.0(supports-color@10.2.2)
+      openai: 7.19.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+      partial-json: 0.1.7
+      typebox: 1.3.27
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - kerberos
+      - supports-color
+      - undici
+      - utf-8-validate
+      - ws
+      - zod
+
   '@earendil-works/pi-ai@0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)':
     dependencies:
       '@anthropic-ai/sdk': 0.124.0(zod@4.6.5)
@@ -7254,6 +7282,25 @@ snapshots:
       https-proxy-agent: 9.1.0(supports-color@10.2.2)
       openai: 7.19.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       partial-json: 0.1.7
+      typebox: 1.3.27
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - kerberos
+      - supports-color
+      - undici
+      - utf-8-validate
+      - ws
+      - zod
+
+  '@earendil-works/pi-durable@0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)':
+    dependencies:
+      '@earendil-works/chord': 0.99.2
+      '@earendil-works/pi-ai': 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+      diff: 8.0.4
       typebox: 1.3.27
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -7673,7 +7720,7 @@ snapshots:
 
   '@fontsource-variable/outfit@5.3.0': {}
 
-  '@google/genai@2.21.0(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(supports-color@10.2.2)':
+  '@google/genai@2.21.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(supports-color@10.2.2)':
     dependencies:
       google-auth-library: 10.9.1(supports-color@10.2.2)
       p-retry: 4.6.2
@@ -7681,6 +7728,19 @@ snapshots:
       ws: 8.21.3
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
+  '@google/genai@2.21.0(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(supports-color@10.2.2)':
+    dependencies:
+      google-auth-library: 10.9.1(supports-color@10.2.2)
+      p-retry: 4.6.2
+      protobufjs: 7.6.6
+      ws: 8.21.3
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(supports-color@10.2.2)(zod@4.6.5)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -7912,6 +7972,28 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@4.6.5)
     optionalDependencies:
       '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5)':
+    dependencies:
+      '@hono/node-server': 2.1.1(hono@4.13.8)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.7.0(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)
+      hono: 4.13.8
+      jose: 6.2.12
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.6.5
+      zod-to-json-schema: 3.25.2(zod@4.6.5)
     transitivePeerDependencies:
       - supports-color
 
@@ -9806,8 +9888,8 @@ snapshots:
       yaml: 2.9.1
       zod: 4.6.5
     optionalDependencies:
-      '@earendil-works/pi-ai': 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
-      '@earendil-works/pi-durable': 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+      '@earendil-works/pi-ai': 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+      '@earendil-works/pi-durable': 0.99.2(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(@smithy/signature-v4@5.7.4)(supports-color@10.2.2)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       just-bash: 3.6.0(supports-color@10.2.2)
       react: 19.2.8
       vite: 8.3.1(@types/node@26.6.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
@@ -9822,7 +9904,7 @@ snapshots:
       '@babel/plugin-proposal-decorators': 8.0.2(@babel/core@8.0.6)
       '@cfworker/json-schema': 4.1.1
       '@modelcontextprotocol/client': 2.0.0
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.30.0(supports-color@10.2.2)(zod@4.6.5)
       '@modelcontextprotocol/server': 2.0.0
       '@rolldown/plugin-babel': 0.2.4(@babel/core@8.0.6)(@babel/runtime@7.29.7)(rolldown@1.2.11)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       capnweb: 0.12.0
