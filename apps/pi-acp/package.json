@@ -13,13 +13,13 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "catalog:",
-    "@earendil-works/pi-durable": "0.99.2",
+    "@earendil-works/pi-durable": "catalog:",
     "@experiments/protocol-schemas": "workspace:*",
     "agents": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.99.2",
+    "@earendil-works/pi-ai": "catalog:",
     "@experiments/oxlint-config": "workspace:*",
     "@experiments/typescript-config": "workspace:*"
   }
