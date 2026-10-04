@@ -5,5 +5,6 @@ export default defineConfig({
     testTimeout: 90_000,
     fileParallelism: false,
     hookTimeout: 30_000,
+    reporters: ["default", "./verdict.ts"],
   },
 });

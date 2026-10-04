@@ -35,7 +35,10 @@ The core tests need only `AHP_URL`. Additional URI variables enable channel-spec
 | `AHP_CHANGESET_URI`       | An expanded, subscribable changeset URI                                                                     | Changeset lifecycle and file edits                                                                                    |
 | `AHP_MCP_URI`             | A ready MCP side channel advertised by a session customization                                              | Rejection of an unadvertised MCP method                                                                               |
 | `AHP_WRITABLE_FILE_URI`   | A disposable file                                                                                           | Write and restore, with `AHP_TEST_MUTATIONS=1`                                                                        |
-| `AHP_TEST_MUTATIONS=1`    | Consent to change the disposable fixtures                                                                   | Session action validation, title echo, cross-client state and missed-title reconnect recovery, file write and restore |
+| `AHP_TEST_MUTATIONS=1`    | Consent to change the disposable fixtures                                                                   | Session action validation, title echo, cross-client state and missed-title reconnect recovery, file write and restore, state-model convergence, automation catalogue write path |
+| `AHP_TEST_AUTOMATION_RUNS=1` | Consent to start real automation runs (requires `AHP_TEST_MUTATIONS=1` and the host's `automations` capability) | `runAutomation` requestId idempotency and run-channel shape                                                    |
+
+Convergence tests dispatch real actions (title, chat draft) and restore the original value, so they sit behind `AHP_TEST_MUTATIONS=1`. The chat-draft test skips when the fixture chat already carries a draft, because restoring an arbitrary draft shape is not possible without replaying its full wire form.
 
 Mutation tests attempt to restore the original title or file content even after assertion failure, but an interrupted process can leave a fixture changed. Title scenarios preserve both the scenario and cleanup errors if both fail. Files run serially because tests share supplied mutable fixtures; this does not isolate them from another suite process or other clients. Use disposable fixtures. No test sends an agent prompt, starts an automation, or intentionally executes a terminal command.
 
@@ -62,6 +65,9 @@ pnpm test:ahp
 | `resources.test.ts`      | Read, list, resolve, missing resource, optional write and restore                                                                      |
 | `terminal.test.ts`       | Terminal state and root catalogue consistency                                                                                          |
 | `automation.test.ts`     | Advertised automation catalogue                                                                                                        |
+| `automation-write.test.ts` | Definition lifecycle (create, update, remove) with convergence, manual-run idempotency and run-channel shape (opt-in)                  |
+| `convergence.test.ts`    | State-model convergence: `reduce(S0, E) == S1` for session title and chat draft changes against fresh-subscribe snapshots                |
+| `chat-resume.test.ts`    | `chat/turnResume` rejection matrix (unknown turn, no errored turn)                                                                      |
 | `telemetry.test.ts`      | Advertised OTLP channels                                                                                                               |
 | `resource-watch.test.ts` | Watch creation, subscription, and state                                                                                                |
 | `changeset.test.ts`      | Changeset state and file edits                                                                                                         |
@@ -71,7 +77,20 @@ pnpm test:ahp
 | `raw.test.ts`            | Local transport regressions: buffered/correlated actions, JSON-RPC demultiplexing, invalid frames, socket failure and bounded evidence |
 | `client.test.ts`         | Local typed-client regressions: declared default-chat selection, invalid catalogue membership, fallback and failure cleanup            |
 
-The suite checks requirements that a URL client can observe. It does not prove every AHP 0.9.0 rule: full MCP relay, authentication challenges, automation execution, tool confirmation, and streaming turns need dedicated fixtures and, in some cases, a controllable agent. Watch and MCP cases cover only the behavior listed above.
+The suite checks requirements that a URL client can observe. It does not prove every AHP 0.9.0 rule: full MCP relay, authentication challenges, automation trigger evaluation, tool confirmation, and streaming turns need dedicated fixtures and, in some cases, a controllable agent. Watch and MCP cases cover only the behavior listed above.
+
+## Verdict
+
+A tiered reporter (`verdict.ts`) classifies every result and prints a single verdict:
+
+```
+  MUST-tier  : pass  70 | fail(hard)   0
+  SHOULD-tier: pass   0 | fail(soft)   0
+  skipped    :  34 | collection errors: 0
+  VERDICT: IS fully AHP-conformant
+```
+
+Tests whose name contains `[strict]` are SHOULD-tier: their failure is a soft failure. Everything else is MUST-tier. Skips never fail the run, but a passing run with many skips covers fewer areas — inspect the totals. The suite runs files sequentially; keep it that way when sharing one host.
 
 ## Raw observation contract
 
