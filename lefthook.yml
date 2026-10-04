@@ -24,9 +24,9 @@ pre-commit:
       files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/web/src apps/agent-host/examples/web/vite.config.ts
       run: oxlint --deny-warnings --type-aware {files}
 
-    oxlint-pi-agent:
+    oxlint-pi-acp:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
-      files: git diff --cached --name-only --diff-filter=ACMR -- apps/pi-agent/src apps/pi-agent/test apps/pi-agent/vitest.config.ts
+      files: git diff --cached --name-only --diff-filter=ACMR -- apps/pi-acp/src apps/pi-acp/test apps/pi-acp/vitest.config.ts
       run: oxlint --deny-warnings --type-aware {files}
 
     oxlint-protocol-schemas:

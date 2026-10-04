@@ -1,5 +1,5 @@
 import {
-  agent,
+  agent as acpAgent,
   methods,
   type AgentConnection,
   type AgentContext,
@@ -14,38 +14,50 @@ import {
   PROTOCOL_VERSION,
   RequestError,
 } from "@agentclientprotocol/sdk";
-import type { AgentEventStream } from "@earendil-works/pi-durable";
 import type { PiHarness, PiSession } from "agents/harnesses/pi";
-import { eventUpdates } from "./acp-events";
+import { AcpSessionEventsWatcher } from "./acp-session-watch";
 import { websocketStream } from "./websocket-stream";
 
 type AcpConnectParams = {
   socket: WebSocket;
   harness: PiHarness;
   cwd: string;
+  name?: string;
 };
 
 type AttachedSession = {
   session: PiSession;
-  watch: AgentEventStream;
+  watch: AcpSessionEventsWatcher;
 };
 
+const DEFAULT_NAME = "pi-acp";
+const CURRENT_VERSION = "0.99.2";
+
+// Make an ACP agent connection for one WebSocket.
 export function connectAcp(params: AcpConnectParams): AgentConnection {
   return new AcpAgent(params).connection;
 }
 
 class AcpAgent {
   readonly connection: AgentConnection;
-  private readonly harness: PiHarness;
-  private readonly cwd: string;
+  private harness: PiHarness;
+  private cwd: string;
+  private name: string;
   private initialized = false;
-  private readonly attachedSessions = new Map<string, AttachedSession>();
-  private readonly runningPrompts = new Set<string>();
+  private attachedSessions = new Map<string, AttachedSession>();
+  private runningPrompts = new Set<string>();
 
-  constructor({ socket, harness, cwd }: AcpConnectParams) {
+  constructor({ socket, harness, cwd, name = DEFAULT_NAME }: AcpConnectParams) {
     this.harness = harness;
     this.cwd = cwd;
-    this.connection = agent({ name: "pi-durable" })
+    this.name = name;
+    this.connection = this.createACPAgentConnection(socket);
+
+    void this.startCleanupWatcher();
+  }
+
+  private createACPAgentConnection(socket: WebSocket) {
+    return acpAgent({ name: this.name })
       .onRequest(methods.agent.initialize, () => this.initialize())
       .onRequest(methods.agent.authenticate, () => this.authenticate())
       .onRequest(methods.agent.session.new, ({ params, client }) => this.newSession(params, client))
@@ -55,8 +67,6 @@ class AcpAgent {
       .onRequest(methods.agent.session.prompt, ({ params }) => this.prompt(params))
       .onNotification(methods.agent.session.cancel, ({ params }) => this.cancel(params))
       .connect(websocketStream(socket));
-
-    void this.cleanup();
   }
 
   private initialize(): InitializeResponse {
@@ -64,14 +74,15 @@ class AcpAgent {
 
     return {
       protocolVersion: PROTOCOL_VERSION,
-      agentInfo: { name: "pi-durable", version: "0.99.2" },
+      agentInfo: { name: this.name, version: CURRENT_VERSION },
       agentCapabilities: { loadSession: true },
       authMethods: [],
     };
   }
 
+  // TODO: implement
   private authenticate(): never {
-    throw RequestError.invalidParams(void 0, "No authentication methods");
+    throw RequestError.methodNotFound(methods.agent.authenticate);
   }
 
   private async newSession(
@@ -103,7 +114,7 @@ class AcpAgent {
 
     const session = this.harness.session(params.sessionId);
 
-    await replayHistory(session, client);
+    await this.replayHistory(session, client);
     await this.attachSession(session, client);
 
     return {};
@@ -149,6 +160,7 @@ class AcpAgent {
 
   private requireInitialized(): void {
     if (!this.initialized) {
+      // TODO: should we throw something else?
       throw RequestError.invalidRequest("Initialize ACP first");
     }
   }
@@ -181,100 +193,52 @@ class AcpAgent {
 
   private async attachSession(session: PiSession, client: AgentContext): Promise<void> {
     const previous = this.attachedSessions.get(session.id);
-    const watch = await session.events();
-    this.attachedSessions.set(session.id, { session, watch });
-    await previous?.watch.stop();
-    startSessionWatch({
+    const watch = new AcpSessionEventsWatcher({
       sessionId: session.id,
-      watch,
+      watch: await session.events(),
       client,
       signal: this.connection.signal,
     });
+    this.attachedSessions.set(session.id, { session, watch });
+    await previous?.watch.stop();
+
+    watch.start();
   }
 
-  private async cleanup(): Promise<void> {
-    await this.connection.closed;
-    await Promise.all([...this.attachedSessions.values()].map(({ watch }) => watch.stop()));
-    this.attachedSessions.clear();
-  }
-}
+  // Send the text of old messages to the client. Call this before new events start.
+  private async replayHistory(session: PiSession, client: AgentContext): Promise<void> {
+    for (const entry of await session.messages()) {
+      const message = entry.model?.[0];
 
-function startSessionWatch({
-  sessionId,
-  watch,
-  client,
-  signal,
-}: {
-  sessionId: string;
-  watch: AgentEventStream;
-  client: AgentContext;
-  signal: AbortSignal;
-}): void {
-  const sentTextLengths: Map<number, number> = new Map();
-  const currentToolOutputs: Map<string, string> = new Map();
-  watch.start(async (events) => {
-    for (const event of events) {
-      if (signal.aborted) {
-        return;
-      }
-
-      for (const update of eventUpdates(event, sentTextLengths, currentToolOutputs)) {
-        if (signal.aborted) {
-          return;
-        }
-
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          await client.notify(methods.client.session.update, {
-            sessionId,
-            update,
-          });
-        } catch (error) {
-          if (signal.aborted) {
-            return;
-          }
-
-          throw error;
-        }
-      }
-    }
-  });
-  void watch.closed.then((end) => {
-    if (end.reason === "listener_error") {
-      console.error("ACP event watch terminated", {
-        sessionId,
-        reason: end.reason,
-        error: end.error,
-      });
-    }
-  });
-}
-
-async function replayHistory(session: PiSession, client: AgentContext): Promise<void> {
-  for (const entry of await session.messages()) {
-    const message = entry.model?.[0];
-
-    if (!message || (message.role !== "user" && message.role !== "assistant")) {
-      continue;
-    }
-
-    const content = Array.isArray(message.content)
-      ? message.content
-      : [{ type: "text", text: message.content }];
-
-    for (const part of content) {
-      if (part.type !== "text") {
+      if (!message || (message.role !== "user" && message.role !== "assistant")) {
         continue;
       }
 
-      // eslint-disable-next-line no-await-in-loop
-      await client.notify(methods.client.session.update, {
-        sessionId: session.id,
-        update: {
-          sessionUpdate: message.role === "user" ? "user_message_chunk" : "agent_message_chunk",
-          content: { type: "text", text: part.text },
-        },
-      });
+      const content = Array.isArray(message.content)
+        ? message.content
+        : [{ type: "text", text: message.content }];
+
+      for (const part of content) {
+        if (part.type !== "text") {
+          continue;
+        }
+
+        // eslint-disable-next-line no-await-in-loop we want to do this in order
+        await client.notify(methods.client.session.update, {
+          sessionId: session.id,
+          update: {
+            sessionUpdate: message.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+            content: { type: "text", text: part.text },
+          },
+        });
+      }
     }
+  }
+
+  // Stop the event watches when the client closes the connection.
+  private async startCleanupWatcher(): Promise<void> {
+    await this.connection.closed;
+    await Promise.all([...this.attachedSessions.values()].map(({ watch }) => watch.stop()));
+    this.attachedSessions.clear();
   }
 }
