@@ -79,6 +79,11 @@ const FetchTurnsParamsSchema = ChannelParamsSchema.extend({
   cursor: z.string().optional(),
 });
 
+const ResourceReadParamsSchema = RootChannelParamsSchema.extend({
+  uri: uriSchema,
+  encoding: z.enum(["base64", "utf-8"]).optional(),
+});
+
 const DispatchActionParamsSchema = ChannelParamsSchema.extend({
   clientSeq: seqSchema,
   action: StateActionSchema,
@@ -178,6 +183,8 @@ type ListSessionsParams = z.output<typeof ListSessionsParamsSchema>;
 
 type FetchTurnsParams = z.output<typeof FetchTurnsParamsSchema>;
 
+type ResourceReadParams = z.output<typeof ResourceReadParamsSchema>;
+
 type DispatchActionParams = z.output<typeof DispatchActionParamsSchema>;
 
 type AutomationCapabilities = z.output<typeof AutomationCapabilitiesSchema>;
@@ -213,6 +220,7 @@ export {
   ListSessionsParamsSchema,
   FetchTurnsParamsSchema,
   DispatchActionParamsSchema,
+  ResourceReadParamsSchema,
   type ChannelParams,
   type RootChannelParams,
   type ClientCapabilities,
@@ -225,6 +233,7 @@ export {
   type ListSessionsParams,
   type FetchTurnsParams,
   type DispatchActionParams,
+  type ResourceReadParams,
   AutomationCapabilitiesSchema,
   FetchTurnsResultSchema,
   ImplementationSchema,

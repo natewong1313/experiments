@@ -184,7 +184,7 @@ it.each(CASES)("measures storage work for $name", async (fixture) => {
 
     const documents = new DocumentBaseline(state.storage.sql);
     documents.write("baseline", "live", baselineState);
-    const journal = new ActionJournal(drizzle(state.storage));
+    const journal = new ActionJournal(drizzle(state.storage, { casing: "snake_case" }));
     audit(state.storage.sql);
     const delta: ChatAction = { type: "chat/delta", turnId: "turn", partId: "text", content: "x" };
 

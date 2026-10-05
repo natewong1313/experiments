@@ -4,6 +4,7 @@ import { noArrayFilterMapRule } from "./rules/no-array-filter-map.ts";
 import { noReduceAccumulatorCopyRule } from "./rules/no-reduce-accumulator-copy.ts";
 import { noChainedTypeAssertionsRule } from "./rules/no-chained-type-assertions.ts";
 import { noConditionalEmptyObjectSpreadRule } from "./rules/no-conditional-empty-object-spread.ts";
+import { noDirectSqlExecRule } from "./rules/no-direct-sql-exec.ts";
 import { noInlineObjectParametersRule } from "./rules/no-inline-object-parameters.ts";
 import { noKnownValueWideningRule } from "./rules/no-known-value-widening.ts";
 import { noModuleMockingRule } from "./rules/no-module-mocking.ts";
@@ -28,6 +29,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-reduce-accumulator-copy": noReduceAccumulatorCopyRule,
     "no-chained-type-assertions": noChainedTypeAssertionsRule,
     "no-conditional-empty-object-spread": noConditionalEmptyObjectSpreadRule,
+    "no-direct-sql-exec": noDirectSqlExecRule,
     "no-inline-object-parameters": noInlineObjectParametersRule,
     "no-known-value-widening": noKnownValueWideningRule,
     "no-module-mocking": noModuleMockingRule,

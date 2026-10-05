@@ -66,10 +66,17 @@ function chatResponsePartId({ turnId, kind, index }: ChatResponsePartIdParts): s
   return `${turnId}/${kind}/${index}`;
 }
 
+type MappingState = {
+  partCount: number;
+  lastPart?: Pick<Extract<ActiveTurn["responseParts"][number], { id: string }>, "kind" | "id">;
+  toolExists: boolean;
+};
+
 function acpUpdateToChatActions(
   turn: Pick<ActiveTurn, "id" | "responseParts"> | undefined,
   notification: SessionNotification,
   rootSessionId = notification.sessionId,
+  mapping?: MappingState,
 ): ChatAction[] {
   if (!turn) {
     return [];
@@ -103,7 +110,7 @@ function acpUpdateToChatActions(
 
       const kind = update.sessionUpdate === "agent_message_chunk" ? "markdown" : "reasoning";
 
-      const last = turn.responseParts.at(LAST_PART_INDEX);
+      const last = mapping ? mapping.lastPart : turn.responseParts.at(LAST_PART_INDEX);
 
       const messageSuffix = update.messageId
         ? `/message/${encodeURIComponent(update.messageId)}`
@@ -120,7 +127,7 @@ function acpUpdateToChatActions(
         `${chatResponsePartId({
           turnId: turn.id,
           kind,
-          index: turn.responseParts.length,
+          index: mapping?.partCount ?? turn.responseParts.length,
         })}${messageSuffix}`;
 
       const actions: ChatAction[] = existing
@@ -168,11 +175,13 @@ function acpUpdateToChatActions(
     }
 
     case "tool_call_update": {
-      const tool = turn.responseParts.find(
-        (part) => part.kind === "toolCall" && part.toolCall.toolCallId === update.toolCallId,
-      );
+      const tool = mapping
+        ? void 0
+        : turn.responseParts.find(
+            (part) => part.kind === "toolCall" && part.toolCall.toolCallId === update.toolCallId,
+          );
 
-      if (!tool) {
+      if (!(mapping ? mapping.toolExists : tool)) {
         return [systemUpdate(turn.id, notification, sessionUpdateText(update))];
       }
 

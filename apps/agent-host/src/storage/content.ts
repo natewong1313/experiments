@@ -1,4 +1,7 @@
 import * as z from "zod";
+import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import type { drizzle } from "drizzle-orm/durable-sqlite";
+import { chats, contents, contentPieces } from "./schema";
 import {
   type metaSchema,
   ContentRefSchema,
@@ -11,7 +14,7 @@ import {
 } from "@experiments/protocol-schemas/ahp";
 import { checkBytes } from "../memory";
 import { ProtocolError, RpcCodes } from "../ahp/protocol";
-import { encodedSize, pieceEnd, readPiece, JSON_PIECE_CHARACTERS, type StoredPiece } from "./parts";
+import { encodedSize, pieceEnd, readPiece, JSON_PIECE_CHARACTERS } from "./parts";
 
 const INLINE_BYTES = 8192;
 
@@ -23,7 +26,9 @@ const SESSION_CONTENT_BYTES = 67_108_864;
 
 const PIECE_CHARACTERS = 16_384;
 
-type ContentRow = { content_type: string; encoding: "utf-8" | "base64"; bytes: number };
+type ContentEncoding = typeof contents.$inferSelect.encoding;
+
+type Database = ReturnType<typeof drizzle>;
 
 type Metadata = z.output<typeof metaSchema>;
 
@@ -32,10 +37,10 @@ const MISSING_INDEX = -1;
 const DATA_PREFIX = "data:";
 
 class ContentStore {
-  private readonly sql: SqlStorage;
+  private readonly db: Database;
 
-  constructor(sql: SqlStorage) {
-    this.sql = sql;
+  constructor(db: Database) {
+    this.db = db;
   }
 
   storeActionContent(chat: string, actions: StateAction[]): StateAction[] {
@@ -44,7 +49,7 @@ class ContentStore {
     const store = (
       data: string,
       contentType: string,
-      encoding: ContentRow["encoding"] = "utf-8",
+      encoding: ContentEncoding = "utf-8",
     ): ContentRef => {
       const key = JSON.stringify([contentType, encoding, data]);
       const existing = references.get(key);
@@ -223,7 +228,7 @@ class ContentStore {
     chat: string,
     data: string,
     contentType: string,
-    encoding: ContentRow["encoding"],
+    encoding: ContentEncoding,
   ): ContentRef {
     const bytes = new TextEncoder().encode(data).byteLength;
     checkBytes(
@@ -232,35 +237,41 @@ class ContentStore {
       "Content exceeds the resource response budget",
     );
 
-    const owner = this.sql
-      .exec<{ content_bytes: number }>("SELECT content_bytes FROM chats WHERE uri = ?", chat)
-      .one();
+    const owner = this.db
+      .select({ contentBytes: chats.contentBytes })
+      .from(chats)
+      .where(eq(chats.uri, chat))
+      .get();
+
+    if (!owner) {
+      throw new Error("Chat does not exist");
+    }
 
     checkBytes(
-      owner.content_bytes + bytes,
+      owner.contentBytes + bytes,
       SESSION_CONTENT_BYTES,
       "Session content exceeds the storage budget",
     );
     const uri = `ahp-content:/${crypto.randomUUID()}`;
-    this.sql.exec(
-      "INSERT INTO contents VALUES (?, ?, ?, ?, ?, NULL)",
-      uri,
-      chat,
-      contentType,
-      encoding,
-      bytes,
-    );
+    this.db
+      .insert(contents)
+      .values({ uri, chatUri: chat, contentType, encoding, bytes, retiredSeq: null })
+      .run();
     let piece = 0;
 
     for (let offset = 0; offset < data.length;) {
       const end = pieceEnd(data, offset, JSON_PIECE_CHARACTERS);
       const stored = JSON.stringify(data.slice(offset, end));
-      this.sql.exec("INSERT INTO content_pieces VALUES (?, ?, ?)", uri, piece, stored);
+      this.db.insert(contentPieces).values({ uri, piece, data: stored }).run();
       offset = end;
       piece += 1;
     }
 
-    this.sql.exec("UPDATE chats SET content_bytes = content_bytes + ? WHERE uri = ?", bytes, chat);
+    this.db
+      .update(chats)
+      .set({ contentBytes: sql`${chats.contentBytes} + ${bytes}` })
+      .where(eq(chats.uri, chat))
+      .run();
 
     return {
       uri,
@@ -269,8 +280,8 @@ class ContentStore {
     };
   }
 
-  readResource(uri: string, encoding?: ContentRow["encoding"]): ResourceReadResult {
-    const row = this.sql.exec<ContentRow>("SELECT * FROM contents WHERE uri = ?", uri).next().value;
+  readResource(uri: string, encoding?: ContentEncoding): ResourceReadResult {
+    const row = this.db.select().from(contents).where(eq(contents.uri, uri)).get();
 
     if (!row) {
       throw new ProtocolError(
@@ -281,18 +292,19 @@ class ContentStore {
 
     checkBytes(row.bytes, RESOURCE_BYTES, "Resource exceeds the response budget");
 
-    const data = Array.from(
-      this.sql.exec<StoredPiece>(
-        "SELECT data FROM content_pieces WHERE uri = ? ORDER BY piece",
-        uri,
-      ),
-      readPiece,
-    ).join("");
+    const data = this.db
+      .select({ data: contentPieces.data })
+      .from(contentPieces)
+      .where(eq(contentPieces.uri, uri))
+      .orderBy(asc(contentPieces.piece))
+      .all()
+      .map((piece) => readPiece(piece))
+      .join("");
 
     const preferred = encoding ?? row.encoding;
 
     if (preferred === row.encoding) {
-      return this.checkResponseBudget({ data, encoding: preferred, contentType: row.content_type });
+      return this.checkResponseBudget({ data, encoding: preferred, contentType: row.contentType });
     }
 
     if (preferred === "utf-8") {
@@ -303,7 +315,7 @@ class ContentStore {
       return this.checkResponseBudget({
         data: new TextDecoder().decode(bytes),
         encoding: preferred,
-        contentType: row.content_type,
+        contentType: row.contentType,
       });
     }
 
@@ -321,7 +333,7 @@ class ContentStore {
     return this.checkResponseBudget({
       data: base64,
       encoding: preferred,
-      contentType: row.content_type,
+      contentType: row.contentType,
     });
   }
 
@@ -336,19 +348,20 @@ class ContentStore {
   }
 
   retireChatContent(chat: string, sequence: number): void {
-    this.sql.exec(
-      "UPDATE contents SET retired_seq = ? WHERE chat_uri = ? AND retired_seq IS NULL",
-      sequence,
-      chat,
-    );
+    const match = and(eq(contents.chatUri, chat), isNull(contents.retiredSeq));
+
+    this.db.update(contents).set({ retiredSeq: sequence }).where(match).run();
   }
 
   deleteRetiredContent(floor: number): void {
-    this.sql.exec(
-      "DELETE FROM content_pieces WHERE uri IN (SELECT uri FROM contents WHERE retired_seq <= ?)",
-      floor,
-    );
-    this.sql.exec("DELETE FROM contents WHERE retired_seq <= ?", floor);
+    const retired = this.db
+      .select({ uri: contents.uri })
+      .from(contents)
+      .where(lte(contents.retiredSeq, floor));
+
+    this.db.delete(contentPieces).where(inArray(contentPieces.uri, retired)).run();
+
+    this.db.delete(contents).where(lte(contents.retiredSeq, floor)).run();
   }
 }
 

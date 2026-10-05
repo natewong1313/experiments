@@ -7,6 +7,7 @@ export default defineConfig({
 
   jsPlugins: ["eslint-plugin-drizzle"],
   rules: {
+    "anti-slop/no-direct-sql-exec": "error",
     "drizzle/enforce-delete-with-where": "error",
     "drizzle/enforce-update-with-where": "error",
   },

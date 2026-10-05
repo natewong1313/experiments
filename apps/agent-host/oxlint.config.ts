@@ -18,6 +18,14 @@ export default defineConfig({
       },
     },
     {
+      // Test fixtures inspect Durable Object storage directly; production code
+      // must use drizzle (see `anti-slop/no-direct-sql-exec`).
+      files: ["test/**/*.ts"],
+      rules: {
+        "anti-slop/no-direct-sql-exec": "off",
+      },
+    },
+    {
       // Timer APIs need an executor to reject the deadline promise.
       files: ["src/deadline.ts"],
       rules: {

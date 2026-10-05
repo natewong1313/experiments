@@ -1,4 +1,7 @@
 import * as z from "zod";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import type { drizzle } from "drizzle-orm/durable-sqlite";
+import { replyParts, textPieces, turnRecords } from "./schema";
 import {
   type metaSchema,
   ResponsePartSchema,
@@ -69,15 +72,9 @@ function openInput(part: ResponsePart): number {
   return part.kind === "inputRequest" && part.response === void 0 ? 1 : 0;
 }
 
-type PartRow = {
-  position: number;
-  identity: string | null;
-  kind: string;
-  status: string | null;
-  metadata: string;
-  bytes: number;
-  pieces: number;
-};
+type PartRow = typeof replyParts.$inferSelect;
+
+type Database = ReturnType<typeof drizzle>;
 
 type TextPartIdentity = Pick<Extract<ResponsePart, { id: string }>, "kind" | "id">;
 
@@ -97,10 +94,10 @@ type AppendPiecesParams = {
 };
 
 class Parts {
-  private readonly sql: SqlStorage;
+  private readonly db: Database;
 
-  constructor(sql: SqlStorage) {
-    this.sql = sql;
+  constructor(db: Database) {
+    this.db = db;
   }
 
   parseMetadata(row: PartRow): ResponsePart {
@@ -108,45 +105,52 @@ class Parts {
   }
 
   readRows(chat: string, turn: string): PartRow[] {
-    return this.sql
-      .exec<PartRow>(
-        "SELECT * FROM reply_parts WHERE chat_uri = ? AND turn_id = ? ORDER BY position",
-        chat,
-        turn,
-      )
-      .toArray();
+    const match = and(eq(replyParts.chatUri, chat), eq(replyParts.turnId, turn));
+
+    return this.db.select().from(replyParts).where(match).orderBy(asc(replyParts.position)).all();
   }
 
   findByIdentity(chat: string, turn: string, identity: string, first = false): PartRow[] {
-    return this.sql
-      .exec<PartRow>(
-        `SELECT * FROM reply_parts WHERE chat_uri = ? AND turn_id = ? AND identity = ? ORDER BY position${first ? " LIMIT 1" : ""}`,
-        chat,
-        turn,
-        identity,
-      )
-      .toArray();
+    const match = and(
+      eq(replyParts.chatUri, chat),
+      eq(replyParts.turnId, turn),
+      eq(replyParts.identity, identity),
+    );
+
+    const query = this.db.select().from(replyParts).where(match).orderBy(asc(replyParts.position));
+
+    return first ? query.limit(1).all() : query.all();
   }
 
   readUnfinishedToolCalls(chat: string, turn: string): PartRow[] {
-    return this.sql
-      .exec<PartRow>(
-        "SELECT * FROM reply_parts WHERE chat_uri = ? AND turn_id = ? AND kind = 'toolCall' AND status IN ('streaming', 'running', 'pending-confirmation', 'pending-result-confirmation', 'auth-required')",
-        chat,
-        turn,
-      )
-      .toArray();
+    const match = and(
+      eq(replyParts.chatUri, chat),
+      eq(replyParts.turnId, turn),
+      eq(replyParts.kind, "toolCall"),
+      inArray(replyParts.status, [
+        "streaming",
+        "running",
+        "pending-confirmation",
+        "pending-result-confirmation",
+        "auth-required",
+      ]),
+    );
+
+    return this.db.select().from(replyParts).where(match).all();
   }
 
   readLastTextIdentity(chat: string, turn: string, count: number): TextPartIdentity | undefined {
-    const row = this.sql
-      .exec<{ kind: string; identity: string | null }>(
-        "SELECT kind, identity FROM reply_parts WHERE chat_uri = ? AND turn_id = ? AND position = ?",
-        chat,
-        turn,
-        count - 1,
-      )
-      .next().value;
+    const match = and(
+      eq(replyParts.chatUri, chat),
+      eq(replyParts.turnId, turn),
+      eq(replyParts.position, count - 1),
+    );
+
+    const row = this.db
+      .select({ kind: replyParts.kind, identity: replyParts.identity })
+      .from(replyParts)
+      .where(match)
+      .get();
 
     if (row && row.identity !== null && (row.kind === "markdown" || row.kind === "reasoning")) {
       return { kind: row.kind, id: row.identity };
@@ -163,12 +167,18 @@ class Parts {
         return part;
       }
 
-      const pieces = this.sql.exec<StoredPiece>(
-        "SELECT text AS data FROM text_pieces WHERE chat_uri = ? AND turn_id = ? AND position = ? ORDER BY piece",
-        chat,
-        turn,
-        row.position,
+      const match = and(
+        eq(textPieces.chatUri, chat),
+        eq(textPieces.turnId, turn),
+        eq(textPieces.position, row.position),
       );
+
+      const pieces = this.db
+        .select({ data: textPieces.text })
+        .from(textPieces)
+        .where(match)
+        .orderBy(asc(textPieces.piece))
+        .all();
 
       return { ...part, content: Array.from(pieces, readPiece).join("") };
     });
@@ -198,71 +208,96 @@ class Parts {
     }
 
     const status = part.kind === "toolCall" ? part.toolCall.status : null;
-    this.sql.exec(
-      "INSERT INTO reply_parts VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
-      chat,
-      turn,
-      position,
-      identity,
-      part.kind,
-      status,
-      metadata,
-      encodedSize(part),
-    );
+    this.db
+      .insert(replyParts)
+      .values({
+        chatUri: chat,
+        turnId: turn,
+        position,
+        identity,
+        kind: part.kind,
+        status,
+        metadata,
+        bytes: encodedSize(part),
+        pieces: 0,
+      })
+      .run();
 
     if (text !== void 0) {
       this.appendPieces({ chat, turn, position, start: 0, text });
     }
 
-    this.sql.exec(
-      "UPDATE turn_records SET bytes = bytes + ?, part_count = part_count + 1, blocking_count = blocking_count + ?, input_count = input_count + ? WHERE chat_uri = ? AND turn_id = ?",
-      encodedSize(part) + 1,
-      blocking(part),
-      openInput(part),
-      chat,
-      turn,
-    );
+    const match = and(eq(turnRecords.chatUri, chat), eq(turnRecords.turnId, turn));
+
+    this.db
+      .update(turnRecords)
+      .set({
+        bytes: sql`${turnRecords.bytes} + ${encodedSize(part) + 1}`,
+        partCount: sql`${turnRecords.partCount} + 1`,
+        blockingCount: sql`${turnRecords.blockingCount} + ${blocking(part)}`,
+        inputCount: sql`${turnRecords.inputCount} + ${openInput(part)}`,
+      })
+      .where(match)
+      .run();
   }
 
   replace(chat: string, turn: string, row: PartRow, part: ResponsePart): void {
     const bytes = encodedSize(part);
     checkBytes(bytes, MAX_PART_METADATA_BYTES, "Reply part metadata exceeds the storage budget");
     const previous = this.parseMetadata(row);
-    this.sql.exec(
-      "UPDATE reply_parts SET metadata = ?, bytes = ?, status = ? WHERE chat_uri = ? AND turn_id = ? AND position = ?",
-      JSON.stringify(part),
-      bytes,
-      part.kind === "toolCall" ? part.toolCall.status : null,
-      chat,
-      turn,
-      row.position,
+
+    const match = and(
+      eq(replyParts.chatUri, chat),
+      eq(replyParts.turnId, turn),
+      eq(replyParts.position, row.position),
     );
-    this.sql.exec(
-      "UPDATE turn_records SET bytes = bytes + ?, blocking_count = blocking_count + ?, input_count = input_count + ? WHERE chat_uri = ? AND turn_id = ?",
-      bytes - row.bytes,
-      blocking(part) - blocking(previous),
-      openInput(part) - openInput(previous),
-      chat,
-      turn,
-    );
+
+    this.db
+      .update(replyParts)
+      .set({
+        metadata: JSON.stringify(part),
+        bytes,
+        status: part.kind === "toolCall" ? part.toolCall.status : null,
+      })
+      .where(match)
+      .run();
+
+    const turnMatch = and(eq(turnRecords.chatUri, chat), eq(turnRecords.turnId, turn));
+
+    this.db
+      .update(turnRecords)
+      .set({
+        bytes: sql`${turnRecords.bytes} + ${bytes - row.bytes}`,
+        blockingCount: sql`${turnRecords.blockingCount} + ${blocking(part) - blocking(previous)}`,
+        inputCount: sql`${turnRecords.inputCount} + ${openInput(part) - openInput(previous)}`,
+      })
+      .where(turnMatch)
+      .run();
   }
 
   appendText(chat: string, turn: string, row: PartRow, text: string): void {
     const bytes = encodedSize(text) - STRING_QUOTES;
     this.appendPieces({ chat, turn, position: row.position, start: row.pieces, text });
-    this.sql.exec(
-      "UPDATE reply_parts SET bytes = bytes + ? WHERE chat_uri = ? AND turn_id = ? AND position = ?",
-      bytes,
-      chat,
-      turn,
-      row.position,
+
+    const match = and(
+      eq(replyParts.chatUri, chat),
+      eq(replyParts.turnId, turn),
+      eq(replyParts.position, row.position),
     );
-    this.sql.exec(
-      "UPDATE turn_records SET bytes = bytes + ? WHERE chat_uri = ? AND turn_id = ?",
-      bytes,
-      chat,
-      turn,
-    );
+
+    this.db
+      .update(replyParts)
+      .set({ bytes: sql`${replyParts.bytes} + ${bytes}` })
+      .where(match)
+      .run();
+
+    const turnMatch = and(eq(turnRecords.chatUri, chat), eq(turnRecords.turnId, turn));
+
+    this.db
+      .update(turnRecords)
+      .set({ bytes: sql`${turnRecords.bytes} + ${bytes}` })
+      .where(turnMatch)
+      .run();
   }
 
   private appendPieces({ chat, turn, position, start, text }: AppendPiecesParams): void {
@@ -271,34 +306,28 @@ class Parts {
     for (let offset = 0; offset < text.length;) {
       const end = pieceEnd(text, offset, JSON_PIECE_CHARACTERS);
       const data = JSON.stringify(text.slice(offset, end));
-      this.sql.exec(
-        "INSERT INTO text_pieces VALUES (?, ?, ?, ?, ?)",
-        chat,
-        turn,
-        position,
-        piece,
-        data,
-      );
+      this.db
+        .insert(textPieces)
+        .values({ chatUri: chat, turnId: turn, position, piece, text: data })
+        .run();
       offset = end;
       piece += 1;
     }
 
-    this.sql.exec(
-      "UPDATE reply_parts SET pieces = ? WHERE chat_uri = ? AND turn_id = ? AND position = ?",
-      piece,
-      chat,
-      turn,
-      position,
+    const match = and(
+      eq(replyParts.chatUri, chat),
+      eq(replyParts.turnId, turn),
+      eq(replyParts.position, position),
     );
+
+    this.db.update(replyParts).set({ pieces: piece }).where(match).run();
   }
 
   deleteTurnRecords(chat: string, turn?: string): void {
-    for (const table of ["reply_parts", "text_pieces", "turn_records"]) {
-      if (turn === void 0) {
-        this.sql.exec(`DELETE FROM ${table} WHERE chat_uri = ?`, chat);
-      } else {
-        this.sql.exec(`DELETE FROM ${table} WHERE chat_uri = ? AND turn_id = ?`, chat, turn);
-      }
+    for (const table of [replyParts, textPieces, turnRecords]) {
+      const match = and(eq(table.chatUri, chat), turn === void 0 ? void 0 : eq(table.turnId, turn));
+
+      this.db.delete(table).where(match).run();
     }
   }
 }

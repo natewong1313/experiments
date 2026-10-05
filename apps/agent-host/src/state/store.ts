@@ -74,10 +74,10 @@ class HostStore {
 
   constructor(state: DurableObjectState) {
     this.storage = state.storage;
-    this.db = drizzle(state.storage);
-    this.chats = new ChatStore(this.db, state.storage.sql);
+    this.db = drizzle(state.storage, { casing: "snake_case" });
+    this.chats = new ChatStore(this.db);
     this.journal = new ActionJournal(this.db);
-    this.contents = new ContentStore(state.storage.sql);
+    this.contents = new ContentStore(this.db);
     // The durable-sqlite migrator executes synchronously on the sync driver.
     // Tables exist before this constructor returns and before recover() runs.
     // The outcome goes through state.blockConcurrencyWhile so that a failed
@@ -91,10 +91,17 @@ class HostStore {
   }
 
   *recoverableSessions(): Generator<LiveSession> {
-    const rows = this.storage.sql.exec<{ uri: string }>(
-      "SELECT uri FROM sessions WHERE json_extract(session, '$.lifecycle') = 'creating' OR (json_extract(session, '$.chats[0].status') & ?) != 0 ORDER BY uri",
-      ACTIVE_TURN_STATUS,
-    );
+    const rows = this.db
+      .select({ uri: sessions.uri })
+      .from(sessions)
+      .where(
+        or(
+          sql`json_extract(${sessions.session}, '$.lifecycle') = 'creating'`,
+          sql`(json_extract(${sessions.session}, '$.chats[0].status') & ${ACTIVE_TURN_STATUS}) != 0`,
+        ),
+      )
+      .orderBy(asc(sessions.uri))
+      .all();
 
     for (const row of rows) {
       yield this.requireMetadata(row.uri);

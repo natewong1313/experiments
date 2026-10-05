@@ -1,5 +1,5 @@
-import { and, eq, max } from "drizzle-orm";
-import { turns } from "./schema";
+import { and, desc, eq, gt, max, sql } from "drizzle-orm";
+import { chats, turns, turnRecords } from "./schema";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
 import {
   ChatStateSchema,
@@ -31,13 +31,7 @@ const MAX_PARTS = 10_000;
 
 const MAX_CHAT_METADATA_BYTES = 65_536;
 
-type TurnRow = {
-  metadata: string;
-  bytes: number;
-  part_count: number;
-  blocking_count: number;
-  input_count: number;
-};
+type TurnRow = typeof turnRecords.$inferSelect;
 
 type AgentUpdateContext = {
   partCount: number;
@@ -66,32 +60,33 @@ type Database = ReturnType<typeof drizzle>;
 
 class ChatStore {
   private readonly db: Database;
-  private readonly sql: SqlStorage;
   private readonly parts: Parts;
   private readonly history: TurnHistory;
 
-  constructor(db: Database, sql: SqlStorage) {
+  constructor(db: Database) {
     this.db = db;
-    this.sql = sql;
-    this.parts = new Parts(sql);
-    this.history = new TurnHistory(sql, this.parts);
+    this.parts = new Parts(db);
+    this.history = new TurnHistory(db, this.parts);
   }
 
   readMetadata(uri: string): ChatState {
-    const row = this.sql
-      .exec<{ metadata: string; active_turn: string | null }>(
-        "SELECT metadata, active_turn FROM chats WHERE uri = ?",
-        uri,
-      )
-      .one();
+    const row = this.db
+      .select({ metadata: chats.metadata, activeTurn: chats.activeTurn })
+      .from(chats)
+      .where(eq(chats.uri, uri))
+      .get();
+
+    if (!row) {
+      throw new Error("Chat does not exist");
+    }
 
     const chat = ChatStateSchema.parse(JSON.parse(row.metadata));
 
-    if (row.active_turn === null) {
+    if (row.activeTurn === null) {
       return chat;
     }
 
-    const turn = this.readTurnRecord(uri, row.active_turn);
+    const turn = this.readTurnRecord(uri, row.activeTurn);
 
     return { ...chat, activeTurn: ActiveTurnSchema.parse(JSON.parse(turn.metadata)) };
   }
@@ -113,13 +108,17 @@ class ChatStore {
   }
 
   activeStateBytes(uri: string): number {
+    const match = and(eq(turnRecords.chatUri, chats.uri), eq(turnRecords.turnId, chats.activeTurn));
+
     return (
-      this.sql
-        .exec<{ bytes: number }>(
-          `SELECT LENGTH(CAST(metadata AS BLOB)) + COALESCE((SELECT bytes FROM turn_records WHERE chat_uri = uri AND turn_id = active_turn), 0) AS bytes FROM chats WHERE uri = ?`,
-          uri,
-        )
-        .next().value?.bytes ?? 0
+      this.db
+        .select({
+          bytes: sql<number>`LENGTH(CAST(${chats.metadata} AS BLOB)) + COALESCE(${turnRecords.bytes}, 0)`,
+        })
+        .from(chats)
+        .leftJoin(turnRecords, match)
+        .where(eq(chats.uri, uri))
+        .get()?.bytes ?? 0
     );
   }
 
@@ -137,8 +136,8 @@ class ChatStore {
     const turn = this.readTurnRecord(uri, chat.activeTurn.id);
 
     return {
-      partCount: turn.part_count,
-      lastPart: this.parts.readLastTextIdentity(uri, chat.activeTurn.id, turn.part_count),
+      partCount: turn.partCount,
+      lastPart: this.parts.readLastTextIdentity(uri, chat.activeTurn.id, turn.partCount),
       toolExists:
         toolId !== void 0 &&
         this.parts
@@ -173,7 +172,10 @@ class ChatStore {
       throw new Error("Use record transitions to save turns");
     }
 
-    this.sql.exec("INSERT INTO chats (uri, metadata) VALUES (?, ?)", uri, JSON.stringify(chat));
+    this.db
+      .insert(chats)
+      .values({ uri, metadata: JSON.stringify(chat) })
+      .run();
   }
 
   applyAction(uri: string, action: ChatAction): ChatState {
@@ -269,7 +271,7 @@ class ChatStore {
         this.parts.insert(
           uri,
           active.id,
-          this.readTurnRecord(uri, active.id).part_count,
+          this.readTurnRecord(uri, active.id).partCount,
           action.part,
         );
       }
@@ -283,7 +285,7 @@ class ChatStore {
       const part = next.activeTurn?.responseParts[0];
 
       if (part) {
-        this.parts.insert(uri, active.id, this.readTurnRecord(uri, active.id).part_count, part);
+        this.parts.insert(uri, active.id, this.readTurnRecord(uri, active.id).partCount, part);
       }
     } else if (action.type === "chat/usage" && next.activeTurn) {
       this.writeTurnMetadata(uri, active.id, next.activeTurn);
@@ -348,7 +350,7 @@ class ChatStore {
       if (row) {
         this.parts.replace(uri, active.id, row, part);
       } else {
-        this.parts.insert(uri, active.id, this.readTurnRecord(uri, active.id).part_count, part);
+        this.parts.insert(uri, active.id, this.readTurnRecord(uri, active.id).partCount, part);
       }
     }
 
@@ -371,7 +373,7 @@ class ChatStore {
     const turn = this.readTurnRecord(uri, active.id);
     chat.status =
       (chat.status & ~ACTIVITY_MASK) |
-      (turn.blocking_count + turn.input_count > 0 ? INPUT_NEEDED : IN_PROGRESS);
+      (turn.blockingCount + turn.inputCount > 0 ? INPUT_NEEDED : IN_PROGRESS);
   }
 
   private complete(
@@ -403,12 +405,7 @@ class ChatStore {
     }
 
     if (action.type === "chat/error") {
-      this.parts.insert(
-        uri,
-        active.id,
-        this.readTurnRecord(uri, active.id).part_count,
-        action.part,
-      );
+      this.parts.insert(uri, active.id, this.readTurnRecord(uri, active.id).partCount, action.part);
     }
 
     this.writeTurnMetadata(uri, active.id, { ...finished, responseParts: [] });
@@ -443,14 +440,15 @@ class ChatStore {
         return current;
       }
 
-      const latest = this.sql
-        .exec<{ turn_id: string }>(
-          "SELECT turn_id FROM turns WHERE chat_uri = ? ORDER BY ordinal DESC LIMIT 1",
-          uri,
-        )
-        .next().value;
+      const latest = this.db
+        .select({ turnId: turns.turnId })
+        .from(turns)
+        .where(eq(turns.chatUri, uri))
+        .orderBy(desc(turns.ordinal))
+        .limit(1)
+        .get();
 
-      if (latest?.turn_id !== action.turnId) {
+      if (latest?.turnId !== action.turnId) {
         return current;
       }
 
@@ -472,32 +470,30 @@ class ChatStore {
       return next;
     }
 
+    const match =
+      action.turnId === void 0
+        ? void 0
+        : and(eq(turns.chatUri, uri), eq(turns.turnId, action.turnId));
+
     const boundary =
       action.turnId === void 0
         ? void 0
-        : this.sql
-            .exec<{ ordinal: number }>(
-              "SELECT ordinal FROM turns WHERE chat_uri = ? AND turn_id = ?",
-              uri,
-              action.turnId,
-            )
-            .next().value;
+        : this.db.select({ ordinal: turns.ordinal }).from(turns).where(match).get();
 
     if (action.turnId !== void 0 && !boundary) {
       return current;
     }
 
-    const removed = this.sql
-      .exec<{ turn_id: string }>(
-        "SELECT turn_id FROM turns WHERE chat_uri = ? AND ordinal > ?",
-        uri,
-        boundary?.ordinal ?? INITIAL_ORDINAL,
-      )
-      .toArray();
+    const removedMatch = and(
+      eq(turns.chatUri, uri),
+      gt(turns.ordinal, boundary?.ordinal ?? INITIAL_ORDINAL),
+    );
+
+    const removed = this.db.select({ turnId: turns.turnId }).from(turns).where(removedMatch).all();
 
     for (const row of removed) {
-      this.parts.deleteTurnRecords(uri, row.turn_id);
-      this.removeHistory(uri, row.turn_id);
+      this.parts.deleteTurnRecords(uri, row.turnId);
+      this.removeHistory(uri, row.turnId);
     }
 
     if (current.activeTurn) {
@@ -527,7 +523,7 @@ class ChatStore {
   deleteChat(uri: string): void {
     this.db.delete(turns).where(eq(turns.chatUri, uri)).run();
     this.parts.deleteTurnRecords(uri);
-    this.sql.exec("DELETE FROM chats WHERE uri = ?", uri);
+    this.db.delete(chats).where(eq(chats.uri, uri)).run();
   }
 
   private insertTurn(uri: string, turn: ActiveTurn | Turn): void {
@@ -540,13 +536,18 @@ class ChatStore {
       "Turn metadata exceeds the storage budget",
     );
 
-    this.sql.exec(
-      "INSERT INTO turn_records VALUES (?, ?, ?, ?, 0, 0, 0)",
-      uri,
-      turn.id,
-      JSON.stringify(stub),
-      encodedSize(stub),
-    );
+    this.db
+      .insert(turnRecords)
+      .values({
+        chatUri: uri,
+        turnId: turn.id,
+        metadata: JSON.stringify(stub),
+        bytes: encodedSize(stub),
+        partCount: 0,
+        blockingCount: 0,
+        inputCount: 0,
+      })
+      .run();
 
     for (const [position, part] of responseParts.entries()) {
       this.parts.insert(uri, turn.id, position, part);
@@ -556,9 +557,15 @@ class ChatStore {
   }
 
   private readTurnRecord(uri: string, id: string): TurnRow {
-    return this.sql
-      .exec<TurnRow>("SELECT * FROM turn_records WHERE chat_uri = ? AND turn_id = ?", uri, id)
-      .one();
+    const match = and(eq(turnRecords.chatUri, uri), eq(turnRecords.turnId, id));
+
+    const row = this.db.select().from(turnRecords).where(match).get();
+
+    if (!row) {
+      throw new Error("Turn record does not exist");
+    }
+
+    return row;
   }
 
   private checkTurnBudget(uri: string, id: string, completed = false): void {
@@ -570,7 +577,7 @@ class ChatStore {
     );
 
     if (!completed) {
-      checkBytes(turn.part_count, MAX_PARTS, "Turn has too many reply parts");
+      checkBytes(turn.partCount, MAX_PARTS, "Turn has too many reply parts");
     }
   }
 
@@ -581,13 +588,16 @@ class ChatStore {
     const reserve = "state" in value ? COMPLETION_RESERVE_BYTES : 0;
     const limit = MAX_CHAT_METADATA_BYTES + reserve;
     checkBytes(bytes, limit, "Turn metadata exceeds the storage budget");
-    this.sql.exec(
-      "UPDATE turn_records SET metadata = ?, bytes = bytes + ? WHERE chat_uri = ? AND turn_id = ?",
-      JSON.stringify(value),
-      bytes - previousBytes,
-      uri,
-      id,
-    );
+    const match = and(eq(turnRecords.chatUri, uri), eq(turnRecords.turnId, id));
+
+    this.db
+      .update(turnRecords)
+      .set({
+        metadata: JSON.stringify(value),
+        bytes: sql`${turnRecords.bytes} + ${bytes - previousBytes}`,
+      })
+      .where(match)
+      .run();
     this.checkTurnBudget(uri, id, "state" in value);
   }
 
@@ -598,14 +608,16 @@ class ChatStore {
 
     checkBytes(bytes, MAX_CHAT_METADATA_BYTES, "Chat metadata exceeds the storage budget");
 
-    this.sql.exec(
-      "UPDATE chats SET metadata = ?, active_turn = ? WHERE uri = ? AND (metadata != ? OR active_turn IS NOT ?)",
-      text,
-      activeTurn?.id ?? null,
-      uri,
-      text,
-      activeTurn?.id ?? null,
+    const match = and(
+      eq(chats.uri, uri),
+      sql`(${chats.metadata} != ${text} OR ${chats.activeTurn} IS NOT ${activeTurn?.id ?? null})`,
     );
+
+    this.db
+      .update(chats)
+      .set({ metadata: text, activeTurn: activeTurn?.id ?? null })
+      .where(match)
+      .run();
   }
 }
 

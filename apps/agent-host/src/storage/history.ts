@@ -1,4 +1,7 @@
 import * as z from "zod";
+import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
+import type { drizzle } from "drizzle-orm/durable-sqlite";
+import { turns, turnRecords } from "./schema";
 import { TurnSchema, type ChatState, type Turn } from "@experiments/protocol-schemas/ahp";
 import type { Parts } from "./parts";
 import { ProtocolError, RpcCodes } from "../ahp/protocol";
@@ -15,23 +18,27 @@ const CursorSchema = z.object({ channel: z.string(), before: z.int().nonnegative
 
 type HistoryPage = Pick<ChatState, "turns" | "turnsNextCursor">;
 
-type HistoryTurnRow = { metadata: string };
+type Database = ReturnType<typeof drizzle>;
 
 class TurnHistory {
-  private readonly sql: SqlStorage;
+  private readonly db: Database;
   private readonly parts: Parts;
 
-  constructor(sql: SqlStorage, parts: Parts) {
-    this.sql = sql;
+  constructor(db: Database, parts: Parts) {
+    this.db = db;
     this.parts = parts;
   }
+
   storedBytes(uri: string): number {
-    const normalized = this.sql
-      .exec<{ bytes: number }>(
-        `SELECT COALESCE(SUM(r.bytes), 0) AS bytes FROM turns t JOIN turn_records r ON r.chat_uri = t.chat_uri AND r.turn_id = t.turn_id WHERE t.chat_uri = ?`,
-        uri,
-      )
-      .one().bytes;
+    const match = and(eq(turnRecords.chatUri, turns.chatUri), eq(turnRecords.turnId, turns.turnId));
+
+    const normalized =
+      this.db
+        .select({ bytes: sql<number>`COALESCE(SUM(${turnRecords.bytes}), 0)` })
+        .from(turns)
+        .innerJoin(turnRecords, match)
+        .where(eq(turns.chatUri, uri))
+        .get()?.bytes ?? 0;
 
     return normalized;
   }
@@ -58,11 +65,13 @@ class TurnHistory {
     );
     const history: Turn[] = [];
 
-    for (const row of this.sql.exec<{ turn_id: string }>(
-      "SELECT turn_id FROM turns WHERE chat_uri = ? ORDER BY ordinal",
-      uri,
-    )) {
-      history.push(this.readTurn(uri, row.turn_id));
+    for (const row of this.db
+      .select({ turnId: turns.turnId })
+      .from(turns)
+      .where(eq(turns.chatUri, uri))
+      .orderBy(asc(turns.ordinal))
+      .all()) {
+      history.push(this.readTurn(uri, row.turnId));
     }
 
     return { ...live(), turns: history };
@@ -93,17 +102,18 @@ class TurnHistory {
     let boundary = before;
     let more = false;
 
-    const rows = this.sql.exec<{
-      turn_id: string;
-      ordinal: number;
-      bytes: number;
-    }>(
-      `SELECT t.turn_id, t.ordinal, r.bytes
-       FROM turns t JOIN turn_records r ON r.chat_uri = t.chat_uri AND r.turn_id = t.turn_id WHERE t.chat_uri = ? AND t.ordinal < ? ORDER BY t.ordinal DESC LIMIT ?`,
-      uri,
-      before,
-      limit + 1,
-    );
+    const match = and(eq(turnRecords.chatUri, turns.chatUri), eq(turnRecords.turnId, turns.turnId));
+
+    const pageMatch = and(eq(turns.chatUri, uri), lt(turns.ordinal, before));
+
+    const rows = this.db
+      .select({ turnId: turns.turnId, ordinal: turns.ordinal, bytes: turnRecords.bytes })
+      .from(turns)
+      .innerJoin(turnRecords, match)
+      .where(pageMatch)
+      .orderBy(desc(turns.ordinal))
+      .limit(limit + 1)
+      .all();
 
     for (const row of rows) {
       if (history.length >= limit || row.bytes > remaining) {
@@ -115,7 +125,7 @@ class TurnHistory {
         break;
       }
 
-      history.unshift(this.readTurn(uri, row.turn_id));
+      history.unshift(this.readTurn(uri, row.turnId));
       remaining -= row.bytes;
       boundary = row.ordinal;
     }
@@ -130,13 +140,17 @@ class TurnHistory {
   }
 
   readTurn(uri: string, turnId: string): Turn {
-    const row = this.sql
-      .exec<HistoryTurnRow>(
-        "SELECT * FROM turn_records WHERE chat_uri = ? AND turn_id = ?",
-        uri,
-        turnId,
-      )
-      .one();
+    const match = and(eq(turnRecords.chatUri, uri), eq(turnRecords.turnId, turnId));
+
+    const row = this.db
+      .select({ metadata: turnRecords.metadata })
+      .from(turnRecords)
+      .where(match)
+      .get();
+
+    if (!row) {
+      throw new Error("Turn record does not exist");
+    }
 
     const turn = TurnSchema.parse(JSON.parse(row.metadata));
 
