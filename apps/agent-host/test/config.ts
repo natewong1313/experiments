@@ -13,7 +13,7 @@ const TEST_CONFIG: AgentConfig = {
 };
 
 function createSession(store: HostStore, uri: string, sessionKey: string): Publication {
-  return store.create({
+  return store.createSession({
     uri,
     sessionKey,
     provider: TEST_CONFIG.agent.provider,

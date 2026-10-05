@@ -42,18 +42,20 @@ async function openHost(): Promise<{
   return { stub, peer };
 }
 
-async function recordFor(stub: DurableObjectStub): Promise<ReturnType<HostStore["require"]>> {
+async function recordFor(
+  stub: DurableObjectStub,
+): Promise<ReturnType<HostStore["requireWithActiveOutput"]>> {
   return await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
 
-    return new HostStore(state).require(SESSION);
+    return new HostStore(state).requireWithActiveOutput(SESSION);
   });
 }
 
 async function create(
   peer: Peer,
   stub: DurableObjectStub,
-): Promise<ReturnType<HostStore["require"]>> {
+): Promise<ReturnType<HostStore["requireWithActiveOutput"]>> {
   await peer.request("createSession", {
     channel: SESSION,
     provider: "custom",
@@ -152,7 +154,7 @@ it("reopens the same ACP conversation and session key after host eviction", asyn
       expect(instance).toBeDefined();
       const store = new HostStore(state);
       expect(store.sequence).toBe(sequence);
-      expect(store.snapshot(ROOT).state).toMatchObject({
+      expect(store.readSnapshot(ROOT).state).toMatchObject({
         agents: [{ provider: "custom" }],
       });
 

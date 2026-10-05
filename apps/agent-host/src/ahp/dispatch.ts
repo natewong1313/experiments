@@ -32,7 +32,7 @@ class ActionDispatch {
       action: input.action,
     });
 
-    const previous = this.store.previous(origin);
+    const previous = this.store.lookupDispatchResult(origin);
 
     if (previous) {
       const envelope =
@@ -51,21 +51,21 @@ class ActionDispatch {
       return;
     }
 
-    const record = this.store.lookup(input.channel);
+    const record = this.store.lookupMetadata(input.channel);
 
     if (!record) {
       return;
     }
 
     let reason = rejection(record, input.channel, input.action, (turnId) =>
-      this.store.hasTurn(record.chatUri, turnId),
+      this.store.hasCompletedTurn(record.chatUri, turnId),
     );
 
     if (input.action.type === "chat/turnStarted" && this.turns.isRunning(record)) {
       reason = "The previous agent turn is still stopping";
     }
 
-    const dispatch: Parameters<HostStore["dispatch"]>[0] = {
+    const dispatch: Parameters<HostStore["commitDispatch"]>[0] = {
       ...input,
       record,
       origin,
@@ -76,7 +76,7 @@ class ActionDispatch {
       dispatch.rejection = reason;
     }
 
-    const publication = this.store.dispatch(dispatch);
+    const publication = this.store.commitDispatch(dispatch);
 
     const [acknowledgement] = publication.actions;
 

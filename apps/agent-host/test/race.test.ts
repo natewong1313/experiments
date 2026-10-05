@@ -25,7 +25,7 @@ async function recordFor(stub: DurableObjectStub): Promise<LiveSession> {
   return await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
 
-    return new HostStore(state).require(SESSION);
+    return new HostStore(state).requireWithActiveOutput(SESSION);
   });
 }
 
@@ -108,7 +108,7 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
       await runInDurableObject(stub, (instance, state) => {
         expect(instance).toBeDefined();
         const store = new HostStore(state);
-        expect(store.lookup(SESSION)).toBeNull();
+        expect(store.lookupWithActiveOutput(SESSION)).toBeNull();
       });
     });
     await peer.request("createSession", { channel: SESSION });

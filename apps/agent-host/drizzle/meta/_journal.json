@@ -43,6 +43,13 @@
       "when": 1791077046659,
       "tag": "0005_escaped_storage_pieces",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791166935139,
+      "tag": "0006_remove_document_storage",
+      "breakpoints": true
     }
   ]
 }

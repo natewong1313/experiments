@@ -10,6 +10,7 @@ import {
   ListSessionsParamsSchema,
   FetchTurnsParamsSchema,
   DispatchActionParamsSchema,
+  ResourceReadParamsSchema,
   JsonRpcCallSchema,
   type JsonRpcCall,
 } from "@experiments/protocol-schemas/ahp";
@@ -176,11 +177,11 @@ class AhpRpc {
     const subscriptions = this.clients.validateSubscriptions(
       input.clientId,
       (input.initialSubscriptions ?? []).filter(
-        (channel) => channel === ROOT || this.store.exists(channel),
+        (channel) => channel === ROOT || this.store.hasSessionChannel(channel),
       ),
     );
 
-    const snapshots = this.store.snapshots(subscriptions);
+    const snapshots = this.store.readSnapshots(subscriptions);
 
     this.clients.attach(socket, input.clientId, subscriptions);
 
@@ -198,16 +199,18 @@ class AhpRpc {
 
     const available = this.clients.validateSubscriptions(
       input.clientId,
-      input.subscriptions.filter((channel) => channel === ROOT || this.store.exists(channel)),
+      input.subscriptions.filter(
+        (channel) => channel === ROOT || this.store.hasSessionChannel(channel),
+      ),
     );
 
-    const actions = this.store.replay(input.lastSeenServerSeq, available);
+    const actions = this.store.readReplay(input.lastSeenServerSeq, available);
 
     const result =
       actions === null
         ? {
             type: "snapshot",
-            snapshots: this.store.snapshots(available),
+            snapshots: this.store.readSnapshots(available),
           }
         : {
             type: "replay",
@@ -252,7 +255,7 @@ class AhpRpc {
           channel,
         ]);
 
-        const snapshot = this.store.snapshot(channel, view?.turns);
+        const snapshot = this.store.readSnapshot(channel, view?.turns);
         this.clients.attach(socket, client.clientId, subscriptions);
 
         return { snapshot };
@@ -282,9 +285,15 @@ class AhpRpc {
         return null;
       }
 
+      case "resourceRead": {
+        const input = parseHostParams(ResourceReadParamsSchema, params);
+
+        return this.store.readResource(input.uri, input.encoding);
+      }
+
       case "fetchTurns": {
         const input = parseHostParams(FetchTurnsParamsSchema, params);
-        const publication = this.store.fetchTurns(input.channel, input.cursor);
+        const publication = this.store.publishHistoryPage(input.channel, input.cursor);
 
         if (publication) {
           this.clients.broadcast(publication);
@@ -312,7 +321,7 @@ class AhpRpc {
   private listSessions(params: JsonRpcCall["params"]): RpcResult {
     const input = parseHostParams(ListSessionsParamsSchema, params);
 
-    return this.store.list({
+    return this.store.listSessions({
       cursor: input.cursor,
       limit: input.limit ?? DEFAULT_PAGE_SIZE,
     });

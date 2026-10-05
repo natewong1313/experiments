@@ -1,6 +1,6 @@
-import type { ActiveTurn, Turn } from "@experiments/protocol-schemas/ahp";
+import type { IndexedActiveTurn, IndexedTurn } from "../../lib/ahp/state";
 
 export type ConversationTurnParams = {
-  turn: Turn | ActiveTurn;
+  turn: IndexedTurn | IndexedActiveTurn;
   streaming: boolean;
 };

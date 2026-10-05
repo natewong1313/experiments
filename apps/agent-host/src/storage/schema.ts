@@ -1,4 +1,11 @@
-import { blob, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  integer,
+  index,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import type { ActionEnvelope, RootState, SessionState } from "@experiments/protocol-schemas/ahp";
 
 const host = sqliteTable("host", {
@@ -6,6 +13,7 @@ const host = sqliteTable("host", {
   seq: integer("seq").notNull(),
   root: text("root", { mode: "json" }).$type<RootState>().notNull(),
   replayFloor: integer("replay_floor").notNull(),
+  replayBytes: integer("replay_bytes").notNull().default(0),
 });
 
 const sessions = sqliteTable("sessions", {
@@ -20,6 +28,7 @@ const sessions = sqliteTable("sessions", {
 
 const actions = sqliteTable("actions", {
   seq: integer("seq").primaryKey(),
+  bytes: integer("bytes").notNull().default(0),
   envelope: text("envelope", { mode: "json" }).$type<ActionEnvelope>().notNull(),
 });
 
@@ -47,18 +56,92 @@ const turns = sqliteTable(
   ],
 );
 
-// Chunked BLOB storage for turn documents.
-// Accessed through JsonDocuments on raw storage.sql.
-// Chunk-diff writes are storage-engine logic, not relational queries.
-const documentChunks = sqliteTable(
-  "document_chunks",
+const chats = sqliteTable("chats", {
+  uri: text("uri").primaryKey(),
+  metadata: text("metadata").notNull(),
+  activeTurn: text("active_turn"),
+  contentBytes: integer("content_bytes").notNull().default(0),
+});
+
+const turnRecords = sqliteTable(
+  "turn_records",
   {
-    scope: text("scope").notNull(),
-    id: text("id").notNull(),
-    chunk: integer("chunk").notNull(),
-    data: blob("data").notNull(),
+    chatUri: text("chat_uri").notNull(),
+    turnId: text("turn_id").notNull(),
+    metadata: text("metadata").notNull(),
+    bytes: integer("bytes").notNull(),
+    partCount: integer("part_count").notNull(),
+    blockingCount: integer("blocking_count").notNull(),
+    inputCount: integer("input_count").notNull(),
   },
-  (table) => [primaryKey({ columns: [table.scope, table.id, table.chunk] })],
+  (table) => [primaryKey({ columns: [table.chatUri, table.turnId] })],
 );
 
-export { documentChunks, host, sessions, actions, dispatches, turns };
+const replyParts = sqliteTable(
+  "reply_parts",
+  {
+    chatUri: text("chat_uri").notNull(),
+    turnId: text("turn_id").notNull(),
+    position: integer("position").notNull(),
+    identity: text("identity"),
+    kind: text("kind").notNull(),
+    status: text("status"),
+    metadata: text("metadata").notNull(),
+    bytes: integer("bytes").notNull(),
+    pieces: integer("pieces").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.chatUri, table.turnId, table.position] }),
+    index("reply_parts_identity").on(table.chatUri, table.turnId, table.identity, table.position),
+    index("reply_parts_status").on(table.chatUri, table.turnId, table.kind, table.status),
+  ],
+);
+
+const textPieces = sqliteTable(
+  "text_pieces",
+  {
+    chatUri: text("chat_uri").notNull(),
+    turnId: text("turn_id").notNull(),
+    position: integer("position").notNull(),
+    piece: integer("piece").notNull(),
+    text: text("text").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.chatUri, table.turnId, table.position, table.piece] })],
+);
+
+const contents = sqliteTable(
+  "contents",
+  {
+    uri: text("uri").primaryKey(),
+    chatUri: text("chat_uri").notNull(),
+    contentType: text("content_type").notNull(),
+    encoding: text("encoding").notNull(),
+    bytes: integer("bytes").notNull(),
+    retiredSeq: integer("retired_seq"),
+  },
+  (table) => [index("contents_retired").on(table.retiredSeq)],
+);
+
+const contentPieces = sqliteTable(
+  "content_pieces",
+  {
+    uri: text("uri").notNull(),
+    piece: integer("piece").notNull(),
+    data: text("data").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.uri, table.piece] })],
+);
+
+export {
+  host,
+  sessions,
+  actions,
+  dispatches,
+  turns,
+  chats,
+  turnRecords,
+  replyParts,
+  textPieces,
+  contents,
+  contentPieces,
+};

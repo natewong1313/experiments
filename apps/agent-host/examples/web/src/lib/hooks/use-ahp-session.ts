@@ -1,13 +1,8 @@
 import type { Snapshot } from "@microsoft/agent-host-protocol";
 import { useState } from "react";
-import {
-  ChatStateSchema,
-  SessionStateSchema,
-  type ChatState,
-  type SessionState,
-} from "@experiments/protocol-schemas/ahp";
+import { SessionStateSchema, type SessionState } from "@experiments/protocol-schemas/ahp";
 import { dispatchAction } from "../ahp/dispatch";
-import { reduceChat, reduceSession } from "../ahp/state";
+import { reduceChat, reduceSession, parseChat, type ClientChatState } from "../ahp/state";
 import { useAgentHost } from "./use-agent-host";
 import { useAhpChannel } from "./use-ahp-channel";
 
@@ -25,19 +20,16 @@ type CancelTurn = () => Promise<void>;
 type SessionView = {
   connection: "connecting" | "connected" | "error";
   session: ReturnType<typeof useAhpChannel<SessionState>>;
-  chat: ReturnType<typeof useAhpChannel<ChatState>>;
+  chat: ReturnType<typeof useAhpChannel<ClientChatState>>;
   canSend: boolean;
   command: CommandState;
   sendMessage: SendMessage;
   cancelTurn: CancelTurn;
+  loadEarlier(): Promise<void>;
 };
 
 function parseSession(value: Snapshot["state"]): SessionState {
   return SessionStateSchema.parse(value);
-}
-
-function parseChat(value: Snapshot["state"]): ChatState {
-  return ChatStateSchema.parse(value);
 }
 
 type UseAhpSessionParams = { sessionUri: string };
@@ -133,6 +125,21 @@ function useAhpSession({ sessionUri }: UseAhpSessionParams): SessionView {
     }
   }
 
+  async function loadEarlier(): Promise<void> {
+    if (
+      view.status !== "connected" ||
+      chat.status !== "ready" ||
+      chat.state.turnsNextCursor === ABSENT
+    ) {
+      return;
+    }
+
+    await view.client.request("fetchTurns", {
+      channel: chat.state.resource,
+      cursor: chat.state.turnsNextCursor,
+    });
+  }
+
   return {
     connection: view.status,
     session,
@@ -141,6 +148,7 @@ function useAhpSession({ sessionUri }: UseAhpSessionParams): SessionView {
     command,
     sendMessage,
     cancelTurn,
+    loadEarlier,
   };
 }
 

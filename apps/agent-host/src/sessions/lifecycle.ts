@@ -48,7 +48,7 @@ class SessionLifecycle {
 
     const sessionKey = `${this.hostId}/${crypto.randomUUID()}`;
 
-    const publication = this.store.create({
+    const publication = this.store.createSession({
       uri: input.channel,
       sessionKey,
       provider,
@@ -59,18 +59,18 @@ class SessionLifecycle {
     this.clients.notify(ROOT, "root/sessionAdded", {
       summary: publication.summary,
     });
-    const record = this.store.require(input.channel);
+    const record = this.store.requireMetadata(input.channel);
     this.waitUntil(this.prepareSession(record));
   }
 
   async dispose(channel: string): Promise<void> {
-    const record = this.store.requireMetadata(channel);
+    const record = this.store.requireSessionRecord(channel);
 
     if (channel !== record.uri) {
       throw new ProtocolError(RpcCodes.params, "Dispose the session channel");
     }
 
-    this.clients.broadcast(this.store.remove(record.uri));
+    this.clients.broadcast(this.store.deleteSession(record.uri));
     this.clients.notify(ROOT, "root/sessionRemoved", { session: record.uri });
     this.clients.dropChannels([record.uri, record.chatUri]);
     await this.agents.release(record);
@@ -93,7 +93,7 @@ class SessionLifecycle {
 
     try {
       const agent = await this.agents.get(original);
-      const current = this.store.lookup(uri);
+      const current = this.store.lookupMetadata(uri);
 
       if (!current) {
         await this.agents.release(original);
@@ -105,12 +105,12 @@ class SessionLifecycle {
         return;
       }
 
-      this.store.bindAgent(uri, agent.sessionId);
+      this.store.bindAgentSession(uri, agent.sessionId);
       agent.activate();
       this.publish(uri, { type: "session/ready" });
       await this.agents.idle(original);
     } catch (error) {
-      if (this.store.lookup(uri)?.sessionKey === original.sessionKey) {
+      if (this.store.lookupMetadata(uri)?.sessionKey === original.sessionKey) {
         const failure = error instanceof Error ? error : new Error("Agent operation failed");
 
         this.publish(uri, {
@@ -122,7 +122,7 @@ class SessionLifecycle {
   }
 
   private publish(channel: string, action: StateAction): void {
-    this.clients.broadcast(this.store.apply(channel, action));
+    this.clients.broadcast(this.store.applyAction(channel, action));
   }
 }
 

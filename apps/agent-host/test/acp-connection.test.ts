@@ -46,7 +46,7 @@ it("aborts a stalled connector and closes a socket returned after its deadline",
     vi.useFakeTimers();
 
     try {
-      const record = store.require(uri);
+      const record = store.requireWithActiveOutput(uri);
       const failed = connectionError(agents.get(record));
       await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
       expect(await failed).toMatchObject({

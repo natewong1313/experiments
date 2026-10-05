@@ -13,6 +13,7 @@ import {
   type ListSessionsParams,
   type ReconnectParams,
   type RootChannelParams,
+  type ResourceReadParams,
   type SubscribeParams,
 } from "@experiments/protocol-schemas/ahp";
 import * as z from "zod";
@@ -35,6 +36,7 @@ type PeerParams =
   | ListSessionsParams
   | ReconnectParams
   | RootChannelParams
+  | ResourceReadParams
   | SubscribeParams;
 
 class Peer {
@@ -91,7 +93,7 @@ class Peer {
   }
 }
 
-async function connectPeer(stub: DurableObjectStub): Promise<Peer> {
+async function connectPeer(stub: DurableObjectStub, clientId = "test-client"): Promise<Peer> {
   const response = await stub.fetch("https://host/ahp", {
     headers: { Upgrade: "websocket" },
   });
@@ -103,7 +105,7 @@ async function connectPeer(stub: DurableObjectStub): Promise<Peer> {
   const peer = new Peer(response.webSocket);
   await peer.request("initialize", {
     channel: "ahp-root://",
-    clientId: "test-client",
+    clientId,
     protocolVersions: [PROTOCOL_VERSION],
   });
 

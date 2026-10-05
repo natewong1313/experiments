@@ -66,6 +66,24 @@ async function chatSnapshot({
   return ChatStateSchema.parse(result.snapshot?.state);
 }
 
+function storedUri(state: ReturnType<typeof ChatStateSchema.parse>): string {
+  for (const part of state.turns.flatMap((turn) => turn.responseParts)) {
+    if (part.kind === "contentRef") {
+      return part.uri;
+    }
+
+    if (part.kind === "toolCall" && "content" in part.toolCall) {
+      const edit = part.toolCall.content?.find((item) => item.type === "fileEdit");
+
+      if (edit?.type === "fileEdit" && edit.after) {
+        return edit.after.content.uri;
+      }
+    }
+  }
+
+  throw new Error("Expected stored content reference");
+}
+
 it("publishes ACP text, reasoning, and tool updates through the host", async () => {
   await withAcpAgent({
     prompt: async (connection, request) => {
@@ -153,6 +171,7 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
       });
       const state = await chatSnapshot({ peer, chat });
       expect(state.activeTurn).toBeUndefined();
+      expect(storedUri(state).startsWith("ahp-content:/")).toBe(true);
       expect(state.turns).toMatchObject([
         {
           id: "mapped-turn",
@@ -181,7 +200,7 @@ it("publishes ACP text, reasoning, and tool updates through the host", async () 
                     type: "fileEdit",
                     after: {
                       uri: "file:///file.txt",
-                      content: { uri: "data:text/plain;charset=utf-8,Ignored%20diff" },
+                      content: { uri: storedUri(state) },
                     },
                   },
                 ],
@@ -418,7 +437,7 @@ it("preserves plans and images while ignoring unrelated ACP sessions", async () 
           state: "complete",
           responseParts: [
             { kind: "systemNotification", _meta: { acp: { update: { sessionUpdate: "plan" } } } },
-            { kind: "contentRef", uri: "data:image/png;base64,AQ==" },
+            { kind: "contentRef", uri: storedUri(state) },
           ],
         },
       ]);
@@ -485,9 +504,9 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
     expect(instance).toBeDefined();
     const store = new HostStore(state);
     createSession(store, SESSION, "timestamp-generation");
-    store.apply(SESSION, { type: "session/ready" });
+    store.applyAction(SESSION, { type: "session/ready" });
 
-    return store.require(SESSION).chatUri;
+    return store.requireWithActiveOutput(SESSION).chatUri;
   });
 
   const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -522,7 +541,7 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
     await runInDurableObject(stub, (instance, state) => {
       expect(instance).toBeDefined();
       const store = new HostStore(state);
-      const stateSnapshot = ChatStateSchema.parse(store.snapshot(chat).state);
+      const stateSnapshot = ChatStateSchema.parse(store.readSnapshot(chat).state);
       expect(stateSnapshot.activeTurn).toBeUndefined();
     });
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -567,7 +586,7 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
       expect(instance).toBeDefined();
       const store = new HostStore(state);
       createSession(store, SESSION, "old-generation");
-      const original = store.require(SESSION);
+      const original = store.requireWithActiveOutput(SESSION);
 
       const agents = new AgentConnections({
         connect: connectAcp,
@@ -576,9 +595,9 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
 
       try {
         const old = await agents.get(original);
-        store.remove(SESSION);
+        store.deleteSession(SESSION);
         createSession(store, SESSION, "replacement-generation");
-        const replacement = store.require(SESSION);
+        const replacement = store.requireWithActiveOutput(SESSION);
         const current = await agents.get(replacement);
         expect(current.sessionId).not.toBe(old.sessionId);
         await agents.release(original);

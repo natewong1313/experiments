@@ -1,5 +1,7 @@
 import type { AhpClient, Subscription } from "@microsoft/agent-host-protocol/client";
 
+const HISTORY_TURNS = 20;
+
 type SharedSubscription = {
   users: number;
 };
@@ -32,7 +34,12 @@ function acquireChannel(client: AhpClient, uri: string): ChannelLease {
   shared.users += 1;
   const entry = shared;
   const registry = resources;
-  const result = client.subscribe(uri);
+
+  const result = client.subscribe(
+    uri,
+    uri.startsWith("ahp-chat:/") ? { view: { turns: HISTORY_TURNS } } : {},
+  );
+
   const subscription = client.attachSubscription(uri);
 
   function release(): void {

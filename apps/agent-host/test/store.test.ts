@@ -29,13 +29,13 @@ const IN_PROGRESS = 8;
 
 const READ = 32;
 
-const MAX_DELTA_CHUNKS = 2;
+const MAX_DELTA_CHUNKS = 1;
 
 function ready(store: HostStore): string {
   createSession(store, SESSION, "generation-1");
-  store.apply(SESSION, { type: "session/ready" });
+  store.applyAction(SESSION, { type: "session/ready" });
 
-  return store.require(SESSION).chatUri;
+  return store.requireWithActiveOutput(SESSION).chatUri;
 }
 
 function turnStarted(turnId: string): ChatAction {
@@ -48,15 +48,15 @@ function turnStarted(turnId: string): ChatAction {
 }
 
 function completeTurn(store: HostStore, chat: string, turnId: string): void {
-  store.apply(chat, turnStarted(turnId));
-  store.apply(chat, {
+  store.applyAction(chat, turnStarted(turnId));
+  store.applyAction(chat, {
     type: "chat/responsePart",
     turnId,
     part: { kind: "markdown", id: turnId, content: "" },
   });
 
   for (let written = 0; written < RESPONSE_BYTES; written += DELTA_BYTES) {
-    store.apply(chat, {
+    store.applyAction(chat, {
       type: "chat/delta",
       turnId,
       partId: turnId,
@@ -64,7 +64,7 @@ function completeTurn(store: HostStore, chat: string, turnId: string): void {
     });
   }
 
-  store.apply(chat, { type: "chat/turnComplete", turnId, duration: 1 });
+  store.applyAction(chat, { type: "chat/turnComplete", turnId, duration: 1 });
 }
 
 async function withStore(
@@ -80,25 +80,25 @@ async function withStore(
 it("keeps session and chat snapshots equal to reduced live and replayed actions", async () => {
   await withStore((store) => {
     const chat = ready(store);
-    store.apply(SESSION, { type: "session/isReadChanged", isRead: true });
-    let sessionMirror = SessionStateSchema.parse(store.snapshot(SESSION).state);
-    let chatMirror = ChatStateSchema.parse(store.snapshot(chat).state);
+    store.applyAction(SESSION, { type: "session/isReadChanged", isRead: true });
+    let sessionMirror = SessionStateSchema.parse(store.readSnapshot(SESSION).state);
+    let chatMirror = ChatStateSchema.parse(store.readSnapshot(chat).state);
     const cut = store.sequence;
 
     const publications = [
-      store.apply(chat, turnStarted("turn")),
-      store.apply(chat, {
+      store.applyAction(chat, turnStarted("turn")),
+      store.applyAction(chat, {
         type: "chat/responsePart",
         turnId: "turn",
         part: { kind: "markdown", id: "part", content: "" },
       }),
-      store.apply(chat, {
+      store.applyAction(chat, {
         type: "chat/delta",
         turnId: "turn",
         partId: "part",
         content: "Hello",
       }),
-      store.apply(chat, {
+      store.applyAction(chat, {
         type: "chat/error",
         turnId: "turn",
         duration: 1,
@@ -122,18 +122,18 @@ it("keeps session and chat snapshots equal to reduced live and replayed actions"
       }
     }
 
-    expect(store.snapshot(SESSION).state).toEqual(sessionMirror);
-    expect(store.snapshot(chat).state).toEqual(chatMirror);
-    expect(store.replay(cut, [SESSION, chat])).toEqual(actions);
-    expect(store.list({ limit: PAGE_SIZE }).items[0]?.status).toBe(ERROR_STATUS | READ);
+    expect(store.readSnapshot(SESSION).state).toEqual(sessionMirror);
+    expect(store.readSnapshot(chat).state).toEqual(chatMirror);
+    expect(store.readReplay(cut, [SESSION, chat])).toEqual(actions);
+    expect(store.listSessions({ limit: PAGE_SIZE }).items[0]?.status).toBe(ERROR_STATUS | READ);
   });
 });
 
-it("writes only bounded live chunks and emits no unchanged summary for a delta", async () => {
+it("appends only the incoming text piece and emits no unchanged summary for a delta", async () => {
   await withStore((store, state) => {
     const chat = ready(store);
-    store.apply(chat, turnStarted("turn"));
-    store.apply(chat, {
+    store.applyAction(chat, turnStarted("turn"));
+    store.applyAction(chat, {
       type: "chat/responsePart",
       turnId: "turn",
       part: { kind: "markdown", id: "part", content: "x".repeat(DELTA_BYTES) },
@@ -141,11 +141,11 @@ it("writes only bounded live chunks and emits no unchanged summary for a delta",
     const { sql } = state.storage;
     sql.exec(`
       CREATE TABLE chunk_writes (scope TEXT, id TEXT, bytes INTEGER);
-      CREATE TRIGGER record_insert AFTER INSERT ON document_chunks BEGIN INSERT INTO chunk_writes VALUES (NEW.scope, NEW.id, LENGTH(NEW.data)); END;
-      CREATE TRIGGER record_update AFTER UPDATE ON document_chunks BEGIN INSERT INTO chunk_writes VALUES (NEW.scope, NEW.id, LENGTH(NEW.data)); END;
+      CREATE TRIGGER record_insert AFTER INSERT ON text_pieces BEGIN INSERT INTO chunk_writes VALUES (NEW.chat_uri, NEW.turn_id, LENGTH(CAST(NEW.text AS BLOB))); END;
+      CREATE TRIGGER forbid_text_rewrite BEFORE UPDATE ON text_pieces BEGIN SELECT RAISE(ABORT, 'previous text rewritten'); END;
     `);
 
-    const publication = store.apply(chat, {
+    const publication = store.applyAction(chat, {
       type: "chat/delta",
       turnId: "turn",
       partId: "part",
@@ -160,13 +160,14 @@ it("writes only bounded live chunks and emits no unchanged summary for a delta",
     expect(writes.length).toBeLessThanOrEqual(MAX_DELTA_CHUNKS);
 
     for (const write of writes) {
-      expect(write.scope).toBe("chat");
+      expect(write.scope).toBe(chat);
+      expect(write.bytes).toBe(JSON.stringify("x").length);
       expect(write.bytes).toBeLessThanOrEqual(CHUNK_BYTES);
     }
 
     expect(publication.actions).toHaveLength(1);
     expect(publication.summary).toBeUndefined();
-    expect(store.list({ limit: PAGE_SIZE }).items[0]?.status).toBe(IN_PROGRESS);
+    expect(store.listSessions({ limit: PAGE_SIZE }).items[0]?.status).toBe(IN_PROGRESS);
   });
 });
 
@@ -178,11 +179,13 @@ it("retains history larger than a SQL row across eviction without loading it int
     const chat = ready(store);
     completeTurn(store, chat, "first");
     completeTurn(store, chat, "second");
-    expect(store.require(chat).chat.turns).toEqual([]);
-    expect(store.hasTurn(chat, "first")).toBe(true);
+    expect(store.requireWithActiveOutput(chat).chat.turns).toEqual([]);
+    expect(store.hasCompletedTurn(chat, "first")).toBe(true);
 
     const { maximum } = state.storage.sql
-      .exec<{ maximum: number }>("SELECT MAX(LENGTH(data)) AS maximum FROM document_chunks")
+      .exec<{ maximum: number }>(
+        "SELECT MAX(LENGTH(CAST(text AS BLOB))) AS maximum FROM text_pieces",
+      )
       .one();
 
     expect(maximum).toBeLessThanOrEqual(CHUNK_BYTES);
@@ -191,8 +194,8 @@ it("retains history larger than a SQL row across eviction without loading it int
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeInstanceOf(AgentHost);
     const store = new HostStore(state);
-    const chat = store.require(SESSION).chatUri;
-    const snapshot = ChatStateSchema.parse(store.snapshot(chat).state);
+    const chat = store.requireWithActiveOutput(SESSION).chatUri;
+    const snapshot = ChatStateSchema.parse(store.readSnapshot(chat).state);
     expect(snapshot.turns.map((turn) => turn.id)).toEqual(["first", "second"]);
 
     for (const turn of snapshot.turns) {
@@ -202,20 +205,20 @@ it("retains history larger than a SQL row across eviction without loading it int
       ]);
     }
 
-    expect(store.hasTurn(chat, "first")).toBe(true);
+    expect(store.hasCompletedTurn(chat, "first")).toBe(true);
   });
 });
 
 it("rolls back state and sequence together when a chunk write fails", async () => {
   await withStore((store, state) => {
     const chat = ready(store);
-    store.apply(chat, turnStarted("turn"));
-    const before = store.snapshot(chat);
+    store.applyAction(chat, turnStarted("turn"));
+    const before = store.readSnapshot(chat);
     state.storage.sql.exec(
-      "CREATE TRIGGER fail_chunk BEFORE INSERT ON document_chunks WHEN NEW.scope = 'chat' AND NEW.chunk = 1 BEGIN SELECT RAISE(ABORT, 'chunk write failed'); END",
+      "CREATE TRIGGER fail_chunk BEFORE INSERT ON text_pieces WHEN NEW.piece = 1 BEGIN SELECT RAISE(ABORT, 'chunk write failed'); END",
     );
     expect(() =>
-      store.apply(chat, {
+      store.applyAction(chat, {
         type: "chat/responsePart",
         turnId: "turn",
         part: {
@@ -225,17 +228,17 @@ it("rolls back state and sequence together when a chunk write fails", async () =
         },
       }),
     ).toThrow("chunk write failed");
-    expect(store.snapshot(chat)).toEqual(before);
+    expect(store.readSnapshot(chat)).toEqual(before);
   });
 });
 
 it("rolls back a dispatch if its acknowledgement cannot be persisted and permits a retry", async () => {
   await withStore((store, state) => {
     ready(store);
-    const before = store.snapshot(SESSION);
+    const before = store.readSnapshot(SESSION);
 
     const input = {
-      record: store.require(SESSION),
+      record: store.requireWithActiveOutput(SESSION),
       channel: SESSION,
       action: { type: "session/titleChanged", title: "Renamed" } as const,
       origin: { clientId: "client", clientSeq: 1 },
@@ -245,35 +248,34 @@ it("rolls back a dispatch if its acknowledgement cannot be persisted and permits
     state.storage.sql.exec(
       "CREATE TRIGGER fail_ack BEFORE INSERT ON dispatches BEGIN SELECT RAISE(ABORT, 'ack write failed'); END",
     );
-    expect(() => store.dispatch(input)).toThrow("ack write failed");
-    expect(store.snapshot(SESSION)).toEqual(before);
-    expect(store.previous(input.origin)).toBeNull();
-    expect(store.replay(before.fromSeq, [SESSION])).toEqual([]);
+    expect(() => store.commitDispatch(input)).toThrow("ack write failed");
+    expect(store.readSnapshot(SESSION)).toEqual(before);
+    expect(store.lookupDispatchResult(input.origin)).toBeNull();
+    expect(store.readReplay(before.fromSeq, [SESSION])).toEqual([]);
     state.storage.sql.exec("DROP TRIGGER fail_ack");
-    const publication = store.dispatch(input);
+    const publication = store.commitDispatch(input);
     const reopened = new HostStore(state);
-    expect(reopened.previous(input.origin)).toEqual({
+    expect(reopened.lookupDispatchResult(input.origin)).toEqual({
       frame: input.frame,
       envelope: publication.actions[0],
     });
-    expect(reopened.snapshot(SESSION).state).toMatchObject({
+    expect(reopened.readSnapshot(SESSION).state).toMatchObject({
       title: "Renamed",
     });
   });
 });
 
 it("paginates metadata without reading chats and rejects a chat URI as a session cursor", async () => {
-  await withStore((store, state) => {
+  await withStore((store) => {
     const chat = ready(store);
     const nextSession = `${SESSION}-next`;
     createSession(store, nextSession, "generation-2");
-    state.storage.sql.exec("DELETE FROM document_chunks WHERE scope = 'chat' AND id = ?", chat);
-    const first = store.list({ limit: 1 });
+    const first = store.listSessions({ limit: 1 });
     expect(first.items.map((item) => item.resource)).toEqual([SESSION]);
     expect(first.nextCursor).toBe(SESSION);
-    const next = store.list({ cursor: first.nextCursor, limit: 1 });
+    const next = store.listSessions({ cursor: first.nextCursor, limit: 1 });
     expect(next.items.map((item) => item.resource)).toEqual([nextSession]);
     expect(next.nextCursor).toBeUndefined();
-    expect(() => store.list({ cursor: chat, limit: 1 })).toThrow("Invalid session cursor");
+    expect(() => store.listSessions({ cursor: chat, limit: 1 })).toThrow("Invalid session cursor");
   });
 });

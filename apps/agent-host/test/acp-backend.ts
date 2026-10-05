@@ -1,10 +1,23 @@
 import { DurableObject } from "cloudflare:workers";
-import { agent, methods, PROTOCOL_VERSION, type AgentConnection } from "@agentclientprotocol/sdk";
+import {
+  agent,
+  methods,
+  PROTOCOL_VERSION,
+  type AgentConnection,
+  type SessionNotification,
+  type PromptResponse,
+} from "@agentclientprotocol/sdk";
 import { websocketStream } from "../src/agent/websocket-stream";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
 const STATUS_UNAUTHORIZED = 401;
+
+type ControlledTurn = {
+  sessionId: string;
+  connection: AgentConnection;
+  completion: PromiseWithResolvers<PromptResponse>;
+};
 
 type BackendEvent =
   | { kind: "connect"; sessionKey: string }
@@ -12,7 +25,35 @@ type BackendEvent =
   | { kind: "prompt"; sessionId: string };
 
 class AcpBackend extends DurableObject {
+  private controlledTurn: ControlledTurn | null = null;
+
   private readonly connections: Map<WebSocket, AgentConnection> = new Map();
+
+  async holdPrompts(): Promise<void> {
+    await this.ctx.storage.put("holdPrompts", true);
+  }
+
+  async emit(update: SessionNotification["update"]): Promise<void> {
+    const turn = this.controlledTurn;
+
+    if (!turn) {
+      throw new Error("No held prompt");
+    }
+
+    await turn.connection.client.notify(methods.client.session.update, {
+      sessionId: turn.sessionId,
+      update,
+    });
+  }
+
+  hasHeldPrompt(): boolean {
+    return this.controlledTurn !== null;
+  }
+
+  finishPrompt(): void {
+    this.controlledTurn?.completion.resolve({ stopReason: "end_turn" });
+    this.controlledTurn = null;
+  }
 
   async events(): Promise<BackendEvent[]> {
     return (await this.ctx.storage.get<BackendEvent[]>("events")) ?? [];
@@ -70,6 +111,14 @@ class AcpBackend extends DurableObject {
       })
       .onRequest(methods.agent.session.prompt, async ({ params: { sessionId }, client: host }) => {
         await this.record({ kind: "prompt", sessionId });
+
+        if ((await this.ctx.storage.get<boolean>("holdPrompts")) === true) {
+          const completion = Promise.withResolvers<PromptResponse>();
+          this.controlledTurn = { sessionId, connection, completion };
+
+          return completion.promise;
+        }
+
         await host.notify(methods.client.session.update, {
           sessionId,
           update: {

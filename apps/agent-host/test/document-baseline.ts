@@ -1,34 +1,34 @@
-import type * as z from "zod";
-import type { ChatState, Turn } from "@experiments/protocol-schemas/ahp";
-import { MAX_DOCUMENT_BYTES, checkBytes } from "../memory";
+import { ChatStateSchema, type ChatState } from "@experiments/protocol-schemas/ahp";
+import { MAX_TURN_BYTES, checkBytes } from "../src/memory";
 
 const CHUNK_BYTES = 65_536;
 
 type ChunkRow = { chunk: number; data: ArrayBuffer };
 
-type JsonDocument = ChatState | Turn;
-
-class JsonDocuments {
+class DocumentBaseline {
   private readonly sql: SqlStorage;
 
   constructor(sql: SqlStorage) {
     this.sql = sql;
+    sql.exec(
+      "CREATE TABLE baseline_chunks (scope TEXT NOT NULL, id TEXT NOT NULL, chunk INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (scope, id, chunk))",
+    );
   }
 
-  read<T extends JsonDocument>(scope: string, id: string, schema: z.ZodType<T>): T {
+  read(scope: string, id: string): ChatState {
     const size = this.size(scope, id);
 
     if (size === 0) {
       throw new Error(`Missing stored document: ${scope}/${id}`);
     }
 
-    checkBytes(size, MAX_DOCUMENT_BYTES, "Stored document exceeds the memory budget");
+    checkBytes(size, MAX_TURN_BYTES, "Stored document exceeds the memory budget");
 
     const bytes = new Uint8Array(size);
     let offset = 0;
 
     for (const row of this.sql.exec<ChunkRow>(
-      "SELECT chunk, data FROM document_chunks WHERE scope = ? AND id = ? ORDER BY chunk",
+      "SELECT chunk, data FROM baseline_chunks WHERE scope = ? AND id = ? ORDER BY chunk",
       scope,
       id,
     )) {
@@ -38,10 +38,10 @@ class JsonDocuments {
 
     const text = new TextDecoder().decode(bytes);
 
-    return schema.parse(JSON.parse(text));
+    return ChatStateSchema.parse(JSON.parse(text));
   }
 
-  write(scope: string, id: string, value: JsonDocument, limit = MAX_DOCUMENT_BYTES): void {
+  write(scope: string, id: string, value: ChatState, limit = MAX_TURN_BYTES): void {
     const text = JSON.stringify(value);
     const message = "Turn exceeds the memory budget";
     checkBytes(text.length, limit, message);
@@ -54,7 +54,7 @@ class JsonDocuments {
 
       const existing = this.sql
         .exec<ChunkRow>(
-          "SELECT chunk, data FROM document_chunks WHERE scope = ? AND id = ? AND chunk = ?",
+          "SELECT chunk, data FROM baseline_chunks WHERE scope = ? AND id = ? AND chunk = ?",
           scope,
           id,
           chunk,
@@ -70,7 +70,7 @@ class JsonDocuments {
 
       if (!unchanged) {
         this.sql.exec(
-          "INSERT INTO document_chunks VALUES (?, ?, ?, ?) ON CONFLICT(scope, id, chunk) DO UPDATE SET data = excluded.data",
+          "INSERT INTO baseline_chunks VALUES (?, ?, ?, ?) ON CONFLICT(scope, id, chunk) DO UPDATE SET data = excluded.data",
           scope,
           id,
           chunk,
@@ -82,26 +82,18 @@ class JsonDocuments {
     }
 
     this.sql.exec(
-      "DELETE FROM document_chunks WHERE scope = ? AND id = ? AND chunk >= ?",
+      "DELETE FROM baseline_chunks WHERE scope = ? AND id = ? AND chunk >= ?",
       scope,
       id,
       chunk,
     );
   }
 
-  remove(scope: string, id: string): void {
-    this.sql.exec("DELETE FROM document_chunks WHERE scope = ? AND id = ?", scope, id);
-  }
-
-  removeScope(scope: string): void {
-    this.sql.exec("DELETE FROM document_chunks WHERE scope = ?", scope);
-  }
-
   size(scope: string, id?: string): number {
     const query =
       id === void 0
-        ? "SELECT COALESCE(SUM(LENGTH(data)), 0) AS bytes FROM document_chunks WHERE scope = ?"
-        : "SELECT COALESCE(SUM(LENGTH(data)), 0) AS bytes FROM document_chunks WHERE scope = ? AND id = ?";
+        ? "SELECT COALESCE(SUM(LENGTH(data)), 0) AS bytes FROM baseline_chunks WHERE scope = ?"
+        : "SELECT COALESCE(SUM(LENGTH(data)), 0) AS bytes FROM baseline_chunks WHERE scope = ? AND id = ?";
 
     const bindings = id === void 0 ? [scope] : [scope, id];
 
@@ -109,4 +101,4 @@ class JsonDocuments {
   }
 }
 
-export { JsonDocuments };
+export { DocumentBaseline };

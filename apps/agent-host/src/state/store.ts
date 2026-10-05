@@ -1,3 +1,4 @@
+import { ChatActionSchema } from "@experiments/protocol-schemas/ahp";
 import { asc, count, eq, gt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
@@ -13,23 +14,15 @@ import type {
   ChatAction,
   SessionAction,
 } from "@experiments/protocol-schemas/ahp";
-import { reduceChat, reduceRoot, reduceSession } from "./reducers";
+import { reduceRoot, reduceSession } from "./reducers";
 import { ROOT, RpcCodes, ProtocolError } from "../ahp/protocol";
-import { JsonDocuments } from "../storage/json-documents";
-import { ActionJournal } from "../storage/journal";
-import { ChatStore } from "../storage/chat-store";
+import { ActionJournal, ContentStore, ChatStore } from "../storage";
 import storeMigrations from "../../drizzle/migrations";
 import { IDLE, type LiveSession } from "../sessions/record";
 import { projectChat, sessionSummary } from "./projections";
 import { host, sessions } from "../storage/schema";
 import type { InferSelectModel } from "drizzle-orm";
-import {
-  MAX_SNAPSHOT_BYTES,
-  RESPONSE_RESERVE_BYTES,
-  MAX_DOCUMENT_BYTES,
-  COMPLETION_RESERVE_BYTES,
-  checkBytes,
-} from "../memory";
+import { MAX_SNAPSHOT_BYTES, RESPONSE_RESERVE_BYTES, checkBytes } from "../memory";
 
 const SEQUENCE_INCREMENT = 1;
 
@@ -63,7 +56,7 @@ type CreateSessionParams = {
   workingDirectory: string;
 };
 
-type StoreDispatchParams = {
+type CommitDispatchParams = {
   record: LiveSession;
   channel: string;
   action: StateAction;
@@ -77,13 +70,14 @@ class HostStore {
   private readonly db: Database;
   private readonly journal: ActionJournal;
   private readonly chats: ChatStore;
+  private readonly contents: ContentStore;
 
   constructor(state: DurableObjectState) {
     this.storage = state.storage;
     this.db = drizzle(state.storage);
-    const documents = new JsonDocuments(state.storage.sql);
-    this.chats = new ChatStore(this.db, documents, state.storage.sql);
+    this.chats = new ChatStore(this.db, state.storage.sql);
     this.journal = new ActionJournal(this.db);
+    this.contents = new ContentStore(state.storage.sql);
     // The durable-sqlite migrator executes synchronously on the sync driver.
     // Tables exist before this constructor returns and before recover() runs.
     // The outcome goes through state.blockConcurrencyWhile so that a failed
@@ -97,34 +91,23 @@ class HostStore {
   }
 
   *recoverableSessions(): Generator<LiveSession> {
-    const rows = this.storage.sql.exec<{ uri: string; chat_uri: string }>(
-      "SELECT uri, chat_uri FROM sessions WHERE json_extract(session, '$.lifecycle') = 'creating' OR (json_extract(session, '$.chats[0].status') & ?) != 0 ORDER BY uri",
+    const rows = this.storage.sql.exec<{ uri: string }>(
+      "SELECT uri FROM sessions WHERE json_extract(session, '$.lifecycle') = 'creating' OR (json_extract(session, '$.chats[0].status') & ?) != 0 ORDER BY uri",
       ACTIVE_TURN_STATUS,
     );
 
     for (const row of rows) {
-      const bytes = this.chats.liveSize(row.chat_uri);
-
-      if (bytes > MAX_DOCUMENT_BYTES - COMPLETION_RESERVE_BYTES) {
-        console.error({
-          event: "host_recovery_document_too_large",
-          session: row.uri,
-          bytes,
-        });
-        continue;
-      }
-
-      yield this.require(row.uri);
+      yield this.requireMetadata(row.uri);
     }
   }
 
-  exists(channel: string): boolean {
+  hasSessionChannel(channel: string): boolean {
     const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
 
     return this.db.select({ uri: sessions.uri }).from(sessions).where(match).get() !== void 0;
   }
 
-  list(input: ListSessionsParams): SessionPage {
+  listSessions(input: ListSessionsParams): SessionPage {
     if (input.cursor !== void 0) {
       const cursor = this.db
         .select({ uri: sessions.uri })
@@ -156,7 +139,7 @@ class HostStore {
         break;
       }
 
-      const session = this.entry(row.uri);
+      const session = this.lookupSessionRecord(row.uri);
 
       if (session) {
         page.push(session);
@@ -177,18 +160,28 @@ class HostStore {
     return result;
   }
 
-  lookup(channel: string): LiveSession | null {
-    const row = this.entry(channel);
+  lookupWithActiveOutput(channel: string): LiveSession | null {
+    const row = this.lookupSessionRecord(channel);
 
     if (!row) {
       return null;
     }
 
-    return { ...row, chat: this.chats.live(row.chatUri) };
+    return { ...row, chat: this.chats.readWithActiveOutput(row.chatUri) };
   }
 
-  require(channel: string): LiveSession {
-    const record = this.lookup(channel);
+  lookupMetadata(channel: string): LiveSession | null {
+    const row = this.lookupSessionRecord(channel);
+
+    if (!row) {
+      return null;
+    }
+
+    return { ...row, chat: this.chats.readMetadata(row.chatUri) };
+  }
+
+  requireMetadata(channel: string): LiveSession {
+    const record = this.lookupMetadata(channel);
 
     if (!record) {
       throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
@@ -197,8 +190,32 @@ class HostStore {
     return record;
   }
 
-  requireMetadata(channel: string): SessionRow {
-    const row = this.entry(channel);
+  readAgentUpdateContext(
+    chat: string,
+    toolId?: string,
+  ): ReturnType<ChatStore["readAgentUpdateContext"]> {
+    return this.chats.readAgentUpdateContext(chat, toolId);
+  }
+
+  readResource(
+    uri: string,
+    encoding?: "utf-8" | "base64",
+  ): ReturnType<ContentStore["readResource"]> {
+    return this.contents.readResource(uri, encoding);
+  }
+
+  requireWithActiveOutput(channel: string): LiveSession {
+    const record = this.lookupWithActiveOutput(channel);
+
+    if (!record) {
+      throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
+    }
+
+    return record;
+  }
+
+  requireSessionRecord(channel: string): SessionRow {
+    const row = this.lookupSessionRecord(channel);
 
     if (!row) {
       throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
@@ -207,15 +224,15 @@ class HostStore {
     return row;
   }
 
-  hasTurn(chatUri: string, turnId: string): boolean {
-    return this.chats.hasTurn(chatUri, turnId);
+  hasCompletedTurn(chatUri: string, turnId: string): boolean {
+    return this.chats.hasCompletedTurn(chatUri, turnId);
   }
 
-  snapshots(channels: string[]): Snapshot[] {
+  readSnapshots(channels: string[]): Snapshot[] {
     let bytes = RESPONSE_RESERVE_BYTES;
 
     for (const channel of channels) {
-      bytes += this.snapshotSize(channel);
+      bytes += this.snapshotBytes(channel);
       checkBytes(
         bytes,
         MAX_SNAPSHOT_BYTES,
@@ -223,10 +240,10 @@ class HostStore {
       );
     }
 
-    return channels.map((channel) => this.snapshot(channel));
+    return channels.map((channel) => this.readSnapshot(channel));
   }
 
-  private snapshotSize(channel: string): number {
+  private snapshotBytes(channel: string): number {
     if (channel === ROOT) {
       return (
         this.db
@@ -253,22 +270,22 @@ class HostStore {
       throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
     }
 
-    return channel === row.uri ? row.bytes : this.chats.size(channel);
+    return channel === row.uri ? row.bytes : this.chats.snapshotBytes(channel);
   }
 
-  snapshot(channel: string, turns?: number): Snapshot {
+  readSnapshot(channel: string, turns?: number): Snapshot {
     let state: Snapshot["state"];
 
     if (channel === ROOT) {
-      state = this.hostRow().root;
+      state = this.readHostRecord().root;
     } else {
-      const row = this.entry(channel);
+      const row = this.lookupSessionRecord(channel);
 
       if (!row) {
         throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
       }
 
-      state = row.uri === channel ? row.session : this.chats.snapshot(channel, turns);
+      state = row.uri === channel ? row.session : this.chats.readSnapshot(channel, turns);
     }
 
     return { resource: channel, state, fromSeq: this.sequence };
@@ -277,16 +294,16 @@ class HostStore {
   configureAgent(agent: AgentInfo): Publication | null {
     const agents = [agent];
 
-    if (deepEqual(this.hostRow().root.agents, agents)) {
+    if (deepEqual(this.readHostRecord().root.agents, agents)) {
       return null;
     }
 
-    return this.apply(ROOT, { type: "root/agentsChanged", agents });
+    return this.applyAction(ROOT, { type: "root/agentsChanged", agents });
   }
 
-  create({ uri, sessionKey, provider, workingDirectory }: CreateSessionParams): Publication {
+  createSession({ uri, sessionKey, provider, workingDirectory }: CreateSessionParams): Publication {
     return this.storage.transactionSync(() => {
-      if (this.entry(uri)) {
+      if (this.lookupSessionRecord(uri)) {
         throw new ProtocolError(RpcCodes.sessionExists, "Session already exists");
       }
 
@@ -334,16 +351,16 @@ class HostStore {
           session,
         })
         .run();
-      this.chats.save(chatUri, record.chat);
+      this.chats.createChat(chatUri, record.chat);
 
       return {
-        actions: [this.activeSessionsChanged()],
+        actions: [this.publishActiveSessionCount()],
         summary: sessionSummary(record),
       };
     });
   }
 
-  bindAgent(uri: string, acpSession: string): void {
+  bindAgentSession(uri: string, acpSession: string): void {
     this.storage.transactionSync(() => {
       const row = this.db
         .select({ uri: sessions.uri })
@@ -359,7 +376,7 @@ class HostStore {
     });
   }
 
-  remove(uri: string): Publication {
+  deleteSession(uri: string): Publication {
     return this.storage.transactionSync(() => {
       const row = this.db.select().from(sessions).where(eq(sessions.uri, uri)).get();
 
@@ -368,30 +385,36 @@ class HostStore {
       }
 
       this.db.delete(sessions).where(eq(sessions.uri, uri)).run();
-      this.chats.remove(row.chatUri);
+      this.chats.deleteChat(row.chatUri);
+      const publication = { actions: [this.publishActiveSessionCount()] } satisfies Publication;
+      this.contents.retireChatContent(row.chatUri, this.sequence);
+      this.contents.deleteRetiredContent(this.journal.retentionFloor);
 
-      return { actions: [this.activeSessionsChanged()] };
+      return publication;
     });
   }
 
-  apply(channel: string, action: StateAction): Publication {
+  applyAction(channel: string, action: StateAction): Publication {
     return this.storage.transactionSync(() => {
       if (channel === ROOT) {
-        const next = reduceRoot(this.hostRow().root, action);
+        const next = reduceRoot(this.readHostRecord().root, action);
         this.db.update(host).set({ root: next }).where(eq(host.id, 1)).run();
 
-        return { actions: [this.journal.append(channel, action)] };
+        const envelope = this.journal.append(channel, action);
+        this.contents.deleteRetiredContent(this.journal.retentionFloor);
+
+        return { actions: [envelope] };
       }
 
-      return this.transition(this.require(channel), channel, action).publication;
+      return this.transition(this.requireMetadata(channel), channel, action).publication;
     });
   }
 
-  updateChat(record: LiveSession, actions: ChatAction[]): Publication[] {
-    return this.updateAgent(record, [], actions);
+  applyChatActions(record: LiveSession, actions: ChatAction[]): Publication[] {
+    return this.applyAgentActions(record, [], actions);
   }
 
-  updateAgent(
+  applyAgentActions(
     record: LiveSession,
     sessionActions: SessionAction[],
     chatActions: ChatAction[],
@@ -406,7 +429,9 @@ class HostStore {
         publications.push(result.publication);
       }
 
-      for (const action of chatActions) {
+      const normalized = this.contents.storeActionContent(current.chatUri, chatActions);
+
+      for (const action of normalized) {
         const result = this.transition(current, current.chatUri, action);
         current = result.record;
         publications.push(result.publication);
@@ -416,7 +441,7 @@ class HostStore {
     });
   }
 
-  fetchTurns(channel: string, cursor?: string): Publication | null {
+  publishHistoryPage(channel: string, cursor?: string): Publication | null {
     if (
       !this.db
         .select({ uri: sessions.uri })
@@ -432,26 +457,27 @@ class HostStore {
     }
 
     return this.storage.transactionSync(() => {
-      const page: Pick<ChatState, "turns" | "turnsNextCursor"> = this.chats.fetchTurns(
+      const page: Pick<ChatState, "turns" | "turnsNextCursor"> = this.chats.readHistoryPage(
         channel,
         cursor,
       );
 
-      return {
-        actions: [this.journal.append(channel, { type: "chat/turnsLoaded", ...page })],
-      };
+      const envelope = this.journal.append(channel, { type: "chat/turnsLoaded", ...page });
+      this.contents.deleteRetiredContent(this.journal.retentionFloor);
+
+      return { actions: [envelope] };
     });
   }
 
-  replay(since: number, channels: string[]): ActionEnvelope[] | null {
-    return this.journal.replay(since, channels);
+  readReplay(since: number, channels: string[]): ActionEnvelope[] | null {
+    return this.journal.readReplay(since, channels);
   }
 
-  previous(origin: ActionOrigin): { frame: string; envelope: ActionEnvelope } | null {
-    return this.journal.previous(origin);
+  lookupDispatchResult(origin: ActionOrigin): { frame: string; envelope: ActionEnvelope } | null {
+    return this.journal.lookupDispatchResult(origin);
   }
 
-  dispatch(input: StoreDispatchParams): Publication {
+  commitDispatch(input: CommitDispatchParams): Publication {
     return this.storage.transactionSync(() => {
       const { record, channel, action, origin, frame, rejection } = input;
 
@@ -471,7 +497,7 @@ class HostStore {
             };
 
       const [envelope] = publication.actions;
-      this.journal.remember({ origin, frame, envelope });
+      this.journal.saveDispatchResult({ origin, frame, envelope });
 
       return publication;
     });
@@ -483,17 +509,25 @@ class HostStore {
     action: StateAction,
     origin?: ActionOrigin,
   ): Transition {
+    const [normalized] =
+      channel === record.chatUri
+        ? this.contents.storeActionContent(record.chatUri, [action])
+        : [action];
+
+    const accepted = normalized ?? action;
+
     const published: [ActionEnvelope, ...ActionEnvelope[]] = [
-      this.journal.append(channel, action, origin),
+      this.journal.append(channel, accepted, origin),
     ];
+
+    this.contents.deleteRetiredContent(this.journal.retentionFloor);
 
     let next: LiveSession;
 
     if (channel === record.uri) {
-      next = { ...record, session: reduceSession(record.session, action) };
+      next = { ...record, session: reduceSession(record.session, accepted) };
     } else {
-      const chat = reduceChat(record.chat, action);
-      this.chats.save(record.chatUri, chat);
+      const chat = this.chats.applyAction(record.chatUri, ChatActionSchema.parse(accepted));
       next = { ...record, chat: { ...chat, turns: [] } };
       const projected = projectChat(record, chat);
 
@@ -525,7 +559,7 @@ class HostStore {
     return { record: next, publication };
   }
 
-  private activeSessionsChanged(): ActionEnvelope {
+  private publishActiveSessionCount(): ActionEnvelope {
     const row = this.db.select({ value: count() }).from(sessions).get();
 
     const action: StateAction = {
@@ -533,19 +567,22 @@ class HostStore {
       activeSessions: row?.value ?? 0,
     };
 
-    const next = reduceRoot(this.hostRow().root, action);
+    const next = reduceRoot(this.readHostRecord().root, action);
     this.db.update(host).set({ root: next }).where(eq(host.id, 1)).run();
 
-    return this.journal.append(ROOT, action);
+    const envelope = this.journal.append(ROOT, action);
+    this.contents.deleteRetiredContent(this.journal.retentionFloor);
+
+    return envelope;
   }
 
-  private entry(channel: string): SessionRow | undefined {
+  private lookupSessionRecord(channel: string): SessionRow | undefined {
     const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
 
     return this.db.select().from(sessions).where(match).get();
   }
 
-  private hostRow(): HostRow {
+  private readHostRecord(): HostRow {
     const row = this.db.select().from(host).where(eq(host.id, HOST_ID)).get();
 
     if (!row) {

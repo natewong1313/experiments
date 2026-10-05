@@ -66,7 +66,7 @@ class TurnExecution {
     notification: SessionNotification,
     rootSessionId: string,
   ): void {
-    const record = this.store.lookup(identity.uri);
+    const record = this.store.lookupMetadata(identity.uri);
 
     if (
       !record ||
@@ -77,7 +77,19 @@ class TurnExecution {
     }
 
     try {
-      const actions = acpUpdateToChatActions(record.chat.activeTurn, notification, rootSessionId);
+      const toolId =
+        notification.update.sessionUpdate === "tool_call_update"
+          ? notification.update.toolCallId
+          : void 0;
+
+      const mapping = this.store.readAgentUpdateContext(record.chatUri, toolId);
+
+      const actions = acpUpdateToChatActions(
+        record.chat.activeTurn,
+        notification,
+        rootSessionId,
+        mapping,
+      );
 
       const sessionActions = acpUpdateToSessionActions(
         record.session,
@@ -86,7 +98,7 @@ class TurnExecution {
         record.chat.activeTurn !== void 0,
       );
 
-      for (const publication of this.store.updateAgent(record, sessionActions, actions)) {
+      for (const publication of this.store.applyAgentActions(record, sessionActions, actions)) {
         this.clients.broadcast(publication);
       }
     } catch (error) {
@@ -130,7 +142,7 @@ class TurnExecution {
     try {
       const agent = await this.agents.get(original);
       agent.activate();
-      const current = this.store.lookup(uri);
+      const current = this.store.lookupMetadata(uri);
       const turn = current?.chat.activeTurn;
 
       if (!turn || turn.id !== turnId || current.sessionKey !== original.sessionKey) {
@@ -138,7 +150,7 @@ class TurnExecution {
       }
 
       const outcome = await agent.prompt(turn.message);
-      const latest = this.store.lookup(uri);
+      const latest = this.store.lookupMetadata(uri);
 
       if (latest?.chat.activeTurn?.id !== turnId || latest.sessionKey !== original.sessionKey) {
         return;
@@ -167,7 +179,7 @@ class TurnExecution {
     } catch (error) {
       const failure = error instanceof Error ? error : new Error("Agent operation failed");
 
-      const record = this.store.lookup(uri);
+      const record = this.store.lookupMetadata(uri);
 
       if (record?.chat.activeTurn?.id === turnId && record.sessionKey === original.sessionKey) {
         this.failTurn(record, errorMessage(failure));
@@ -204,7 +216,7 @@ class TurnExecution {
   }
 
   private publish(channel: string, action: StateAction): void {
-    this.clients.broadcast(this.store.apply(channel, action));
+    this.clients.broadcast(this.store.applyAction(channel, action));
   }
 }
 

@@ -1,0 +1,211 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`measures storage work for 'mixed' 1`] = `
+{
+  "baseline": {
+    "jsonBytesParsed": 1720727,
+    "payloadBytesWritten": 1655558,
+    "rowsRead": 131,
+    "rowsWritten": 66,
+  },
+  "complete": {
+    "jsonBytesParsed": 1188,
+    "payloadBytesWritten": 804,
+    "rowsRead": 41,
+    "rowsWritten": 24,
+  },
+  "name": "mixed",
+  "normalized": {
+    "jsonBytesParsed": 2549,
+    "payloadBytesWritten": 1078,
+    "rowsRead": 65,
+    "rowsWritten": 34,
+  },
+  "snapshot": {
+    "jsonBytesParsed": 859725,
+    "payloadBytesWritten": 0,
+    "rowsRead": 1023,
+    "rowsWritten": 0,
+  },
+}
+`;
+
+exports[`measures storage work for 'text-1m' 1`] = `
+{
+  "baseline": {
+    "jsonBytesParsed": 1000319,
+    "payloadBytesWritten": 17431,
+    "rowsRead": 57,
+    "rowsWritten": 7,
+  },
+  "complete": {
+    "jsonBytesParsed": 858,
+    "payloadBytesWritten": 515,
+    "rowsRead": 30,
+    "rowsWritten": 17,
+  },
+  "name": "text-1m",
+  "normalized": {
+    "jsonBytesParsed": 1119,
+    "payloadBytesWritten": 365,
+    "rowsRead": 25,
+    "rowsWritten": 14,
+  },
+  "snapshot": {
+    "jsonBytesParsed": 1000890,
+    "payloadBytesWritten": 0,
+    "rowsRead": 132,
+    "rowsWritten": 0,
+  },
+}
+`;
+
+exports[`measures storage work for 'text-10k' 1`] = `
+{
+  "baseline": {
+    "jsonBytesParsed": 10319,
+    "payloadBytesWritten": 10471,
+    "rowsRead": 12,
+    "rowsWritten": 7,
+  },
+  "complete": {
+    "jsonBytesParsed": 858,
+    "payloadBytesWritten": 515,
+    "rowsRead": 30,
+    "rowsWritten": 17,
+  },
+  "name": "text-10k",
+  "normalized": {
+    "jsonBytesParsed": 1119,
+    "payloadBytesWritten": 365,
+    "rowsRead": 25,
+    "rowsWritten": 14,
+  },
+  "snapshot": {
+    "jsonBytesParsed": 10648,
+    "payloadBytesWritten": 0,
+    "rowsRead": 11,
+    "rowsWritten": 0,
+  },
+}
+`;
+
+exports[`measures storage work for 'text-100k' 1`] = `
+{
+  "baseline": {
+    "jsonBytesParsed": 100319,
+    "payloadBytesWritten": 34935,
+    "rowsRead": 15,
+    "rowsWritten": 7,
+  },
+  "complete": {
+    "jsonBytesParsed": 858,
+    "payloadBytesWritten": 515,
+    "rowsRead": 30,
+    "rowsWritten": 17,
+  },
+  "name": "text-100k",
+  "normalized": {
+    "jsonBytesParsed": 1119,
+    "payloadBytesWritten": 365,
+    "rowsRead": 25,
+    "rowsWritten": 14,
+  },
+  "snapshot": {
+    "jsonBytesParsed": 100670,
+    "payloadBytesWritten": 0,
+    "rowsRead": 22,
+    "rowsWritten": 0,
+  },
+}
+`;
+
+exports[`measures storage work for 'tools-10' 1`] = `
+{
+  "baseline": {
+    "jsonBytesParsed": 8008,
+    "payloadBytesWritten": 8218,
+    "rowsRead": 12,
+    "rowsWritten": 7,
+  },
+  "complete": {
+    "jsonBytesParsed": 1188,
+    "payloadBytesWritten": 800,
+    "rowsRead": 37,
+    "rowsWritten": 22,
+  },
+  "name": "tools-10",
+  "normalized": {
+    "jsonBytesParsed": 1426,
+    "payloadBytesWritten": 706,
+    "rowsRead": 34,
+    "rowsWritten": 17,
+  },
+  "snapshot": {
+    "jsonBytesParsed": 8332,
+    "payloadBytesWritten": 0,
+    "rowsRead": 18,
+    "rowsWritten": 0,
+  },
+}
+`;
+
+exports[`measures storage work for 'tools-100' 1`] = `
+{
+  "baseline": {
+    "jsonBytesParsed": 76318,
+    "payloadBytesWritten": 76529,
+    "rowsRead": 16,
+    "rowsWritten": 9,
+  },
+  "complete": {
+    "jsonBytesParsed": 1188,
+    "payloadBytesWritten": 802,
+    "rowsRead": 37,
+    "rowsWritten": 22,
+  },
+  "name": "tools-100",
+  "normalized": {
+    "jsonBytesParsed": 1426,
+    "payloadBytesWritten": 708,
+    "rowsRead": 34,
+    "rowsWritten": 17,
+  },
+  "snapshot": {
+    "jsonBytesParsed": 76552,
+    "payloadBytesWritten": 0,
+    "rowsRead": 108,
+    "rowsWritten": 0,
+  },
+}
+`;
+
+exports[`measures storage work for 'tools-1000' 1`] = `
+{
+  "baseline": {
+    "jsonBytesParsed": 760318,
+    "payloadBytesWritten": 760530,
+    "rowsRead": 58,
+    "rowsWritten": 30,
+  },
+  "complete": {
+    "jsonBytesParsed": 1188,
+    "payloadBytesWritten": 804,
+    "rowsRead": 41,
+    "rowsWritten": 24,
+  },
+  "name": "tools-1000",
+  "normalized": {
+    "jsonBytesParsed": 1426,
+    "payloadBytesWritten": 710,
+    "rowsRead": 38,
+    "rowsWritten": 19,
+  },
+  "snapshot": {
+    "jsonBytesParsed": 759652,
+    "payloadBytesWritten": 0,
+    "rowsRead": 1008,
+    "rowsWritten": 0,
+  },
+}
+`;

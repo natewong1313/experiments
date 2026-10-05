@@ -31,7 +31,7 @@ function Conversation({ view }: ConversationParams): JSX.Element {
 
   const turnCount = chat.status === "ready" ? chat.state.turns.length : NO_TURNS;
 
-  const activePartCount = activeTurn === ABSENT ? NO_TURNS : activeTurn.responseParts.length;
+  const activePartCount = activeTurn === ABSENT ? NO_TURNS : activeTurn.responseParts.size;
 
   useEffect(() => {
     const transcript = transcriptRef.current;
@@ -67,6 +67,14 @@ function Conversation({ view }: ConversationParams): JSX.Element {
 
     try {
       await view.cancelTurn();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function loadEarlier(): Promise<void> {
+    try {
+      await view.loadEarlier();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error));
     }
@@ -114,6 +122,11 @@ function Conversation({ view }: ConversationParams): JSX.Element {
             turnCount === NO_TURNS &&
             activeTurn === ABSENT &&
             lifecycle === "ready" && <EmptyState />}
+          {chat.status === "ready" && chat.state.turnsNextCursor !== ABSENT && (
+            <Button variant="ghost" onClick={() => void loadEarlier()}>
+              Load earlier messages
+            </Button>
+          )}
           {chat.status === "ready" &&
             chat.state.turns.map((turn) => (
               <ConversationTurn key={turn.id} turn={turn} streaming={false} />

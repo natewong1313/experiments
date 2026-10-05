@@ -45,9 +45,9 @@ async function readyHost(): Promise<{
     expect(instance).toBeDefined();
     const store = new HostStore(ctx);
     createSession(store, SESSION, "protocol-generation");
-    store.apply(SESSION, { type: "session/ready" });
+    store.applyAction(SESSION, { type: "session/ready" });
 
-    return { chat: store.require(SESSION).chatUri, sequence: store.sequence };
+    return { chat: store.requireWithActiveOutput(SESSION).chatUri, sequence: store.sequence };
   });
 
   return { stub, ...state };
@@ -101,7 +101,7 @@ it("accepts draft and activity updates, clears them, and projects activity into 
       // eslint-disable-next-line no-await-in-loop -- Check persisted state before the next action changes it.
       await runInDurableObject(stub, (instance, ctx) => {
         expect(instance).toBeDefined();
-        const record = new HostStore(ctx).require(SESSION);
+        const record = new HostStore(ctx).requireWithActiveOutput(SESSION);
         const expectedDraft = action.type === "chat/draftChanged" ? action.draft : void 0;
         const expectedActivity = action.type === "chat/activityChanged" ? action.activity : void 0;
 
@@ -189,7 +189,7 @@ it.each(["session", "chat"])(
       expect(sender.actions.filter((envelope) => envelope.channel === channel)).toEqual(before);
       await runInDurableObject(stub, (instance, ctx) => {
         expect(instance).toBeDefined();
-        const record = new HostStore(ctx).require(SESSION);
+        const record = new HostStore(ctx).requireWithActiveOutput(SESSION);
         expect(family === "session" ? record.session.title : record.chat.activity).toBe(
           "After unsubscribe",
         );
@@ -275,7 +275,7 @@ it.each(["replay", "snapshot"])(
       });
       await runInDurableObject(stub, (instance, ctx) => {
         expect(instance).toBeDefined();
-        new HostStore(ctx).apply(SESSION, {
+        new HostStore(ctx).applyAction(SESSION, {
           type: "session/titleChanged",
           title: "Before reconnect",
         });
@@ -395,7 +395,7 @@ it("delivers duplicate acknowledgements only to their origin and removes dispose
       expect(instance).toBeDefined();
       const store = new HostStore(ctx);
       expect(store.sequence).toBe(accepted?.serverSeq);
-      expect(store.require(SESSION).session.title).toBe("Renamed");
+      expect(store.requireWithActiveOutput(SESSION).session.title).toBe("Renamed");
     });
     observer.notify("unsubscribe", { channel: SESSION });
     await observer.request("ping", { channel: ROOT });
@@ -422,7 +422,7 @@ it("delivers duplicate acknowledgements only to their origin and removes dispose
         expect(connection).toMatchObject({ phase: "ready", subscriptions: [] });
       }
 
-      expect(new HostStore(ctx).lookup(SESSION)).toBeNull();
+      expect(new HostStore(ctx).lookupWithActiveOutput(SESSION)).toBeNull();
     });
     await expect(sender.request("subscribe", { channel: chat })).rejects.toThrow(
       "Session does not exist",
@@ -437,7 +437,7 @@ it("routes reconnect through replay or snapshots and enforces the connection pha
   const { stub, chat, sequence } = await readyHost();
   await runInDurableObject(stub, (instance, ctx) => {
     expect(instance).toBeDefined();
-    new HostStore(ctx).apply(SESSION, {
+    new HostStore(ctx).applyAction(SESSION, {
       type: "session/titleChanged",
       title: "While disconnected",
     });

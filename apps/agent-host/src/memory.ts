@@ -1,6 +1,6 @@
 import type { ActionEnvelope } from "@experiments/protocol-schemas/ahp";
 
-const MAX_DOCUMENT_BYTES = 2_097_152;
+const MAX_TURN_BYTES = 2_097_152;
 
 const COMPLETION_RESERVE_BYTES = 16_384;
 
@@ -31,7 +31,7 @@ function jsonSize(value: ActionEnvelope): number {
 }
 
 export {
-  MAX_DOCUMENT_BYTES,
+  MAX_TURN_BYTES,
   COMPLETION_RESERVE_BYTES,
   MAX_SNAPSHOT_BYTES,
   MAX_REPLAY_BYTES,

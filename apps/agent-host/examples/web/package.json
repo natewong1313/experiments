@@ -13,7 +13,8 @@
     "cf-typegen": "wrangler types --include-runtime=false --strict-vars=false",
     "generate-routes": "tsr generate",
     "check-types": "tsr generate && wrangler types --include-runtime=false --strict-vars=false && tsc --noEmit",
-    "lint": "oxlint --deny-warnings --type-aware src vite.config.ts"
+    "lint": "oxlint --deny-warnings --type-aware src vite.config.ts",
+    "measure-updates": "node --expose-gc --import tsx scripts/measure-updates.ts"
   },
   "dependencies": {
     "@cloudflare/computer": "catalog:",
@@ -34,6 +35,7 @@
     "agents": "catalog:",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
+    "immutable": "^5.1.9",
     "radix-ui": "^1.6.7",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -52,6 +54,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^6.0.1",
+    "tsx": "^4.23.15",
     "vite": "^8.0.0"
   }
 }
