@@ -5,4 +5,5 @@ export default defineConfig({
   driver: "durable-sqlite",
   schema: "./src/storage/schema.ts",
   out: "./drizzle",
+  casing: "snake_case",
 });

@@ -9,36 +9,40 @@ import {
 import type { ActionEnvelope, RootState, SessionState } from "@experiments/protocol-schemas/ahp";
 
 const host = sqliteTable("host", {
-  id: integer("id").primaryKey(),
-  seq: integer("seq").notNull(),
-  root: text("root", { mode: "json" }).$type<RootState>().notNull(),
-  replayFloor: integer("replay_floor").notNull(),
-  replayBytes: integer("replay_bytes").notNull().default(0),
+  id: integer().primaryKey(),
+  seq: integer().notNull(),
+  root: text({ mode: "json" }).$type<RootState>().notNull(),
+  replayFloor: integer().notNull(),
+  replayBytes: integer().notNull().default(0),
 });
 
-const sessions = sqliteTable("sessions", {
-  uri: text("uri").primaryKey(),
-  chatUri: text("chat_uri").notNull().unique(),
-  sessionKey: text("container").notNull(),
-  acpSession: text("acp_session"),
-  createdAt: text("created_at").notNull(),
-  modifiedAt: text("modified_at").notNull(),
-  session: text("session", { mode: "json" }).$type<SessionState>().notNull(),
-});
+const sessions = sqliteTable(
+  "sessions",
+  {
+    uri: text().primaryKey(),
+    chatUri: text().notNull(),
+    sessionKey: text("container").notNull(),
+    acpSession: text(),
+    createdAt: text().notNull(),
+    modifiedAt: text().notNull(),
+    session: text({ mode: "json" }).$type<SessionState>().notNull(),
+  },
+  (table) => [uniqueIndex("sessions_chat_uri_unique").on(table.chatUri)],
+);
 
 const actions = sqliteTable("actions", {
-  seq: integer("seq").primaryKey(),
-  bytes: integer("bytes").notNull().default(0),
-  envelope: text("envelope", { mode: "json" }).$type<ActionEnvelope>().notNull(),
+  seq: integer().primaryKey(),
+  bytes: integer().notNull().default(0),
+  envelope: text({ mode: "json" }).$type<ActionEnvelope>().notNull(),
 });
 
 const dispatches = sqliteTable(
   "dispatches",
   {
-    clientId: text("client_id").notNull(),
-    clientSeq: integer("client_seq").notNull(),
-    frame: text("frame").notNull(),
-    envelope: text("envelope", { mode: "json" }).$type<ActionEnvelope>().notNull(),
+    clientId: text().notNull(),
+    clientSeq: integer().notNull(),
+    frame: text().notNull(),
+    envelope: text({ mode: "json" }).$type<ActionEnvelope>().notNull(),
   },
   (table) => [primaryKey({ columns: [table.clientId, table.clientSeq] })],
 );
@@ -46,9 +50,9 @@ const dispatches = sqliteTable(
 const turns = sqliteTable(
   "turns",
   {
-    chatUri: text("chat_uri").notNull(),
-    turnId: text("turn_id").notNull(),
-    ordinal: integer("ordinal").notNull(),
+    chatUri: text().notNull(),
+    turnId: text().notNull(),
+    ordinal: integer().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.chatUri, table.turnId] }),
@@ -57,22 +61,22 @@ const turns = sqliteTable(
 );
 
 const chats = sqliteTable("chats", {
-  uri: text("uri").primaryKey(),
-  metadata: text("metadata").notNull(),
-  activeTurn: text("active_turn"),
-  contentBytes: integer("content_bytes").notNull().default(0),
+  uri: text().primaryKey(),
+  metadata: text().notNull(),
+  activeTurn: text(),
+  contentBytes: integer().notNull().default(0),
 });
 
 const turnRecords = sqliteTable(
   "turn_records",
   {
-    chatUri: text("chat_uri").notNull(),
-    turnId: text("turn_id").notNull(),
-    metadata: text("metadata").notNull(),
-    bytes: integer("bytes").notNull(),
-    partCount: integer("part_count").notNull(),
-    blockingCount: integer("blocking_count").notNull(),
-    inputCount: integer("input_count").notNull(),
+    chatUri: text().notNull(),
+    turnId: text().notNull(),
+    metadata: text().notNull(),
+    bytes: integer().notNull(),
+    partCount: integer().notNull(),
+    blockingCount: integer().notNull(),
+    inputCount: integer().notNull(),
   },
   (table) => [primaryKey({ columns: [table.chatUri, table.turnId] })],
 );
@@ -80,15 +84,15 @@ const turnRecords = sqliteTable(
 const replyParts = sqliteTable(
   "reply_parts",
   {
-    chatUri: text("chat_uri").notNull(),
-    turnId: text("turn_id").notNull(),
-    position: integer("position").notNull(),
-    identity: text("identity"),
-    kind: text("kind").notNull(),
-    status: text("status"),
-    metadata: text("metadata").notNull(),
-    bytes: integer("bytes").notNull(),
-    pieces: integer("pieces").notNull(),
+    chatUri: text().notNull(),
+    turnId: text().notNull(),
+    position: integer().notNull(),
+    identity: text(),
+    kind: text().notNull(),
+    status: text(),
+    metadata: text().notNull(),
+    bytes: integer().notNull(),
+    pieces: integer().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.chatUri, table.turnId, table.position] }),
@@ -100,11 +104,11 @@ const replyParts = sqliteTable(
 const textPieces = sqliteTable(
   "text_pieces",
   {
-    chatUri: text("chat_uri").notNull(),
-    turnId: text("turn_id").notNull(),
-    position: integer("position").notNull(),
-    piece: integer("piece").notNull(),
-    text: text("text").notNull(),
+    chatUri: text().notNull(),
+    turnId: text().notNull(),
+    position: integer().notNull(),
+    piece: integer().notNull(),
+    text: text().notNull(),
   },
   (table) => [primaryKey({ columns: [table.chatUri, table.turnId, table.position, table.piece] })],
 );
@@ -112,12 +116,12 @@ const textPieces = sqliteTable(
 const contents = sqliteTable(
   "contents",
   {
-    uri: text("uri").primaryKey(),
-    chatUri: text("chat_uri").notNull(),
-    contentType: text("content_type").notNull(),
-    encoding: text("encoding").notNull(),
-    bytes: integer("bytes").notNull(),
-    retiredSeq: integer("retired_seq"),
+    uri: text().primaryKey(),
+    chatUri: text().notNull(),
+    contentType: text().notNull(),
+    encoding: text({ enum: ["utf-8", "base64"] }).notNull(),
+    bytes: integer().notNull(),
+    retiredSeq: integer(),
   },
   (table) => [index("contents_retired").on(table.retiredSeq)],
 );
@@ -125,9 +129,9 @@ const contents = sqliteTable(
 const contentPieces = sqliteTable(
   "content_pieces",
   {
-    uri: text("uri").notNull(),
-    piece: integer("piece").notNull(),
-    data: text("data").notNull(),
+    uri: text().notNull(),
+    piece: integer().notNull(),
+    data: text().notNull(),
   },
   (table) => [primaryKey({ columns: [table.uri, table.piece] })],
 );
