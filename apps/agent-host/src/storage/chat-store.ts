@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, max, sql } from "drizzle-orm";
-import { chats, turns, turnRecords } from "./schema";
+import { chatsTable, turnsTable, turnRecordsTable } from "./schema";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
 import {
   ChatStateSchema,
@@ -31,7 +31,7 @@ const MAX_PARTS = 10_000;
 
 const MAX_CHAT_METADATA_BYTES = 65_536;
 
-type TurnRow = typeof turnRecords.$inferSelect;
+type TurnRow = typeof turnRecordsTable.$inferSelect;
 
 type AgentUpdateContext = {
   partCount: number;
@@ -71,9 +71,9 @@ class ChatStore {
 
   readMetadata(uri: string): ChatState {
     const row = this.db
-      .select({ metadata: chats.metadata, activeTurn: chats.activeTurn })
-      .from(chats)
-      .where(eq(chats.uri, uri))
+      .select({ metadata: chatsTable.metadata, activeTurn: chatsTable.activeTurn })
+      .from(chatsTable)
+      .where(eq(chatsTable.uri, uri))
       .get();
 
     if (!row) {
@@ -108,16 +108,19 @@ class ChatStore {
   }
 
   activeStateBytes(uri: string): number {
-    const match = and(eq(turnRecords.chatUri, chats.uri), eq(turnRecords.turnId, chats.activeTurn));
+    const match = and(
+      eq(turnRecordsTable.chatUri, chatsTable.uri),
+      eq(turnRecordsTable.turnId, chatsTable.activeTurn),
+    );
 
     return (
       this.db
         .select({
-          bytes: sql<number>`LENGTH(CAST(${chats.metadata} AS BLOB)) + COALESCE(${turnRecords.bytes}, 0)`,
+          bytes: sql<number>`LENGTH(CAST(${chatsTable.metadata} AS BLOB)) + COALESCE(${turnRecordsTable.bytes}, 0)`,
         })
-        .from(chats)
-        .leftJoin(turnRecords, match)
-        .where(eq(chats.uri, uri))
+        .from(chatsTable)
+        .leftJoin(turnRecordsTable, match)
+        .where(eq(chatsTable.uri, uri))
         .get()?.bytes ?? 0
     );
   }
@@ -160,9 +163,9 @@ class ChatStore {
   }
 
   hasCompletedTurn(uri: string, turnId: string): boolean {
-    const match = and(eq(turns.chatUri, uri), eq(turns.turnId, turnId));
+    const match = and(eq(turnsTable.chatUri, uri), eq(turnsTable.turnId, turnId));
 
-    const row = this.db.select({ turnId: turns.turnId }).from(turns).where(match).get();
+    const row = this.db.select({ turnId: turnsTable.turnId }).from(turnsTable).where(match).get();
 
     return row !== void 0;
   }
@@ -173,7 +176,7 @@ class ChatStore {
     }
 
     this.db
-      .insert(chats)
+      .insert(chatsTable)
       .values({ uri, metadata: JSON.stringify(chat) })
       .run();
   }
@@ -418,13 +421,13 @@ class ChatStore {
 
   private addHistory(uri: string, id: string): void {
     const highest = this.db
-      .select({ ordinal: max(turns.ordinal) })
-      .from(turns)
-      .where(eq(turns.chatUri, uri))
+      .select({ ordinal: max(turnsTable.ordinal) })
+      .from(turnsTable)
+      .where(eq(turnsTable.chatUri, uri))
       .get();
 
     this.db
-      .insert(turns)
+      .insert(turnsTable)
       .values({ chatUri: uri, turnId: id, ordinal: (highest?.ordinal ?? INITIAL_ORDINAL) + 1 })
       .run();
   }
@@ -441,10 +444,10 @@ class ChatStore {
       }
 
       const latest = this.db
-        .select({ turnId: turns.turnId })
-        .from(turns)
-        .where(eq(turns.chatUri, uri))
-        .orderBy(desc(turns.ordinal))
+        .select({ turnId: turnsTable.turnId })
+        .from(turnsTable)
+        .where(eq(turnsTable.chatUri, uri))
+        .orderBy(desc(turnsTable.ordinal))
         .limit(1)
         .get();
 
@@ -473,23 +476,27 @@ class ChatStore {
     const match =
       action.turnId === void 0
         ? void 0
-        : and(eq(turns.chatUri, uri), eq(turns.turnId, action.turnId));
+        : and(eq(turnsTable.chatUri, uri), eq(turnsTable.turnId, action.turnId));
 
     const boundary =
       action.turnId === void 0
         ? void 0
-        : this.db.select({ ordinal: turns.ordinal }).from(turns).where(match).get();
+        : this.db.select({ ordinal: turnsTable.ordinal }).from(turnsTable).where(match).get();
 
     if (action.turnId !== void 0 && !boundary) {
       return current;
     }
 
     const removedMatch = and(
-      eq(turns.chatUri, uri),
-      gt(turns.ordinal, boundary?.ordinal ?? INITIAL_ORDINAL),
+      eq(turnsTable.chatUri, uri),
+      gt(turnsTable.ordinal, boundary?.ordinal ?? INITIAL_ORDINAL),
     );
 
-    const removed = this.db.select({ turnId: turns.turnId }).from(turns).where(removedMatch).all();
+    const removed = this.db
+      .select({ turnId: turnsTable.turnId })
+      .from(turnsTable)
+      .where(removedMatch)
+      .all();
 
     for (const row of removed) {
       this.parts.deleteTurnRecords(uri, row.turnId);
@@ -516,14 +523,14 @@ class ChatStore {
   }
 
   private removeHistory(uri: string, id: string): void {
-    const match = and(eq(turns.chatUri, uri), eq(turns.turnId, id));
-    this.db.delete(turns).where(match).run();
+    const match = and(eq(turnsTable.chatUri, uri), eq(turnsTable.turnId, id));
+    this.db.delete(turnsTable).where(match).run();
   }
 
   deleteChat(uri: string): void {
-    this.db.delete(turns).where(eq(turns.chatUri, uri)).run();
+    this.db.delete(turnsTable).where(eq(turnsTable.chatUri, uri)).run();
     this.parts.deleteTurnRecords(uri);
-    this.db.delete(chats).where(eq(chats.uri, uri)).run();
+    this.db.delete(chatsTable).where(eq(chatsTable.uri, uri)).run();
   }
 
   private insertTurn(uri: string, turn: ActiveTurn | Turn): void {
@@ -537,7 +544,7 @@ class ChatStore {
     );
 
     this.db
-      .insert(turnRecords)
+      .insert(turnRecordsTable)
       .values({
         chatUri: uri,
         turnId: turn.id,
@@ -557,9 +564,9 @@ class ChatStore {
   }
 
   private readTurnRecord(uri: string, id: string): TurnRow {
-    const match = and(eq(turnRecords.chatUri, uri), eq(turnRecords.turnId, id));
+    const match = and(eq(turnRecordsTable.chatUri, uri), eq(turnRecordsTable.turnId, id));
 
-    const row = this.db.select().from(turnRecords).where(match).get();
+    const row = this.db.select().from(turnRecordsTable).where(match).get();
 
     if (!row) {
       throw new Error("Turn record does not exist");
@@ -588,13 +595,13 @@ class ChatStore {
     const reserve = "state" in value ? COMPLETION_RESERVE_BYTES : 0;
     const limit = MAX_CHAT_METADATA_BYTES + reserve;
     checkBytes(bytes, limit, "Turn metadata exceeds the storage budget");
-    const match = and(eq(turnRecords.chatUri, uri), eq(turnRecords.turnId, id));
+    const match = and(eq(turnRecordsTable.chatUri, uri), eq(turnRecordsTable.turnId, id));
 
     this.db
-      .update(turnRecords)
+      .update(turnRecordsTable)
       .set({
         metadata: JSON.stringify(value),
-        bytes: sql`${turnRecords.bytes} + ${bytes - previousBytes}`,
+        bytes: sql`${turnRecordsTable.bytes} + ${bytes - previousBytes}`,
       })
       .where(match)
       .run();
@@ -609,12 +616,12 @@ class ChatStore {
     checkBytes(bytes, MAX_CHAT_METADATA_BYTES, "Chat metadata exceeds the storage budget");
 
     const match = and(
-      eq(chats.uri, uri),
-      sql`(${chats.metadata} != ${text} OR ${chats.activeTurn} IS NOT ${activeTurn?.id ?? null})`,
+      eq(chatsTable.uri, uri),
+      sql`(${chatsTable.metadata} != ${text} OR ${chatsTable.activeTurn} IS NOT ${activeTurn?.id ?? null})`,
     );
 
     this.db
-      .update(chats)
+      .update(chatsTable)
       .set({ metadata: text, activeTurn: activeTurn?.id ?? null })
       .where(match)
       .run();

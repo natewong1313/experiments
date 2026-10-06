@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, min, sql, inArray } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
 import type { ActionEnvelope, ActionOrigin, StateAction } from "@experiments/protocol-schemas/ahp";
-import { host, actions, dispatches } from "./schema";
+import { hostTable, actionsTable, dispatchesTable } from "./schema";
 import { MAX_REPLAY_BYTES, jsonSize } from "../memory";
 import { MAX_FRAME_BYTES } from "../ahp/protocol";
 
@@ -34,8 +34,8 @@ class ActionJournal {
     const checkpoint = this.readCheckpoint();
 
     const oldest = this.db
-      .select({ seq: min(actions.seq) })
-      .from(actions)
+      .select({ seq: min(actionsTable.seq) })
+      .from(actionsTable)
       .get()?.seq;
 
     return Math.max(
@@ -53,18 +53,22 @@ class ActionJournal {
       envelope.origin = origin;
     }
 
-    this.db.update(host).set({ seq: serverSeq }).where(eq(host.id, HOST_ID)).run();
+    this.db.update(hostTable).set({ seq: serverSeq }).where(eq(hostTable.id, HOST_ID)).run();
 
     const bytes = jsonSize(envelope);
 
     if (bytes > MAX_FRAME_BYTES) {
-      this.db.update(host).set({ replayFloor: serverSeq }).where(eq(host.id, HOST_ID)).run();
-    } else {
-      this.db.insert(actions).values({ seq: serverSeq, envelope, bytes }).run();
       this.db
-        .update(host)
-        .set({ replayBytes: sql`${host.replayBytes} + ${bytes}` })
-        .where(eq(host.id, HOST_ID))
+        .update(hostTable)
+        .set({ replayFloor: serverSeq })
+        .where(eq(hostTable.id, HOST_ID))
+        .run();
+    } else {
+      this.db.insert(actionsTable).values({ seq: serverSeq, envelope, bytes }).run();
+      this.db
+        .update(hostTable)
+        .set({ replayBytes: sql`${hostTable.replayBytes} + ${bytes}` })
+        .where(eq(hostTable.id, HOST_ID))
         .run();
     }
 
@@ -78,9 +82,9 @@ class ActionJournal {
 
     for (;;) {
       const row = this.db
-        .select({ seq: actions.seq, bytes: actions.bytes })
-        .from(actions)
-        .orderBy(asc(actions.seq))
+        .select({ seq: actionsTable.seq, bytes: actionsTable.bytes })
+        .from(actionsTable)
+        .orderBy(asc(actionsTable.seq))
         .limit(SEQUENCE_INCREMENT)
         .get();
 
@@ -88,11 +92,11 @@ class ActionJournal {
         break;
       }
 
-      this.db.delete(actions).where(eq(actions.seq, row.seq)).run();
+      this.db.delete(actionsTable).where(eq(actionsTable.seq, row.seq)).run();
       retained -= row.bytes;
     }
 
-    this.db.update(host).set({ replayBytes: retained }).where(eq(host.id, HOST_ID)).run();
+    this.db.update(hostTable).set({ replayBytes: retained }).where(eq(hostTable.id, HOST_ID)).run();
   }
 
   readReplay(since: number, channels: string[]): ActionEnvelope[] | null {
@@ -100,8 +104,8 @@ class ActionJournal {
 
     const oldest =
       this.db
-        .select({ seq: min(actions.seq) })
-        .from(actions)
+        .select({ seq: min(actionsTable.seq) })
+        .from(actionsTable)
         .get()?.seq ?? null;
 
     if (
@@ -117,16 +121,16 @@ class ActionJournal {
     }
 
     const match = and(
-      gt(actions.seq, since),
-      inArray(sql<string>`json_extract(${actions.envelope}, '$.channel')`, channels),
+      gt(actionsTable.seq, since),
+      inArray(sql<string>`json_extract(${actionsTable.envelope}, '$.channel')`, channels),
     );
 
     const bytes =
       this.db
         .select({
-          value: sql<number>`COALESCE(SUM(${actions.bytes}), 0)`,
+          value: sql<number>`COALESCE(SUM(${actionsTable.bytes}), 0)`,
         })
-        .from(actions)
+        .from(actionsTable)
         .where(match)
         .get()?.value ?? 0;
 
@@ -135,24 +139,24 @@ class ActionJournal {
     }
 
     return this.db
-      .select({ envelope: actions.envelope })
-      .from(actions)
+      .select({ envelope: actionsTable.envelope })
+      .from(actionsTable)
       .where(match)
-      .orderBy(asc(actions.seq))
+      .orderBy(asc(actionsTable.seq))
       .all()
       .map((row) => row.envelope);
   }
 
   lookupDispatchResult(origin: ActionOrigin): { frame: string; envelope: ActionEnvelope } | null {
     const match = and(
-      eq(dispatches.clientId, origin.clientId),
-      eq(dispatches.clientSeq, origin.clientSeq),
+      eq(dispatchesTable.clientId, origin.clientId),
+      eq(dispatchesTable.clientSeq, origin.clientSeq),
     );
 
     return (
       this.db
-        .select({ frame: dispatches.frame, envelope: dispatches.envelope })
-        .from(dispatches)
+        .select({ frame: dispatchesTable.frame, envelope: dispatchesTable.envelope })
+        .from(dispatchesTable)
         .where(match)
         .get() ?? null
     );
@@ -160,7 +164,7 @@ class ActionJournal {
 
   saveDispatchResult({ origin, frame, envelope }: SaveDispatchResultParams): void {
     this.db
-      .insert(dispatches)
+      .insert(dispatchesTable)
       .values({
         clientId: origin.clientId,
         clientSeq: origin.clientSeq,
@@ -172,9 +176,13 @@ class ActionJournal {
 
   private readCheckpoint(): { seq: number; replayFloor: number; replayBytes: number } {
     const row = this.db
-      .select({ seq: host.seq, replayFloor: host.replayFloor, replayBytes: host.replayBytes })
-      .from(host)
-      .where(eq(host.id, HOST_ID))
+      .select({
+        seq: hostTable.seq,
+        replayFloor: hostTable.replayFloor,
+        replayBytes: hostTable.replayBytes,
+      })
+      .from(hostTable)
+      .where(eq(hostTable.id, HOST_ID))
       .get();
 
     if (!row) {

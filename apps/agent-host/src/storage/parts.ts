@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
-import { replyParts, textPieces, turnRecords } from "./schema";
+import { replyPartsTable, textPiecesTable, turnRecordsTable } from "./schema";
 import {
   type metaSchema,
   ResponsePartSchema,
@@ -72,7 +72,7 @@ function openInput(part: ResponsePart): number {
   return part.kind === "inputRequest" && part.response === void 0 ? 1 : 0;
 }
 
-type PartRow = typeof replyParts.$inferSelect;
+type PartRow = typeof replyPartsTable.$inferSelect;
 
 type Database = ReturnType<typeof drizzle>;
 
@@ -105,29 +105,38 @@ class Parts {
   }
 
   readRows(chat: string, turn: string): PartRow[] {
-    const match = and(eq(replyParts.chatUri, chat), eq(replyParts.turnId, turn));
+    const match = and(eq(replyPartsTable.chatUri, chat), eq(replyPartsTable.turnId, turn));
 
-    return this.db.select().from(replyParts).where(match).orderBy(asc(replyParts.position)).all();
+    return this.db
+      .select()
+      .from(replyPartsTable)
+      .where(match)
+      .orderBy(asc(replyPartsTable.position))
+      .all();
   }
 
   findByIdentity(chat: string, turn: string, identity: string, first = false): PartRow[] {
     const match = and(
-      eq(replyParts.chatUri, chat),
-      eq(replyParts.turnId, turn),
-      eq(replyParts.identity, identity),
+      eq(replyPartsTable.chatUri, chat),
+      eq(replyPartsTable.turnId, turn),
+      eq(replyPartsTable.identity, identity),
     );
 
-    const query = this.db.select().from(replyParts).where(match).orderBy(asc(replyParts.position));
+    const query = this.db
+      .select()
+      .from(replyPartsTable)
+      .where(match)
+      .orderBy(asc(replyPartsTable.position));
 
     return first ? query.limit(1).all() : query.all();
   }
 
   readUnfinishedToolCalls(chat: string, turn: string): PartRow[] {
     const match = and(
-      eq(replyParts.chatUri, chat),
-      eq(replyParts.turnId, turn),
-      eq(replyParts.kind, "toolCall"),
-      inArray(replyParts.status, [
+      eq(replyPartsTable.chatUri, chat),
+      eq(replyPartsTable.turnId, turn),
+      eq(replyPartsTable.kind, "toolCall"),
+      inArray(replyPartsTable.status, [
         "streaming",
         "running",
         "pending-confirmation",
@@ -136,19 +145,19 @@ class Parts {
       ]),
     );
 
-    return this.db.select().from(replyParts).where(match).all();
+    return this.db.select().from(replyPartsTable).where(match).all();
   }
 
   readLastTextIdentity(chat: string, turn: string, count: number): TextPartIdentity | undefined {
     const match = and(
-      eq(replyParts.chatUri, chat),
-      eq(replyParts.turnId, turn),
-      eq(replyParts.position, count - 1),
+      eq(replyPartsTable.chatUri, chat),
+      eq(replyPartsTable.turnId, turn),
+      eq(replyPartsTable.position, count - 1),
     );
 
     const row = this.db
-      .select({ kind: replyParts.kind, identity: replyParts.identity })
-      .from(replyParts)
+      .select({ kind: replyPartsTable.kind, identity: replyPartsTable.identity })
+      .from(replyPartsTable)
       .where(match)
       .get();
 
@@ -168,16 +177,16 @@ class Parts {
       }
 
       const match = and(
-        eq(textPieces.chatUri, chat),
-        eq(textPieces.turnId, turn),
-        eq(textPieces.position, row.position),
+        eq(textPiecesTable.chatUri, chat),
+        eq(textPiecesTable.turnId, turn),
+        eq(textPiecesTable.position, row.position),
       );
 
       const pieces = this.db
-        .select({ data: textPieces.text })
-        .from(textPieces)
+        .select({ data: textPiecesTable.text })
+        .from(textPiecesTable)
         .where(match)
-        .orderBy(asc(textPieces.piece))
+        .orderBy(asc(textPiecesTable.piece))
         .all();
 
       return { ...part, content: Array.from(pieces, readPiece).join("") };
@@ -209,7 +218,7 @@ class Parts {
 
     const status = part.kind === "toolCall" ? part.toolCall.status : null;
     this.db
-      .insert(replyParts)
+      .insert(replyPartsTable)
       .values({
         chatUri: chat,
         turnId: turn,
@@ -227,15 +236,15 @@ class Parts {
       this.appendPieces({ chat, turn, position, start: 0, text });
     }
 
-    const match = and(eq(turnRecords.chatUri, chat), eq(turnRecords.turnId, turn));
+    const match = and(eq(turnRecordsTable.chatUri, chat), eq(turnRecordsTable.turnId, turn));
 
     this.db
-      .update(turnRecords)
+      .update(turnRecordsTable)
       .set({
-        bytes: sql`${turnRecords.bytes} + ${encodedSize(part) + 1}`,
-        partCount: sql`${turnRecords.partCount} + 1`,
-        blockingCount: sql`${turnRecords.blockingCount} + ${blocking(part)}`,
-        inputCount: sql`${turnRecords.inputCount} + ${openInput(part)}`,
+        bytes: sql`${turnRecordsTable.bytes} + ${encodedSize(part) + 1}`,
+        partCount: sql`${turnRecordsTable.partCount} + 1`,
+        blockingCount: sql`${turnRecordsTable.blockingCount} + ${blocking(part)}`,
+        inputCount: sql`${turnRecordsTable.inputCount} + ${openInput(part)}`,
       })
       .where(match)
       .run();
@@ -247,13 +256,13 @@ class Parts {
     const previous = this.parseMetadata(row);
 
     const match = and(
-      eq(replyParts.chatUri, chat),
-      eq(replyParts.turnId, turn),
-      eq(replyParts.position, row.position),
+      eq(replyPartsTable.chatUri, chat),
+      eq(replyPartsTable.turnId, turn),
+      eq(replyPartsTable.position, row.position),
     );
 
     this.db
-      .update(replyParts)
+      .update(replyPartsTable)
       .set({
         metadata: JSON.stringify(part),
         bytes,
@@ -262,14 +271,14 @@ class Parts {
       .where(match)
       .run();
 
-    const turnMatch = and(eq(turnRecords.chatUri, chat), eq(turnRecords.turnId, turn));
+    const turnMatch = and(eq(turnRecordsTable.chatUri, chat), eq(turnRecordsTable.turnId, turn));
 
     this.db
-      .update(turnRecords)
+      .update(turnRecordsTable)
       .set({
-        bytes: sql`${turnRecords.bytes} + ${bytes - row.bytes}`,
-        blockingCount: sql`${turnRecords.blockingCount} + ${blocking(part) - blocking(previous)}`,
-        inputCount: sql`${turnRecords.inputCount} + ${openInput(part) - openInput(previous)}`,
+        bytes: sql`${turnRecordsTable.bytes} + ${bytes - row.bytes}`,
+        blockingCount: sql`${turnRecordsTable.blockingCount} + ${blocking(part) - blocking(previous)}`,
+        inputCount: sql`${turnRecordsTable.inputCount} + ${openInput(part) - openInput(previous)}`,
       })
       .where(turnMatch)
       .run();
@@ -280,22 +289,22 @@ class Parts {
     this.appendPieces({ chat, turn, position: row.position, start: row.pieces, text });
 
     const match = and(
-      eq(replyParts.chatUri, chat),
-      eq(replyParts.turnId, turn),
-      eq(replyParts.position, row.position),
+      eq(replyPartsTable.chatUri, chat),
+      eq(replyPartsTable.turnId, turn),
+      eq(replyPartsTable.position, row.position),
     );
 
     this.db
-      .update(replyParts)
-      .set({ bytes: sql`${replyParts.bytes} + ${bytes}` })
+      .update(replyPartsTable)
+      .set({ bytes: sql`${replyPartsTable.bytes} + ${bytes}` })
       .where(match)
       .run();
 
-    const turnMatch = and(eq(turnRecords.chatUri, chat), eq(turnRecords.turnId, turn));
+    const turnMatch = and(eq(turnRecordsTable.chatUri, chat), eq(turnRecordsTable.turnId, turn));
 
     this.db
-      .update(turnRecords)
-      .set({ bytes: sql`${turnRecords.bytes} + ${bytes}` })
+      .update(turnRecordsTable)
+      .set({ bytes: sql`${turnRecordsTable.bytes} + ${bytes}` })
       .where(turnMatch)
       .run();
   }
@@ -307,7 +316,7 @@ class Parts {
       const end = pieceEnd(text, offset, JSON_PIECE_CHARACTERS);
       const data = JSON.stringify(text.slice(offset, end));
       this.db
-        .insert(textPieces)
+        .insert(textPiecesTable)
         .values({ chatUri: chat, turnId: turn, position, piece, text: data })
         .run();
       offset = end;
@@ -315,16 +324,16 @@ class Parts {
     }
 
     const match = and(
-      eq(replyParts.chatUri, chat),
-      eq(replyParts.turnId, turn),
-      eq(replyParts.position, position),
+      eq(replyPartsTable.chatUri, chat),
+      eq(replyPartsTable.turnId, turn),
+      eq(replyPartsTable.position, position),
     );
 
-    this.db.update(replyParts).set({ pieces: piece }).where(match).run();
+    this.db.update(replyPartsTable).set({ pieces: piece }).where(match).run();
   }
 
   deleteTurnRecords(chat: string, turn?: string): void {
-    for (const table of [replyParts, textPieces, turnRecords]) {
+    for (const table of [replyPartsTable, textPiecesTable, turnRecordsTable]) {
       const match = and(eq(table.chatUri, chat), turn === void 0 ? void 0 : eq(table.turnId, turn));
 
       this.db.delete(table).where(match).run();

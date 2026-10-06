@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
-import { turns, turnRecords } from "./schema";
+import { turnsTable, turnRecordsTable } from "./schema";
 import { TurnSchema, type ChatState, type Turn } from "@experiments/protocol-schemas/ahp";
 import type { Parts } from "./parts";
 import { ProtocolError, RpcCodes } from "../ahp/protocol";
@@ -30,14 +30,17 @@ class TurnHistory {
   }
 
   storedBytes(uri: string): number {
-    const match = and(eq(turnRecords.chatUri, turns.chatUri), eq(turnRecords.turnId, turns.turnId));
+    const match = and(
+      eq(turnRecordsTable.chatUri, turnsTable.chatUri),
+      eq(turnRecordsTable.turnId, turnsTable.turnId),
+    );
 
     const normalized =
       this.db
-        .select({ bytes: sql<number>`COALESCE(SUM(${turnRecords.bytes}), 0)` })
-        .from(turns)
-        .innerJoin(turnRecords, match)
-        .where(eq(turns.chatUri, uri))
+        .select({ bytes: sql<number>`COALESCE(SUM(${turnRecordsTable.bytes}), 0)` })
+        .from(turnsTable)
+        .innerJoin(turnRecordsTable, match)
+        .where(eq(turnsTable.chatUri, uri))
         .get()?.bytes ?? 0;
 
     return normalized;
@@ -66,10 +69,10 @@ class TurnHistory {
     const history: Turn[] = [];
 
     for (const row of this.db
-      .select({ turnId: turns.turnId })
-      .from(turns)
-      .where(eq(turns.chatUri, uri))
-      .orderBy(asc(turns.ordinal))
+      .select({ turnId: turnsTable.turnId })
+      .from(turnsTable)
+      .where(eq(turnsTable.chatUri, uri))
+      .orderBy(asc(turnsTable.ordinal))
       .all()) {
       history.push(this.readTurn(uri, row.turnId));
     }
@@ -102,16 +105,23 @@ class TurnHistory {
     let boundary = before;
     let more = false;
 
-    const match = and(eq(turnRecords.chatUri, turns.chatUri), eq(turnRecords.turnId, turns.turnId));
+    const match = and(
+      eq(turnRecordsTable.chatUri, turnsTable.chatUri),
+      eq(turnRecordsTable.turnId, turnsTable.turnId),
+    );
 
-    const pageMatch = and(eq(turns.chatUri, uri), lt(turns.ordinal, before));
+    const pageMatch = and(eq(turnsTable.chatUri, uri), lt(turnsTable.ordinal, before));
 
     const rows = this.db
-      .select({ turnId: turns.turnId, ordinal: turns.ordinal, bytes: turnRecords.bytes })
-      .from(turns)
-      .innerJoin(turnRecords, match)
+      .select({
+        turnId: turnsTable.turnId,
+        ordinal: turnsTable.ordinal,
+        bytes: turnRecordsTable.bytes,
+      })
+      .from(turnsTable)
+      .innerJoin(turnRecordsTable, match)
       .where(pageMatch)
-      .orderBy(desc(turns.ordinal))
+      .orderBy(desc(turnsTable.ordinal))
       .limit(limit + 1)
       .all();
 
@@ -140,11 +150,11 @@ class TurnHistory {
   }
 
   readTurn(uri: string, turnId: string): Turn {
-    const match = and(eq(turnRecords.chatUri, uri), eq(turnRecords.turnId, turnId));
+    const match = and(eq(turnRecordsTable.chatUri, uri), eq(turnRecordsTable.turnId, turnId));
 
     const row = this.db
-      .select({ metadata: turnRecords.metadata })
-      .from(turnRecords)
+      .select({ metadata: turnRecordsTable.metadata })
+      .from(turnRecordsTable)
       .where(match)
       .get();
 

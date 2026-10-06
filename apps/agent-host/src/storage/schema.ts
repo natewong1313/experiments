@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import type { ActionEnvelope, RootState, SessionState } from "@experiments/protocol-schemas/ahp";
 
-const host = sqliteTable("host", {
+const hostTable = sqliteTable("host", {
   id: integer().primaryKey(),
   seq: integer().notNull(),
   root: text({ mode: "json" }).$type<RootState>().notNull(),
@@ -16,7 +16,7 @@ const host = sqliteTable("host", {
   replayBytes: integer().notNull().default(0),
 });
 
-const sessions = sqliteTable(
+const sessionsTable = sqliteTable(
   "sessions",
   {
     uri: text().primaryKey(),
@@ -30,13 +30,13 @@ const sessions = sqliteTable(
   (table) => [uniqueIndex("sessions_chat_uri_unique").on(table.chatUri)],
 );
 
-const actions = sqliteTable("actions", {
+const actionsTable = sqliteTable("actions", {
   seq: integer().primaryKey(),
   bytes: integer().notNull().default(0),
   envelope: text({ mode: "json" }).$type<ActionEnvelope>().notNull(),
 });
 
-const dispatches = sqliteTable(
+const dispatchesTable = sqliteTable(
   "dispatches",
   {
     clientId: text().notNull(),
@@ -47,7 +47,7 @@ const dispatches = sqliteTable(
   (table) => [primaryKey({ columns: [table.clientId, table.clientSeq] })],
 );
 
-const turns = sqliteTable(
+const turnsTable = sqliteTable(
   "turns",
   {
     chatUri: text().notNull(),
@@ -60,14 +60,14 @@ const turns = sqliteTable(
   ],
 );
 
-const chats = sqliteTable("chats", {
+const chatsTable = sqliteTable("chats", {
   uri: text().primaryKey(),
   metadata: text().notNull(),
   activeTurn: text(),
   contentBytes: integer().notNull().default(0),
 });
 
-const turnRecords = sqliteTable(
+const turnRecordsTable = sqliteTable(
   "turn_records",
   {
     chatUri: text().notNull(),
@@ -81,7 +81,7 @@ const turnRecords = sqliteTable(
   (table) => [primaryKey({ columns: [table.chatUri, table.turnId] })],
 );
 
-const replyParts = sqliteTable(
+const replyPartsTable = sqliteTable(
   "reply_parts",
   {
     chatUri: text().notNull(),
@@ -101,7 +101,7 @@ const replyParts = sqliteTable(
   ],
 );
 
-const textPieces = sqliteTable(
+const textPiecesTable = sqliteTable(
   "text_pieces",
   {
     chatUri: text().notNull(),
@@ -113,7 +113,7 @@ const textPieces = sqliteTable(
   (table) => [primaryKey({ columns: [table.chatUri, table.turnId, table.position, table.piece] })],
 );
 
-const contents = sqliteTable(
+const contentsTable = sqliteTable(
   "contents",
   {
     uri: text().primaryKey(),
@@ -126,7 +126,7 @@ const contents = sqliteTable(
   (table) => [index("contents_retired").on(table.retiredSeq)],
 );
 
-const contentPieces = sqliteTable(
+const contentPiecesTable = sqliteTable(
   "content_pieces",
   {
     uri: text().notNull(),
@@ -137,15 +137,15 @@ const contentPieces = sqliteTable(
 );
 
 export {
-  host,
-  sessions,
-  actions,
-  dispatches,
-  turns,
-  chats,
-  turnRecords,
-  replyParts,
-  textPieces,
-  contents,
-  contentPieces,
+  hostTable,
+  sessionsTable,
+  actionsTable,
+  dispatchesTable,
+  turnsTable,
+  chatsTable,
+  turnRecordsTable,
+  replyPartsTable,
+  textPiecesTable,
+  contentsTable,
+  contentPiecesTable,
 };

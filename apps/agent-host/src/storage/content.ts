@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/durable-sqlite";
-import { chats, contents, contentPieces } from "./schema";
+import { chatsTable, contentsTable, contentPiecesTable } from "./schema";
 import {
   type metaSchema,
   ContentRefSchema,
@@ -26,7 +26,7 @@ const SESSION_CONTENT_BYTES = 67_108_864;
 
 const PIECE_CHARACTERS = 16_384;
 
-type ContentEncoding = typeof contents.$inferSelect.encoding;
+type ContentEncoding = typeof contentsTable.$inferSelect.encoding;
 
 type Database = ReturnType<typeof drizzle>;
 
@@ -238,9 +238,9 @@ class ContentStore {
     );
 
     const owner = this.db
-      .select({ contentBytes: chats.contentBytes })
-      .from(chats)
-      .where(eq(chats.uri, chat))
+      .select({ contentBytes: chatsTable.contentBytes })
+      .from(chatsTable)
+      .where(eq(chatsTable.uri, chat))
       .get();
 
     if (!owner) {
@@ -254,7 +254,7 @@ class ContentStore {
     );
     const uri = `ahp-content:/${crypto.randomUUID()}`;
     this.db
-      .insert(contents)
+      .insert(contentsTable)
       .values({ uri, chatUri: chat, contentType, encoding, bytes, retiredSeq: null })
       .run();
     let piece = 0;
@@ -262,15 +262,15 @@ class ContentStore {
     for (let offset = 0; offset < data.length;) {
       const end = pieceEnd(data, offset, JSON_PIECE_CHARACTERS);
       const stored = JSON.stringify(data.slice(offset, end));
-      this.db.insert(contentPieces).values({ uri, piece, data: stored }).run();
+      this.db.insert(contentPiecesTable).values({ uri, piece, data: stored }).run();
       offset = end;
       piece += 1;
     }
 
     this.db
-      .update(chats)
-      .set({ contentBytes: sql`${chats.contentBytes} + ${bytes}` })
-      .where(eq(chats.uri, chat))
+      .update(chatsTable)
+      .set({ contentBytes: sql`${chatsTable.contentBytes} + ${bytes}` })
+      .where(eq(chatsTable.uri, chat))
       .run();
 
     return {
@@ -281,7 +281,7 @@ class ContentStore {
   }
 
   readResource(uri: string, encoding?: ContentEncoding): ResourceReadResult {
-    const row = this.db.select().from(contents).where(eq(contents.uri, uri)).get();
+    const row = this.db.select().from(contentsTable).where(eq(contentsTable.uri, uri)).get();
 
     if (!row) {
       throw new ProtocolError(
@@ -293,10 +293,10 @@ class ContentStore {
     checkBytes(row.bytes, RESOURCE_BYTES, "Resource exceeds the response budget");
 
     const data = this.db
-      .select({ data: contentPieces.data })
-      .from(contentPieces)
-      .where(eq(contentPieces.uri, uri))
-      .orderBy(asc(contentPieces.piece))
+      .select({ data: contentPiecesTable.data })
+      .from(contentPiecesTable)
+      .where(eq(contentPiecesTable.uri, uri))
+      .orderBy(asc(contentPiecesTable.piece))
       .all()
       .map((piece) => readPiece(piece))
       .join("");
@@ -348,20 +348,20 @@ class ContentStore {
   }
 
   retireChatContent(chat: string, sequence: number): void {
-    const match = and(eq(contents.chatUri, chat), isNull(contents.retiredSeq));
+    const match = and(eq(contentsTable.chatUri, chat), isNull(contentsTable.retiredSeq));
 
-    this.db.update(contents).set({ retiredSeq: sequence }).where(match).run();
+    this.db.update(contentsTable).set({ retiredSeq: sequence }).where(match).run();
   }
 
   deleteRetiredContent(floor: number): void {
     const retired = this.db
-      .select({ uri: contents.uri })
-      .from(contents)
-      .where(lte(contents.retiredSeq, floor));
+      .select({ uri: contentsTable.uri })
+      .from(contentsTable)
+      .where(lte(contentsTable.retiredSeq, floor));
 
-    this.db.delete(contentPieces).where(inArray(contentPieces.uri, retired)).run();
+    this.db.delete(contentPiecesTable).where(inArray(contentPiecesTable.uri, retired)).run();
 
-    this.db.delete(contents).where(lte(contents.retiredSeq, floor)).run();
+    this.db.delete(contentsTable).where(lte(contentsTable.retiredSeq, floor)).run();
   }
 }
 

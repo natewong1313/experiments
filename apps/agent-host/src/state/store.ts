@@ -20,7 +20,7 @@ import { ActionJournal, ContentStore, ChatStore } from "../storage";
 import storeMigrations from "../../drizzle/migrations";
 import { IDLE, type LiveSession } from "../sessions/record";
 import { projectChat, sessionSummary } from "./projections";
-import { host, sessions } from "../storage/schema";
+import { hostTable, sessionsTable } from "../storage/schema";
 import type { InferSelectModel } from "drizzle-orm";
 import { MAX_SNAPSHOT_BYTES, RESPONSE_RESERVE_BYTES, checkBytes } from "../memory";
 
@@ -34,9 +34,9 @@ const MAX_SESSION_BYTES = 65_536;
 
 type Database = ReturnType<typeof drizzle>;
 
-type HostRow = InferSelectModel<typeof host>;
+type HostRow = InferSelectModel<typeof hostTable>;
 
-type SessionRow = InferSelectModel<typeof sessions>;
+type SessionRow = InferSelectModel<typeof sessionsTable>;
 
 type Publication = {
   actions: [ActionEnvelope, ...ActionEnvelope[]];
@@ -92,15 +92,15 @@ class HostStore {
 
   *recoverableSessions(): Generator<LiveSession> {
     const rows = this.db
-      .select({ uri: sessions.uri })
-      .from(sessions)
+      .select({ uri: sessionsTable.uri })
+      .from(sessionsTable)
       .where(
         or(
-          sql`json_extract(${sessions.session}, '$.lifecycle') = 'creating'`,
-          sql`(json_extract(${sessions.session}, '$.chats[0].status') & ${ACTIVE_TURN_STATUS}) != 0`,
+          sql`json_extract(${sessionsTable.session}, '$.lifecycle') = 'creating'`,
+          sql`(json_extract(${sessionsTable.session}, '$.chats[0].status') & ${ACTIVE_TURN_STATUS}) != 0`,
         ),
       )
-      .orderBy(asc(sessions.uri))
+      .orderBy(asc(sessionsTable.uri))
       .all();
 
     for (const row of rows) {
@@ -109,17 +109,19 @@ class HostStore {
   }
 
   hasSessionChannel(channel: string): boolean {
-    const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
+    const match = or(eq(sessionsTable.uri, channel), eq(sessionsTable.chatUri, channel));
 
-    return this.db.select({ uri: sessions.uri }).from(sessions).where(match).get() !== void 0;
+    return (
+      this.db.select({ uri: sessionsTable.uri }).from(sessionsTable).where(match).get() !== void 0
+    );
   }
 
   listSessions(input: ListSessionsParams): SessionPage {
     if (input.cursor !== void 0) {
       const cursor = this.db
-        .select({ uri: sessions.uri })
-        .from(sessions)
-        .where(eq(sessions.uri, input.cursor))
+        .select({ uri: sessionsTable.uri })
+        .from(sessionsTable)
+        .where(eq(sessionsTable.uri, input.cursor))
         .get();
 
       if (!cursor) {
@@ -129,12 +131,12 @@ class HostStore {
 
     const rows = this.db
       .select({
-        uri: sessions.uri,
-        bytes: sql<number>`LENGTH(CAST(${sessions.session} AS BLOB))`,
+        uri: sessionsTable.uri,
+        bytes: sql<number>`LENGTH(CAST(${sessionsTable.session} AS BLOB))`,
       })
-      .from(sessions)
-      .where(input.cursor === void 0 ? void 0 : gt(sessions.uri, input.cursor))
-      .orderBy(asc(sessions.uri))
+      .from(sessionsTable)
+      .where(input.cursor === void 0 ? void 0 : gt(sessionsTable.uri, input.cursor))
+      .orderBy(asc(sessionsTable.uri))
       .limit(input.limit + SEQUENCE_INCREMENT)
       .all();
 
@@ -254,22 +256,22 @@ class HostStore {
     if (channel === ROOT) {
       return (
         this.db
-          .select({ bytes: sql<number>`LENGTH(CAST(${host.root} AS BLOB))` })
-          .from(host)
-          .where(eq(host.id, HOST_ID))
+          .select({ bytes: sql<number>`LENGTH(CAST(${hostTable.root} AS BLOB))` })
+          .from(hostTable)
+          .where(eq(hostTable.id, HOST_ID))
           .get()?.bytes ?? 0
       );
     }
 
-    const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
+    const match = or(eq(sessionsTable.uri, channel), eq(sessionsTable.chatUri, channel));
 
     const row = this.db
       .select({
-        uri: sessions.uri,
-        chatUri: sessions.chatUri,
-        bytes: sql<number>`LENGTH(CAST(${sessions.session} AS BLOB))`,
+        uri: sessionsTable.uri,
+        chatUri: sessionsTable.chatUri,
+        bytes: sql<number>`LENGTH(CAST(${sessionsTable.session} AS BLOB))`,
       })
-      .from(sessions)
+      .from(sessionsTable)
       .where(match)
       .get();
 
@@ -347,7 +349,7 @@ class HostStore {
       };
 
       this.db
-        .insert(sessions)
+        .insert(sessionsTable)
         .values({
           uri,
           chatUri,
@@ -370,28 +372,28 @@ class HostStore {
   bindAgentSession(uri: string, acpSession: string): void {
     this.storage.transactionSync(() => {
       const row = this.db
-        .select({ uri: sessions.uri })
-        .from(sessions)
-        .where(eq(sessions.uri, uri))
+        .select({ uri: sessionsTable.uri })
+        .from(sessionsTable)
+        .where(eq(sessionsTable.uri, uri))
         .get();
 
       if (!row) {
         throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
       }
 
-      this.db.update(sessions).set({ acpSession }).where(eq(sessions.uri, uri)).run();
+      this.db.update(sessionsTable).set({ acpSession }).where(eq(sessionsTable.uri, uri)).run();
     });
   }
 
   deleteSession(uri: string): Publication {
     return this.storage.transactionSync(() => {
-      const row = this.db.select().from(sessions).where(eq(sessions.uri, uri)).get();
+      const row = this.db.select().from(sessionsTable).where(eq(sessionsTable.uri, uri)).get();
 
       if (!row) {
         throw new ProtocolError(RpcCodes.sessionMissing, "Session does not exist");
       }
 
-      this.db.delete(sessions).where(eq(sessions.uri, uri)).run();
+      this.db.delete(sessionsTable).where(eq(sessionsTable.uri, uri)).run();
       this.chats.deleteChat(row.chatUri);
       const publication = { actions: [this.publishActiveSessionCount()] } satisfies Publication;
       this.contents.retireChatContent(row.chatUri, this.sequence);
@@ -405,7 +407,7 @@ class HostStore {
     return this.storage.transactionSync(() => {
       if (channel === ROOT) {
         const next = reduceRoot(this.readHostRecord().root, action);
-        this.db.update(host).set({ root: next }).where(eq(host.id, 1)).run();
+        this.db.update(hostTable).set({ root: next }).where(eq(hostTable.id, 1)).run();
 
         const envelope = this.journal.append(channel, action);
         this.contents.deleteRetiredContent(this.journal.retentionFloor);
@@ -451,9 +453,9 @@ class HostStore {
   publishHistoryPage(channel: string, cursor?: string): Publication | null {
     if (
       !this.db
-        .select({ uri: sessions.uri })
-        .from(sessions)
-        .where(eq(sessions.chatUri, channel))
+        .select({ uri: sessionsTable.uri })
+        .from(sessionsTable)
+        .where(eq(sessionsTable.chatUri, channel))
         .get()
     ) {
       throw new ProtocolError(RpcCodes.params, "Invalid turn-history channel");
@@ -551,9 +553,9 @@ class HostStore {
       const sessionBytes = new TextEncoder().encode(sessionJson).byteLength;
       checkBytes(sessionBytes, MAX_SESSION_BYTES, "Session metadata exceeds the storage budget");
       this.db
-        .update(sessions)
+        .update(sessionsTable)
         .set({ session: next.session, modifiedAt: new Date().toISOString() })
-        .where(eq(sessions.uri, record.uri))
+        .where(eq(sessionsTable.uri, record.uri))
         .run();
     }
 
@@ -567,7 +569,7 @@ class HostStore {
   }
 
   private publishActiveSessionCount(): ActionEnvelope {
-    const row = this.db.select({ value: count() }).from(sessions).get();
+    const row = this.db.select({ value: count() }).from(sessionsTable).get();
 
     const action: StateAction = {
       type: "root/activeSessionsChanged",
@@ -575,7 +577,7 @@ class HostStore {
     };
 
     const next = reduceRoot(this.readHostRecord().root, action);
-    this.db.update(host).set({ root: next }).where(eq(host.id, 1)).run();
+    this.db.update(hostTable).set({ root: next }).where(eq(hostTable.id, 1)).run();
 
     const envelope = this.journal.append(ROOT, action);
     this.contents.deleteRetiredContent(this.journal.retentionFloor);
@@ -584,13 +586,13 @@ class HostStore {
   }
 
   private lookupSessionRecord(channel: string): SessionRow | undefined {
-    const match = or(eq(sessions.uri, channel), eq(sessions.chatUri, channel));
+    const match = or(eq(sessionsTable.uri, channel), eq(sessionsTable.chatUri, channel));
 
-    return this.db.select().from(sessions).where(match).get();
+    return this.db.select().from(sessionsTable).where(match).get();
   }
 
   private readHostRecord(): HostRow {
-    const row = this.db.select().from(host).where(eq(host.id, HOST_ID)).get();
+    const row = this.db.select().from(hostTable).where(eq(hostTable.id, HOST_ID)).get();
 
     if (!row) {
       throw new Error("Host storage is not initialized");
