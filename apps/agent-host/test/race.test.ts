@@ -8,7 +8,7 @@ import {
   type PromptResponse,
 } from "@agentclientprotocol/sdk";
 import { expect, it, vi } from "vitest";
-import { websocketStream } from "../src/agent/websocket-stream";
+import { websocketStream } from "@experiments/agent-host/helpers";
 import { HostStore } from "../src/state/store";
 import type { LiveSession } from "../src/sessions/record";
 import { connectPeer, type Peer } from "./peer";
@@ -79,7 +79,6 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
       .connect(websocketStream(server));
 
     servers.push(connection);
-    server.accept();
     sockets.push(server);
 
     return new Response(null, {

@@ -1,5 +1,6 @@
 import { AgentHost as BaseAgentHost } from "../src/index";
-import type { AgentConfig, AcpConnectionOptions } from "../src/index";
+import { websocketStream } from "@experiments/agent-host/helpers";
+import type { AgentConfig, AcpConnectionOptions, Stream } from "../src/index";
 import { TEST_CONFIG } from "./config";
 import type { CustomHost } from "./custom-host";
 import type { AcpBackend } from "./acp-backend";
@@ -12,7 +13,7 @@ type TestEnv = {
   ACP_BACKEND: DurableObjectNamespace<AcpBackend>;
 };
 
-async function connectAcp({ signal }: AcpConnectionOptions): Promise<WebSocket> {
+async function connectAcp({ signal }: AcpConnectionOptions): Promise<Stream> {
   const response = await fetch("http://agent.test/acp", {
     headers: { Upgrade: "websocket" },
     signal,
@@ -22,14 +23,14 @@ async function connectAcp({ signal }: AcpConnectionOptions): Promise<WebSocket> 
     throw new Error(`Agent connection failed with HTTP ${response.status}`);
   }
 
-  return response.webSocket;
+  return websocketStream(response.webSocket);
 }
 
 class AgentHost extends BaseAgentHost<TestEnv> {
   protected override getAgentConfig(): AgentConfig {
     return TEST_CONFIG;
   }
-  protected override async connectAcp(options: AcpConnectionOptions): Promise<WebSocket> {
+  protected override async connectAcp(options: AcpConnectionOptions): Promise<Stream> {
     return await connectAcp(options);
   }
 }

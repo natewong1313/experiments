@@ -12,7 +12,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import { SessionStateSchema, SubscribeResultSchema } from "@experiments/protocol-schemas/ahp";
 import { expect, vi } from "vitest";
-import { websocketStream } from "../src/agent/websocket-stream";
+import { websocketStream } from "@experiments/agent-host/helpers";
 import { connectPeer, type Peer } from "./peer";
 
 const SESSION = "ahp-session:/host-test";
@@ -73,7 +73,6 @@ async function withAcpAgent(options: WithAcpAgentParams): Promise<void> {
       })
       .connect(websocketStream(server));
 
-    server.accept();
     sockets.push(server);
     servers.push(connection);
 

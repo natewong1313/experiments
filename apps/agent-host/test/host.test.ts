@@ -14,7 +14,7 @@ import {
 } from "@experiments/protocol-schemas/ahp";
 import { expect, it, vi } from "vitest";
 import { AgentConnections } from "../src/agent/acp";
-import { websocketStream } from "../src/agent/websocket-stream";
+import { websocketStream } from "@experiments/agent-host/helpers";
 import type { ContentBlock } from "@experiments/protocol-schemas/acp";
 import { HostStore } from "../src/state/store";
 import { connectPeer, type Peer } from "./peer";
@@ -569,7 +569,6 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
       .onRequest(methods.agent.session.prompt, () => ({ stopReason: "end_turn" }))
       .connect(websocketStream(server));
 
-    server.accept();
     sockets.push(server);
     servers.push(connection);
 

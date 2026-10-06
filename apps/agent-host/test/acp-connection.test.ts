@@ -5,8 +5,13 @@ import { AgentConnections } from "../src/agent/acp";
 import { HostStore } from "../src/state/store";
 import { createSession } from "./config";
 
-import { agent as createAgent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import { websocketStream } from "../src/agent/websocket-stream";
+import {
+  agent as createAgent,
+  methods,
+  PROTOCOL_VERSION,
+  type Stream,
+} from "@agentclientprotocol/sdk";
+import { websocketStream } from "@experiments/agent-host/helpers";
 import { AGENT_IDLE_TIMEOUT_MS, MAX_AGENT_CONNECTIONS } from "../src/memory";
 import type { AgentBinding } from "../src/sessions/record";
 
@@ -22,19 +27,19 @@ async function connectionError(operation: Promise<unknown>): Promise<Error | nul
   }
 }
 
-it("aborts a stalled connector and closes a socket returned after its deadline", async () => {
+it("aborts a stalled connector and disposes a stream returned after its deadline", async () => {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   await runInDurableObject(stub, async (instance, state) => {
     expect(instance).toBeDefined();
     const store = new HostStore(state);
     const uri = "ahp-session:/timeout";
     createSession(store, uri, "timeout-key");
-    const pending = Promise.withResolvers<WebSocket>();
+    const pending = Promise.withResolvers<Stream>();
     const signals: AbortSignal[] = [];
     const keys: string[] = [];
 
     const agents = new AgentConnections({
-      connect: ({ sessionKey, signal }): Promise<WebSocket> => {
+      connect: ({ sessionKey, signal }): Promise<Stream> => {
         keys.push(sessionKey);
         signals.push(signal);
 
@@ -64,7 +69,7 @@ it("aborts a stalled connector and closes a socket returned after its deadline",
       closed.resolve(true);
     });
     server.accept();
-    pending.resolve(client);
+    pending.resolve(websocketStream(client));
     await closed.promise;
     expect(server.readyState).toBe(WebSocket.CLOSED);
   });
@@ -74,10 +79,10 @@ it("caps pending agent connections and frees capacity after a failed setup", asy
   const signals: AbortSignal[] = [];
 
   const agents = new AgentConnections({
-    connect: ({ signal }): Promise<WebSocket> => {
+    connect: ({ signal }): Promise<Stream> => {
       signals.push(signal);
 
-      return Promise.withResolvers<WebSocket>().promise;
+      return Promise.withResolvers<Stream>().promise;
     },
     updates: (): void => {},
   });
@@ -128,7 +133,7 @@ function localAgents(loadSession: boolean): LocalAgents {
   const loads: string[] = [];
 
   const agents = new AgentConnections({
-    connect: async ({ sessionKey }): Promise<WebSocket> => {
+    connect: async ({ sessionKey }): Promise<Stream> => {
       const { 0: client, 1: server } = new WebSocketPair();
       createAgent()
         .onRequest(methods.agent.initialize, () => ({
@@ -143,16 +148,88 @@ function localAgents(loadSession: boolean): LocalAgents {
         })
         .onRequest(methods.agent.session.prompt, () => ({ stopReason: "end_turn" }))
         .connect(websocketStream(server));
-      server.accept();
       servers.set(sessionKey, server);
 
-      return client;
+      return websocketStream(client);
     },
     updates: (): void => {},
   });
 
   return { agents, servers, loads };
 }
+
+it("shares connection setup between concurrent callers", async () => {
+  const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
+  await runInDurableObject(stub, async (instance) => {
+    expect(instance).toBeDefined();
+    const { agents } = localAgents(true);
+    const record = binding("shared");
+
+    try {
+      const [first, second] = await Promise.all([agents.get(record), agents.get(record)]);
+      expect(second).toBe(first);
+      expect(first.closed).toBe(false);
+    } finally {
+      await agents.release(record);
+    }
+  });
+});
+
+it("removes failed shared setup so a later caller can retry", async () => {
+  const setup = Promise.withResolvers<Stream>();
+  let attempts = 0;
+
+  const agents = new AgentConnections({
+    connect: (): Promise<Stream> => {
+      attempts += 1;
+
+      return setup.promise;
+    },
+    updates: (): void => {},
+  });
+
+  const record = binding("failed");
+  const first = connectionError(agents.get(record));
+  const second = connectionError(agents.get(record));
+  const failure = new Error("Connector failed");
+  setup.reject(failure);
+
+  expect(await first).toBe(failure);
+  expect(await second).toBe(failure);
+  expect(attempts).toBe(1);
+  const attemptsBeforeRetry = attempts;
+  const retry = await connectionError(agents.get(record));
+
+  expect(retry).toBe(failure);
+  expect(attempts).toBe(attemptsBeforeRetry + 1);
+});
+
+it("keeps a replacement cached when the previous connection closes", async () => {
+  const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
+  await runInDurableObject(stub, async (instance) => {
+    expect(instance).toBeDefined();
+    const { agents } = localAgents(true);
+    const record = binding("replacement");
+    const previous = await agents.get(record);
+
+    try {
+      const released = agents.release(record);
+      const replacement = agents.get(record);
+      await released;
+      const current = await replacement;
+
+      await vi.waitFor(() => {
+        expect(previous.closed).toBe(true);
+      });
+
+      expect(current).not.toBe(previous);
+      expect(current.closed).toBe(false);
+      expect(await agents.get(record)).toBe(current);
+    } finally {
+      await agents.release(record);
+    }
+  });
+});
 
 it.each([true, false])(
   "expires idle connections only when the backend supports reload: %s",

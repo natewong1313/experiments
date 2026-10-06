@@ -1,5 +1,6 @@
 import { AgentHost } from "../src/index";
-import type { AgentConfig, AcpConnectionOptions } from "../src/index";
+import { websocketStream } from "@experiments/agent-host/helpers";
+import type { AgentConfig, AcpConnectionOptions, Stream } from "../src/index";
 import type { AcpBackend } from "./acp-backend";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
@@ -24,7 +25,7 @@ class CustomHost extends AgentHost<CustomEnv> {
   protected override async connectAcp({
     sessionKey,
     signal,
-  }: AcpConnectionOptions): Promise<WebSocket> {
+  }: AcpConnectionOptions): Promise<Stream> {
     const response = await this.env.ACP_BACKEND.getByName(sessionKey).fetch("https://custom/acp", {
       headers: {
         Upgrade: "websocket",
@@ -38,7 +39,7 @@ class CustomHost extends AgentHost<CustomEnv> {
       throw new Error(`Custom agent connection failed with HTTP ${response.status}`);
     }
 
-    return response.webSocket;
+    return websocketStream(response.webSocket);
   }
 }
 

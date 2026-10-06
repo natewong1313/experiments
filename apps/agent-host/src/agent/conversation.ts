@@ -8,7 +8,7 @@ import {
   type AcpTurnOutcome,
 } from "@experiments/protocol-schemas/acp";
 import type { Message } from "@experiments/protocol-schemas/ahp";
-import { ProtocolError, RpcCodes, NORMAL_CLOSE } from "../ahp/protocol";
+import { ProtocolError, RpcCodes } from "../ahp/protocol";
 import { withDeadline } from "../deadline";
 
 const TURN_TIMEOUT_MS = 600_000;
@@ -17,7 +17,6 @@ const CANCEL_TIMEOUT_MS = 10_000;
 
 type AgentConversationParams = {
   connection: ClientConnection;
-  socket: WebSocket;
   sessionId: string;
   canReload: boolean;
   activate(): void;
@@ -27,12 +26,10 @@ class AgentConversation {
   readonly sessionId: string;
   readonly canReload: boolean;
   private readonly connection: ClientConnection;
-  private readonly socket: WebSocket;
   private readonly onActivate: () => void;
 
   constructor(params: AgentConversationParams) {
     this.connection = params.connection;
-    this.socket = params.socket;
     this.sessionId = params.sessionId;
     this.canReload = params.canReload;
     this.onActivate = (): void => {
@@ -88,11 +85,11 @@ class AgentConversation {
   }
 
   abort(): void {
-    this.socket.close();
+    this.connection.close(new Error("Agent operation aborted"));
   }
 
   release(): void {
-    this.socket.close(NORMAL_CLOSE, "Host released agent");
+    this.connection.close();
   }
 }
 

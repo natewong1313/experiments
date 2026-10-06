@@ -1,5 +1,6 @@
 import { AgentHost as BaseAgentHost } from "@experiments/agent-host";
-import type { AgentConfig, AcpConnectionOptions } from "@experiments/agent-host";
+import { websocketStream } from "@experiments/agent-host/helpers";
+import type { AgentConfig, AcpConnectionOptions, Stream } from "@experiments/agent-host";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
@@ -19,7 +20,7 @@ class AgentHost extends BaseAgentHost<Env> {
   protected override async connectAcp({
     sessionKey,
     signal,
-  }: AcpConnectionOptions): Promise<WebSocket> {
+  }: AcpConnectionOptions): Promise<Stream> {
     const options = { headers: { Upgrade: "websocket" }, signal };
     let response: Response;
 
@@ -45,7 +46,7 @@ class AgentHost extends BaseAgentHost<Env> {
       throw new Error(`Agent connection failed with HTTP ${response.status}`);
     }
 
-    return socket;
+    return websocketStream(socket);
   }
 }
 

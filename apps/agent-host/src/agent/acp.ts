@@ -1,4 +1,10 @@
-import { client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import {
+  client,
+  methods,
+  PROTOCOL_VERSION,
+  type ClientConnection,
+  type Stream,
+} from "@agentclientprotocol/sdk";
 import {
   InitializeRequestOutboundSchema,
   InitializeResponseSchema,
@@ -9,12 +15,11 @@ import {
   RequestPermissionResponseOutboundSchema,
   SessionNotificationSchema,
   type RequestPermissionResponse,
+  type InitializeResponse,
 } from "@experiments/protocol-schemas/acp";
 import type { AgentBinding, SessionGeneration } from "../sessions/record";
-import { FAILED_CONNECTION_CLOSE } from "../ahp/protocol";
 import { workingDirectoryPath, type ConnectAcp, type AcpConnectionOptions } from "../host-config";
 import { withDeadline } from "../deadline";
-import { websocketStream } from "./websocket-stream";
 import { AgentConversation } from "./conversation";
 import { SessionUpdates, type AgentUpdates } from "./updates";
 import { AGENT_IDLE_TIMEOUT_MS, MAX_AGENT_CONNECTIONS, MemoryLimitError } from "../memory";
@@ -22,9 +27,9 @@ import { AGENT_IDLE_TIMEOUT_MS, MAX_AGENT_CONNECTIONS, MemoryLimitError } from "
 const CONNECT_TIMEOUT_MS = 30_000;
 
 type ConnectionEntry = {
-  pending: Promise<AgentConversation>;
+  conversation: Promise<AgentConversation>;
   idleTimer: ReturnType<typeof setTimeout> | null;
-  use: number;
+  useVersion: number;
 };
 
 type AgentConnectionsParams = {
@@ -32,63 +37,47 @@ type AgentConnectionsParams = {
   updates: AgentUpdates;
 };
 
-class AgentConnections {
-  private readonly connect: ConnectAcp;
-  private readonly updates: AgentUpdates;
-  private readonly sessions: Map<string, ConnectionEntry> = new Map();
+type OpenSessionParams = {
+  connection: ClientConnection;
+  record: AgentBinding;
+  canReload: boolean;
+};
 
+/**
+ * Manages agent connections across all sessions on a host
+ */
+class AgentConnections {
+  private connect: ConnectAcp;
+  private updates: AgentUpdates;
+  private sessions: Map<string, ConnectionEntry> = new Map();
+
+  // TODO: make not params
   constructor({ connect, updates }: AgentConnectionsParams) {
     this.connect = connect;
     this.updates = updates;
   }
 
+  /**
+   * Returns a AgentConversation instance for a given session.
+   */
   async get(record: AgentBinding): Promise<AgentConversation> {
-    const cached = this.sessions.get(record.sessionKey);
-
-    if (cached) {
-      cached.use += 1;
-      this.clearIdle(cached);
-      const agent = await cached.pending;
-
-      if (!agent.closed) {
-        return agent;
-      }
-
-      if (this.sessions.get(record.sessionKey) === cached) {
-        this.sessions.delete(record.sessionKey);
-      }
-    }
-
     let entry = this.sessions.get(record.sessionKey);
 
-    if (!entry) {
-      if (this.sessions.size >= MAX_AGENT_CONNECTIONS) {
-        throw new MemoryLimitError(
-          "Agent connection capacity reached; retry after an idle session closes",
-        );
+    try {
+      if (entry) {
+        entry.useVersion += 1;
+        this.clearIdle(entry);
+        const agent = await entry.conversation;
+
+        if (!agent.closed) {
+          return agent;
+        }
+
+        this.remove(record.sessionKey, entry);
       }
 
-      const binding: AgentBinding = {
-        uri: record.uri,
-        sessionKey: record.sessionKey,
-        acpSession: record.acpSession,
-        session: { workingDirectories: record.session.workingDirectories },
-      };
-
-      const opened: ConnectionEntry = {
-        pending: this.open(binding, () => {
-          this.remove(binding.sessionKey, opened);
-        }),
-        idleTimer: null,
-        use: 0,
-      };
-
-      entry = opened;
-      this.sessions.set(record.sessionKey, entry);
-    }
-
-    try {
-      const agent = await entry.pending;
+      entry = this.sessions.get(record.sessionKey) ?? this.openEntry(record);
+      const agent = await entry.conversation;
 
       if (agent.closed) {
         throw new Error("Agent connection closed during setup");
@@ -96,7 +85,9 @@ class AgentConnections {
 
       return agent;
     } catch (error) {
-      this.remove(record.sessionKey, entry);
+      if (entry) {
+        this.remove(record.sessionKey, entry);
+      }
 
       throw error;
     }
@@ -112,7 +103,7 @@ class AgentConnections {
     this.remove(record.sessionKey, entry);
 
     try {
-      const agent = await entry.pending;
+      const agent = await entry.conversation;
       agent.release();
     } catch {}
   }
@@ -124,14 +115,14 @@ class AgentConnections {
       return;
     }
 
-    const { use } = entry;
+    const { useVersion } = entry;
 
     try {
-      const agent = await entry.pending;
+      const agent = await entry.conversation;
 
       if (
         this.sessions.get(record.sessionKey) === entry &&
-        entry.use === use &&
+        entry.useVersion === useVersion &&
         agent.canReload &&
         !agent.closed
       ) {
@@ -142,6 +133,33 @@ class AgentConnections {
         }, AGENT_IDLE_TIMEOUT_MS);
       }
     } catch {}
+  }
+
+  private openEntry(record: AgentBinding): ConnectionEntry {
+    if (this.sessions.size >= MAX_AGENT_CONNECTIONS) {
+      throw new MemoryLimitError(
+        "Agent connection capacity reached; retry after an idle session closes",
+      );
+    }
+
+    const binding: AgentBinding = {
+      uri: record.uri,
+      sessionKey: record.sessionKey,
+      acpSession: record.acpSession,
+      session: { workingDirectories: record.session.workingDirectories },
+    };
+
+    const entry: ConnectionEntry = {
+      conversation: this.open(binding, () => {
+        this.remove(binding.sessionKey, entry);
+      }),
+      idleTimer: null,
+      useVersion: 0,
+    };
+
+    this.sessions.set(record.sessionKey, entry);
+
+    return entry;
   }
 
   private clearIdle(entry: ConnectionEntry): void {
@@ -159,42 +177,69 @@ class AgentConnections {
     }
   }
 
-  private async connectSocket(options: AcpConnectionOptions): Promise<WebSocket> {
-    const socket = await this.connect(options);
+  private async connectStream(options: AcpConnectionOptions): Promise<Stream> {
+    const stream = await this.connect(options);
 
     if (options.signal.aborted) {
-      socket.accept();
-      socket.close(FAILED_CONNECTION_CLOSE, "Agent connection timed out");
+      await Promise.allSettled([
+        stream.readable.cancel(options.signal.reason),
+        stream.writable.abort(options.signal.reason),
+      ]);
       options.signal.throwIfAborted();
     }
 
-    return socket;
+    return stream;
   }
 
-  private async open(record: AgentBinding, onClose: () => void): Promise<AgentConversation> {
+  private async openStream(sessionKey: string): Promise<Stream> {
     const controller = new AbortController();
 
-    const socket = await withDeadline(
-      this.connectSocket({
-        sessionKey: record.sessionKey,
-        signal: controller.signal,
-      }),
+    return withDeadline(
+      this.connectStream({ sessionKey, signal: controller.signal }),
       CONNECT_TIMEOUT_MS,
       () => {
         controller.abort();
       },
     );
+  }
 
-    let sessionId = record.acpSession;
+  private async open(record: AgentBinding, onClose: () => void): Promise<AgentConversation> {
+    const stream = await this.openStream(record.sessionKey);
+    const updates = new SessionUpdates(record, record.acpSession, this.updates);
+    const connection = this.createConnection(stream, updates, onClose);
 
-    const updates = new SessionUpdates(record, sessionId, this.updates);
+    try {
+      console.log("Initializing", record.acpSession);
 
+      const initialized = await this.initializeAgent(connection);
+      const canReload = initialized.agentCapabilities?.loadSession === true;
+      const sessionId = await this.openSession({ connection, record, canReload });
+
+      return new AgentConversation({
+        connection,
+        sessionId,
+        canReload,
+        activate: (): void => {
+          updates.activate(sessionId);
+        },
+      });
+    } catch (error) {
+      connection.close(error);
+      throw error;
+    }
+  }
+
+  private createConnection(
+    stream: Stream,
+    updates: SessionUpdates,
+    onClose: () => void,
+  ): ClientConnection {
     const app = client({ name: "agent-host" })
       .onNotification(methods.client.session.update, SessionNotificationSchema, ({ params }) => {
         try {
           updates.receive(params);
         } catch (error) {
-          socket.close(FAILED_CONNECTION_CLOSE, "Invalid agent update");
+          connection.close(error);
           throw error;
         }
       })
@@ -202,94 +247,85 @@ class AgentConnections {
         RequestPermissionResponseOutboundSchema.parse({ outcome: { outcome: "cancelled" } }),
       );
 
-    try {
-      const connection = app.connect(websocketStream(socket));
+    const connection = app.connect(stream);
+    connection.signal.addEventListener(
+      "abort",
+      () => {
+        onClose();
+      },
+      { once: true },
+    );
 
-      connection.signal.addEventListener("abort", onClose, { once: true });
+    return connection;
+  }
 
-      socket.accept();
+  private async initializeAgent(connection: ClientConnection): Promise<InitializeResponse> {
+    const params = InitializeRequestOutboundSchema.parse({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {
+        session: { compaction: {}, notices: {}, configOptions: { boolean: {} } },
+        subagents: {},
+        plan: {},
+      },
+    });
 
-      console.log("Initializing", record.acpSession);
+    const request = connection.agent.request(methods.agent.initialize, params);
 
-      const initializeParams = InitializeRequestOutboundSchema.parse({
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: {
-          session: { compaction: {}, notices: {}, configOptions: { boolean: {} } },
-          subagents: {},
-          plan: {},
-        },
-      });
+    const result = await withDeadline(request, CONNECT_TIMEOUT_MS, () => {
+      connection.close(new Error("Agent operation timed out"));
+    });
 
-      const initializeRequest = connection.agent.request(
-        methods.agent.initialize,
-        initializeParams,
-      );
+    const initialized = InitializeResponseSchema.parse(result);
 
-      const initializeResult = await withDeadline(initializeRequest, CONNECT_TIMEOUT_MS, () => {
-        socket.close();
-      });
-
-      const initialized = InitializeResponseSchema.parse(initializeResult);
-
-      if (initialized.protocolVersion !== PROTOCOL_VERSION) {
-        throw new Error("Unsupported agent protocol version");
-      }
-
-      const [directory] = record.session.workingDirectories ?? [];
-
-      if (directory === void 0) {
-        throw new Error("Session working directory is missing");
-      }
-
-      const options = NewSessionRequestOutboundSchema.parse({
-        cwd: workingDirectoryPath(directory),
-        mcpServers: [],
-      });
-
-      if (sessionId === null) {
-        console.log("new session", record.acpSession);
-
-        const sessionRequest = connection.agent.request(methods.agent.session.new, options);
-
-        const sessionResult = await withDeadline(sessionRequest, CONNECT_TIMEOUT_MS, () => {
-          socket.close();
-        });
-
-        const session = NewSessionResponseSchema.parse(sessionResult);
-
-        ({ sessionId } = session);
-      } else {
-        if (initialized.agentCapabilities?.loadSession !== true) {
-          throw new Error("Agent cannot reopen this conversation");
-        }
-
-        console.log("loading session", record.acpSession);
-
-        const loadParams = LoadSessionRequestOutboundSchema.parse({ ...options, sessionId });
-        const loadRequest = connection.agent.request(methods.agent.session.load, loadParams);
-
-        const loadResult = await withDeadline(loadRequest, CONNECT_TIMEOUT_MS, () => {
-          socket.close();
-        });
-
-        LoadSessionResponseSchema.parse(loadResult);
-      }
-
-      return new AgentConversation({
-        connection,
-        socket,
-        sessionId,
-        canReload: initialized.agentCapabilities?.loadSession === true,
-        activate: (): void => {
-          if (sessionId !== null) {
-            updates.activate(sessionId);
-          }
-        },
-      });
-    } catch (error) {
-      socket.close(FAILED_CONNECTION_CLOSE, "Agent setup failed");
-      throw error;
+    if (initialized.protocolVersion !== PROTOCOL_VERSION) {
+      throw new Error("Unsupported agent protocol version");
     }
+
+    return initialized;
+  }
+
+  private async openSession({ connection, record, canReload }: OpenSessionParams): Promise<string> {
+    const [directory] = record.session.workingDirectories ?? [];
+
+    if (directory === void 0) {
+      throw new Error("Session working directory is missing");
+    }
+
+    const options = NewSessionRequestOutboundSchema.parse({
+      cwd: workingDirectoryPath(directory),
+      mcpServers: [],
+    });
+
+    const sessionId = record.acpSession;
+
+    if (sessionId === null) {
+      console.log("new session", record.acpSession);
+
+      const request = connection.agent.request(methods.agent.session.new, options);
+
+      const result = await withDeadline(request, CONNECT_TIMEOUT_MS, () => {
+        connection.close(new Error("Agent operation timed out"));
+      });
+
+      return NewSessionResponseSchema.parse(result).sessionId;
+    }
+
+    if (!canReload) {
+      throw new Error("Agent cannot reopen this conversation");
+    }
+
+    console.log("loading session", record.acpSession);
+
+    const params = LoadSessionRequestOutboundSchema.parse({ ...options, sessionId });
+    const request = connection.agent.request(methods.agent.session.load, params);
+
+    const result = await withDeadline(request, CONNECT_TIMEOUT_MS, () => {
+      connection.close(new Error("Agent operation timed out"));
+    });
+
+    LoadSessionResponseSchema.parse(result);
+
+    return sessionId;
   }
 }
 

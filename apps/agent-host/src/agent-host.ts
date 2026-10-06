@@ -1,3 +1,4 @@
+import type { Stream } from "@agentclientprotocol/sdk";
 import { DurableObject } from "cloudflare:workers";
 import { HostStore } from "./state/store";
 import { AgentConnections } from "./agent/acp";
@@ -32,7 +33,7 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
       }
 
       const agents = new AgentConnections({
-        connect: (options): Promise<WebSocket> => this.connectAcp(options),
+        connect: (options): Promise<Stream> => this.connectAcp(options),
         updates: (identity, notification, rootSessionId): void => {
           turns.onAgentUpdate(identity, notification, rootSessionId);
         },
@@ -82,7 +83,7 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
   }
 
   protected abstract getAgentConfig(): AgentConfig;
-  protected abstract connectAcp(options: AcpConnectionOptions): Promise<WebSocket>;
+  protected abstract connectAcp(options: AcpConnectionOptions): Promise<Stream>;
 
   async fetch(request: Request): Promise<Response> {
     await this.rpc;

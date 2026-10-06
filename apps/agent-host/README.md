@@ -1,14 +1,14 @@
 # Agent host
 
 `@experiments/agent-host` exports an abstract Durable Object class for an AHP
-0.9.0 host. Consumers extend it and supply an ACP WebSocket connection and agent
+0.9.0 host. Consumers extend it and supply an ACP stream and agent
 configuration. The consumer owns routing, authentication, and backend resources.
 
 Implement two protected methods:
 
 ```ts
 protected getAgentConfig(): AgentConfig;
-protected connectAcp(options: AcpConnectionOptions): Promise<WebSocket>;
+protected connectAcp(options: AcpConnectionOptions): Promise<Stream>;
 ```
 
 `AgentConfig` contains `agent`, the advertised AHP provider metadata, and `cwd`,
@@ -19,22 +19,36 @@ metadata, and AHP's default directory. Each session records its working director
 which is used again when reopening that conversation.
 
 `AcpConnectionOptions` contains a stable `sessionKey` and an `AbortSignal`. Return
-a dedicated, **unaccepted** Workers WebSocket. The host accepts and owns it,
-initializes ACP, creates or loads the conversation, and sends prompts and
-cancellation. It closes the socket on disposal or connection failure. The consumer
-controls authentication and how the session key selects a backend. Backend
-provisioning and resource cleanup belong to the consumer or backend.
+a fresh ACP `Stream` with unlocked readable and writable sides, ready to exchange
+JSON-RPC messages. The host owns it, initializes ACP, creates or loads the
+conversation, and sends prompts and cancellation. The consumer controls
+authentication and how the session key selects a backend. Backend provisioning
+and resource cleanup belong to the consumer or backend.
 
-The connection hook must honor the abort signal. Opening a socket has a 30-second
-deadline; a socket returned after that deadline is closed. Each AHP session has
-its own socket, even when several sessions use the same backend service.
+The connection hook must honor the abort signal. Opening a stream has a 30-second
+deadline; the host cancels the readable and aborts the writable of any stream
+returned after that deadline. The signal applies only to the connection attempt.
+Each AHP session has its own stream, even when sessions use the same backend.
+
+After connecting, the host uses the SDK connection's `close()` method to reject
+pending requests and cancel the readable on disposal, setup failure, or a request
+deadline. A custom stream's readable cancellation handler must release the whole
+transport. Adapters must validate incoming messages and bound transport buffers;
+the host validates ACP method payloads and responses.
+
+For Workers WebSockets, `websocketStream(socket)` from
+`@experiments/agent-host/helpers` attaches
+listeners, accepts the socket, and returns a ready ACP stream. Pass an unaccepted
+socket to this adapter. It validates frames, bounds its incoming queue, and closes
+the socket when the host cancels its readable.
 
 For example, a remote ACP service can be connected as follows. This service uses
 an `X-Session-Key` header to route back to the same backend after reconnecting:
 
 ```ts
 import { AgentHost } from "@experiments/agent-host";
-import type { AgentConfig, AcpConnectionOptions } from "@experiments/agent-host";
+import { websocketStream } from "@experiments/agent-host/helpers";
+import type { AgentConfig, AcpConnectionOptions, Stream } from "@experiments/agent-host";
 
 type Env = {
   ACP_ENDPOINT: string;
@@ -58,7 +72,7 @@ export class MyHost extends AgentHost<Env> {
   protected override async connectAcp({
     sessionKey,
     signal,
-  }: AcpConnectionOptions): Promise<WebSocket> {
+  }: AcpConnectionOptions): Promise<Stream> {
     const response = await fetch(this.env.ACP_ENDPOINT, {
       headers: {
         Upgrade: "websocket",
@@ -70,7 +84,7 @@ export class MyHost extends AgentHost<Env> {
     if (response.status !== 101 || !response.webSocket) {
       throw new Error(`ACP connection failed: ${response.status}`);
     }
-    return response.webSocket;
+    return websocketStream(response.webSocket);
   }
 }
 
@@ -477,7 +491,7 @@ pnpm run format
 
 The test Worker exports subclasses of the package's public `AgentHost` class.
 A separate ACP backend Durable Object exercises custom provider metadata,
-working directories, authentication headers, socket ownership, and conversation
+working directories, authentication headers, stream ownership, and conversation
 restoration after eviction against a separate ACP backend.
 Tests cover snapshot and replay consistency, bounded delta writes, history larger
 than a SQL row across eviction, atomic rollback, schema migration, connection generation

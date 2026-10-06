@@ -7,7 +7,7 @@ import {
   type SessionNotification,
   type PromptResponse,
 } from "@agentclientprotocol/sdk";
-import { websocketStream } from "../src/agent/websocket-stream";
+import { websocketStream } from "@experiments/agent-host/helpers";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
@@ -131,7 +131,6 @@ class AcpBackend extends DurableObject {
       })
       .connect(websocketStream(server));
 
-    server.accept();
     this.connections.set(server, connection);
     server.addEventListener("close", () => {
       this.connections.delete(server);

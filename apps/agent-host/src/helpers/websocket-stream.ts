@@ -6,6 +6,7 @@ import { MAX_FRAME_BYTES, FAILED_CONNECTION_CLOSE, NORMAL_CLOSE } from "../ahp/p
 
 const MAX_QUEUED_BYTES = 2_097_152;
 
+/** Adapts and accepts an unaccepted Workers WebSocket, owning its lifecycle. */
 function websocketStream(socket: WebSocket): Stream {
   let ended = false;
 
@@ -83,6 +84,8 @@ function websocketStream(socket: WebSocket): Stream {
       socket.close(FAILED_CONNECTION_CLOSE, "ACP stream aborted");
     },
   });
+
+  socket.accept();
 
   return { readable, writable };
 }

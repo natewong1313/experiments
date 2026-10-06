@@ -1,3 +1,4 @@
+import type { Stream } from "@agentclientprotocol/sdk";
 import * as z from "zod";
 import { AgentInfoSchema } from "@experiments/protocol-schemas/ahp";
 
@@ -13,7 +14,7 @@ type AcpConnectionOptions = {
   signal: AbortSignal;
 };
 
-type ConnectAcp = (options: AcpConnectionOptions) => Promise<WebSocket>;
+type ConnectAcp = (options: AcpConnectionOptions) => Promise<Stream>;
 
 function workingDirectory(cwd: string): string {
   const directory = new URL("file:///");

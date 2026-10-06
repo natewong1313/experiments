@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { websocketStream } from "../src/agent/websocket-stream";
+import { websocketStream } from "@experiments/agent-host/helpers";
 
 const PAYLOAD_BYTES = 700_000;
 
@@ -7,7 +7,6 @@ const FRAMES = 5;
 
 it("closes an overloaded ACP stream before the incoming queue can grow without a limit", async () => {
   const { 0: host, 1: agent } = new WebSocketPair();
-  host.accept();
   agent.accept();
   const stream = websocketStream(host);
   const reader = stream.readable.getReader();
