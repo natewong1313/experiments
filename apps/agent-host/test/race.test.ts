@@ -9,8 +9,8 @@ import {
 } from "@agentclientprotocol/sdk";
 import { expect, it, vi } from "vitest";
 import { websocketStream } from "@experiments/agent-host/helpers";
-import { HostStore } from "../src/state/store";
-import type { LiveSession } from "../src/sessions/record";
+import { createHostState } from "./config";
+import type { LiveSession } from "../src/state";
 import { connectPeer, type Peer } from "./peer";
 
 const SESSION = "ahp-session:/reused";
@@ -25,7 +25,7 @@ async function recordFor(stub: DurableObjectStub): Promise<LiveSession> {
   return await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
 
-    return new HostStore(state).requireWithActiveOutput(SESSION);
+    return createHostState(state.storage).queries.requireWithActiveOutput(SESSION);
   });
 }
 
@@ -106,8 +106,8 @@ it("a delayed failure of an old turn cannot stop a recreated session's turn", as
     await vi.waitFor(async () => {
       await runInDurableObject(stub, (instance, state) => {
         expect(instance).toBeDefined();
-        const store = new HostStore(state);
-        expect(store.lookupWithActiveOutput(SESSION)).toBeNull();
+        const store = createHostState(state.storage);
+        expect(store.queries.lookupWithActiveOutput(SESSION)).toBeNull();
       });
     });
     await peer.request("createSession", { channel: SESSION });

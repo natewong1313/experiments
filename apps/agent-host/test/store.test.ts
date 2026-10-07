@@ -7,9 +7,8 @@ import {
   type ChatAction,
 } from "@experiments/protocol-schemas/ahp";
 import { AgentHost } from "../src/agent-host";
-import { HostStore } from "../src/state/store";
+import { createHostState, type HostState, createSession } from "./config";
 import { reduceChat, reduceSession } from "../src/state/reducers";
-import { createSession } from "./config";
 
 const SESSION = "ahp-session:/test";
 
@@ -31,11 +30,11 @@ const READ = 32;
 
 const MAX_DELTA_CHUNKS = 1;
 
-function ready(store: HostStore): string {
+function ready(store: HostState): string {
   createSession(store, SESSION, "generation-1");
-  store.applyAction(SESSION, { type: "session/ready" });
+  store.mutations.applyAction(SESSION, { type: "session/ready" });
 
-  return store.requireWithActiveOutput(SESSION).chatUri;
+  return store.queries.requireWithActiveOutput(SESSION).chatUri;
 }
 
 function turnStarted(turnId: string): ChatAction {
@@ -47,16 +46,16 @@ function turnStarted(turnId: string): ChatAction {
   };
 }
 
-function completeTurn(store: HostStore, chat: string, turnId: string): void {
-  store.applyAction(chat, turnStarted(turnId));
-  store.applyAction(chat, {
+function completeTurn(store: HostState, chat: string, turnId: string): void {
+  store.mutations.applyAction(chat, turnStarted(turnId));
+  store.mutations.applyAction(chat, {
     type: "chat/responsePart",
     turnId,
     part: { kind: "markdown", id: turnId, content: "" },
   });
 
   for (let written = 0; written < RESPONSE_BYTES; written += DELTA_BYTES) {
-    store.applyAction(chat, {
+    store.mutations.applyAction(chat, {
       type: "chat/delta",
       turnId,
       partId: turnId,
@@ -64,41 +63,42 @@ function completeTurn(store: HostStore, chat: string, turnId: string): void {
     });
   }
 
-  store.applyAction(chat, { type: "chat/turnComplete", turnId, duration: 1 });
+  store.mutations.applyAction(chat, { type: "chat/turnComplete", turnId, duration: 1 });
 }
 
 async function withStore(
-  inspect: (store: HostStore, state: DurableObjectState) => void,
+  inspect: (store: HostState, state: DurableObjectState) => void,
 ): Promise<void> {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeInstanceOf(AgentHost);
-    inspect(new HostStore(state), state);
+    const store = createHostState(state.storage);
+    inspect(store, state);
   });
 }
 
 it("keeps session and chat snapshots equal to reduced live and replayed actions", async () => {
   await withStore((store) => {
     const chat = ready(store);
-    store.applyAction(SESSION, { type: "session/isReadChanged", isRead: true });
-    let sessionMirror = SessionStateSchema.parse(store.readSnapshot(SESSION).state);
-    let chatMirror = ChatStateSchema.parse(store.readSnapshot(chat).state);
-    const cut = store.sequence;
+    store.mutations.applyAction(SESSION, { type: "session/isReadChanged", isRead: true });
+    let sessionMirror = SessionStateSchema.parse(store.queries.readSnapshot(SESSION).state);
+    let chatMirror = ChatStateSchema.parse(store.queries.readSnapshot(chat).state);
+    const cut = store.queries.sequence;
 
     const publications = [
-      store.applyAction(chat, turnStarted("turn")),
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, turnStarted("turn")),
+      store.mutations.applyAction(chat, {
         type: "chat/responsePart",
         turnId: "turn",
         part: { kind: "markdown", id: "part", content: "" },
       }),
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/delta",
         turnId: "turn",
         partId: "part",
         content: "Hello",
       }),
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/error",
         turnId: "turn",
         duration: 1,
@@ -122,18 +122,20 @@ it("keeps session and chat snapshots equal to reduced live and replayed actions"
       }
     }
 
-    expect(store.readSnapshot(SESSION).state).toEqual(sessionMirror);
-    expect(store.readSnapshot(chat).state).toEqual(chatMirror);
-    expect(store.readReplay(cut, [SESSION, chat])).toEqual(actions);
-    expect(store.listSessions({ limit: PAGE_SIZE }).items[0]?.status).toBe(ERROR_STATUS | READ);
+    expect(store.queries.readSnapshot(SESSION).state).toEqual(sessionMirror);
+    expect(store.queries.readSnapshot(chat).state).toEqual(chatMirror);
+    expect(store.queries.readReplay(cut, [SESSION, chat])).toEqual(actions);
+    expect(store.queries.listSessions({ limit: PAGE_SIZE }).items[0]?.status).toBe(
+      ERROR_STATUS | READ,
+    );
   });
 });
 
 it("appends only the incoming text piece and emits no unchanged summary for a delta", async () => {
   await withStore((store, state) => {
     const chat = ready(store);
-    store.applyAction(chat, turnStarted("turn"));
-    store.applyAction(chat, {
+    store.mutations.applyAction(chat, turnStarted("turn"));
+    store.mutations.applyAction(chat, {
       type: "chat/responsePart",
       turnId: "turn",
       part: { kind: "markdown", id: "part", content: "x".repeat(DELTA_BYTES) },
@@ -145,7 +147,7 @@ it("appends only the incoming text piece and emits no unchanged summary for a de
       CREATE TRIGGER forbid_text_rewrite BEFORE UPDATE ON text_pieces BEGIN SELECT RAISE(ABORT, 'previous text rewritten'); END;
     `);
 
-    const publication = store.applyAction(chat, {
+    const publication = store.mutations.applyAction(chat, {
       type: "chat/delta",
       turnId: "turn",
       partId: "part",
@@ -167,7 +169,7 @@ it("appends only the incoming text piece and emits no unchanged summary for a de
 
     expect(publication.actions).toHaveLength(1);
     expect(publication.summary).toBeUndefined();
-    expect(store.listSessions({ limit: PAGE_SIZE }).items[0]?.status).toBe(IN_PROGRESS);
+    expect(store.queries.listSessions({ limit: PAGE_SIZE }).items[0]?.status).toBe(IN_PROGRESS);
   });
 });
 
@@ -175,12 +177,12 @@ it("retains history larger than a SQL row across eviction without loading it int
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeInstanceOf(AgentHost);
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     const chat = ready(store);
     completeTurn(store, chat, "first");
     completeTurn(store, chat, "second");
-    expect(store.requireWithActiveOutput(chat).chat.turns).toEqual([]);
-    expect(store.hasCompletedTurn(chat, "first")).toBe(true);
+    expect(store.queries.requireWithActiveOutput(chat).chat.turns).toEqual([]);
+    expect(store.queries.hasCompletedTurn(chat, "first")).toBe(true);
 
     const { maximum } = state.storage.sql
       .exec<{ maximum: number }>(
@@ -193,9 +195,9 @@ it("retains history larger than a SQL row across eviction without loading it int
   await evictDurableObject(stub);
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeInstanceOf(AgentHost);
-    const store = new HostStore(state);
-    const chat = store.requireWithActiveOutput(SESSION).chatUri;
-    const snapshot = ChatStateSchema.parse(store.readSnapshot(chat).state);
+    const store = createHostState(state.storage);
+    const chat = store.queries.requireWithActiveOutput(SESSION).chatUri;
+    const snapshot = ChatStateSchema.parse(store.queries.readSnapshot(chat).state);
     expect(snapshot.turns.map((turn) => turn.id)).toEqual(["first", "second"]);
 
     for (const turn of snapshot.turns) {
@@ -205,20 +207,20 @@ it("retains history larger than a SQL row across eviction without loading it int
       ]);
     }
 
-    expect(store.hasCompletedTurn(chat, "first")).toBe(true);
+    expect(store.queries.hasCompletedTurn(chat, "first")).toBe(true);
   });
 });
 
 it("rolls back state and sequence together when a chunk write fails", async () => {
   await withStore((store, state) => {
     const chat = ready(store);
-    store.applyAction(chat, turnStarted("turn"));
-    const before = store.readSnapshot(chat);
+    store.mutations.applyAction(chat, turnStarted("turn"));
+    const before = store.queries.readSnapshot(chat);
     state.storage.sql.exec(
       "CREATE TRIGGER fail_chunk BEFORE INSERT ON text_pieces WHEN NEW.piece = 1 BEGIN SELECT RAISE(ABORT, 'chunk write failed'); END",
     );
     expect(() =>
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/responsePart",
         turnId: "turn",
         part: {
@@ -228,17 +230,17 @@ it("rolls back state and sequence together when a chunk write fails", async () =
         },
       }),
     ).toThrow("chunk write failed");
-    expect(store.readSnapshot(chat)).toEqual(before);
+    expect(store.queries.readSnapshot(chat)).toEqual(before);
   });
 });
 
 it("rolls back a dispatch if its acknowledgement cannot be persisted and permits a retry", async () => {
   await withStore((store, state) => {
     ready(store);
-    const before = store.readSnapshot(SESSION);
+    const before = store.queries.readSnapshot(SESSION);
 
     const input = {
-      record: store.requireWithActiveOutput(SESSION),
+      record: store.queries.requireWithActiveOutput(SESSION),
       channel: SESSION,
       action: { type: "session/titleChanged", title: "Renamed" } as const,
       origin: { clientId: "client", clientSeq: 1 },
@@ -248,18 +250,18 @@ it("rolls back a dispatch if its acknowledgement cannot be persisted and permits
     state.storage.sql.exec(
       "CREATE TRIGGER fail_ack BEFORE INSERT ON dispatches BEGIN SELECT RAISE(ABORT, 'ack write failed'); END",
     );
-    expect(() => store.commitDispatch(input)).toThrow("ack write failed");
-    expect(store.readSnapshot(SESSION)).toEqual(before);
-    expect(store.lookupDispatchResult(input.origin)).toBeNull();
-    expect(store.readReplay(before.fromSeq, [SESSION])).toEqual([]);
+    expect(() => store.mutations.commitDispatch(input)).toThrow("ack write failed");
+    expect(store.queries.readSnapshot(SESSION)).toEqual(before);
+    expect(store.queries.lookupDispatchResult(input.origin)).toBeNull();
+    expect(store.queries.readReplay(before.fromSeq, [SESSION])).toEqual([]);
     state.storage.sql.exec("DROP TRIGGER fail_ack");
-    const publication = store.commitDispatch(input);
-    const reopened = new HostStore(state);
-    expect(reopened.lookupDispatchResult(input.origin)).toEqual({
+    const publication = store.mutations.commitDispatch(input);
+    const reopened = createHostState(state.storage);
+    expect(reopened.queries.lookupDispatchResult(input.origin)).toEqual({
       frame: input.frame,
       envelope: publication.actions[0],
     });
-    expect(reopened.readSnapshot(SESSION).state).toMatchObject({
+    expect(reopened.queries.readSnapshot(SESSION).state).toMatchObject({
       title: "Renamed",
     });
   });
@@ -270,12 +272,14 @@ it("paginates metadata without reading chats and rejects a chat URI as a session
     const chat = ready(store);
     const nextSession = `${SESSION}-next`;
     createSession(store, nextSession, "generation-2");
-    const first = store.listSessions({ limit: 1 });
+    const first = store.queries.listSessions({ limit: 1 });
     expect(first.items.map((item) => item.resource)).toEqual([SESSION]);
     expect(first.nextCursor).toBe(SESSION);
-    const next = store.listSessions({ cursor: first.nextCursor, limit: 1 });
+    const next = store.queries.listSessions({ cursor: first.nextCursor, limit: 1 });
     expect(next.items.map((item) => item.resource)).toEqual([nextSession]);
     expect(next.nextCursor).toBeUndefined();
-    expect(() => store.listSessions({ cursor: chat, limit: 1 })).toThrow("Invalid session cursor");
+    expect(() => store.queries.listSessions({ cursor: chat, limit: 1 })).toThrow(
+      "Invalid session cursor",
+    );
   });
 });

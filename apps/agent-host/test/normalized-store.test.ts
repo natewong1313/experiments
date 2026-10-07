@@ -6,9 +6,8 @@ import {
   ContentRefSchema,
   type ChatAction,
 } from "@experiments/protocol-schemas/ahp";
-import { HostStore } from "../src/state/store";
+import { createHostState, type HostState, createSession } from "./config";
 import { reduceChat } from "../src/state/reducers";
-import { createSession } from "./config";
 import { connectPeer, Peer } from "./peer";
 
 const SESSION = "ahp-session:/normalized";
@@ -29,15 +28,15 @@ const ESCAPED_CHARACTERS = 200_000;
 
 const ENCODING_BYTES = 800_000;
 
-type StoreCheck = (store: HostStore, state: DurableObjectState, chat: string) => void;
+type StoreCheck = (store: HostState, state: DurableObjectState, chat: string) => void;
 
 async function withStore(check: StoreCheck): Promise<void> {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   await runInDurableObject(stub, (_instance, state) => {
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     createSession(store, SESSION, "generation");
-    store.applyAction(SESSION, { type: "session/ready" });
-    check(store, state, store.requireMetadata(SESSION).chatUri);
+    store.mutations.applyAction(SESSION, { type: "session/ready" });
+    check(store, state, store.queries.requireMetadata(SESSION).chatUri);
   });
 }
 
@@ -63,14 +62,14 @@ function toolActions(id: string): ChatAction[] {
   ];
 }
 
-function equivalent(store: HostStore, chat: string, actions: ChatAction[]): number {
-  let mirror = ChatStateSchema.parse(store.readSnapshot(chat).state);
+function equivalent(store: HostState, chat: string, actions: ChatAction[]): number {
+  let mirror = ChatStateSchema.parse(store.queries.readSnapshot(chat).state);
 
   for (const action of actions) {
-    const publication = store.applyAction(chat, action);
+    const publication = store.mutations.applyAction(chat, action);
     const [envelope] = publication.actions;
     mirror = reduceChat(mirror, envelope.action);
-    expect(store.readSnapshot(chat).state).toEqual(mirror);
+    expect(store.queries.readSnapshot(chat).state).toEqual(mirror);
   }
 
   return actions.length;
@@ -208,15 +207,15 @@ it("matches content replacement, error, resume, truncation and duplicate part id
 
 it("never reads stored text during append and never touches earlier tools or result bodies during status updates", async () => {
   await withStore((store, state, chat) => {
-    store.applyAction(chat, start());
-    store.applyAction(chat, {
+    store.mutations.applyAction(chat, start());
+    store.mutations.applyAction(chat, {
       type: "chat/responsePart",
       turnId: "turn",
       part: { kind: "markdown", id: "text", content: "x".repeat(LARGE_BYTES) },
     });
 
     for (let index = 0; index < TOOL_COUNT; index++) {
-      store.applyChatActions(store.requireMetadata(chat), [
+      store.mutations.applyChatActions(store.queries.requireMetadata(chat), [
         ...toolActions(`tool-${index}`),
         {
           type: "chat/toolCallComplete",
@@ -231,7 +230,7 @@ it("never reads stored text during append and never touches earlier tools or res
       ]);
     }
 
-    store.applyChatActions(store.requireMetadata(chat), toolActions("target"));
+    store.mutations.applyChatActions(store.queries.requireMetadata(chat), toolActions("target"));
     const { sql } = state.storage;
     sql.exec(
       "CREATE TRIGGER forbid_result_rewrite BEFORE UPDATE ON reply_parts WHEN OLD.identity != 'target' AND OLD.kind = 'toolCall' BEGIN SELECT RAISE(ABORT, 'unrelated tool rewritten'); END",
@@ -242,13 +241,13 @@ it("never reads stored text during append and never touches earlier tools or res
     const queries = vi.spyOn(sql, "exec");
 
     try {
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/delta",
         turnId: "turn",
         partId: "text",
         content: "😀",
       });
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/toolCallConfirmed",
         turnId: "turn",
         toolCallId: "target",
@@ -281,13 +280,13 @@ function replaceContent(text: string): ChatAction {
   };
 }
 
-function replaceLetter(store: HostStore, chat: string, letter: string): void {
+function replaceLetter(store: HostState, chat: string, letter: string): void {
   const text = letter.repeat(LARGE_BYTES);
-  store.applyAction(chat, replaceContent(text));
+  store.mutations.applyAction(chat, replaceContent(text));
 }
 
-function resultReference(store: HostStore, chat: string): string {
-  const state = ChatStateSchema.parse(store.readSnapshot(chat).state);
+function resultReference(store: HostState, chat: string): string {
+  const state = ChatStateSchema.parse(store.queries.readSnapshot(chat).state);
   const part = state.activeTurn?.responseParts[0];
 
   if (part?.kind !== "toolCall" || !("content" in part.toolCall)) {
@@ -305,9 +304,9 @@ function resultReference(store: HostStore, chat: string): string {
 
 it("keeps replacement versions readable for replay, cleans disposed content after replay expires and rolls content back with state", async () => {
   await withStore((store, state, chat) => {
-    store.applyAction(chat, start());
-    store.applyChatActions(store.requireMetadata(chat), toolActions("tool"));
-    store.applyAction(chat, {
+    store.mutations.applyAction(chat, start());
+    store.mutations.applyChatActions(store.queries.requireMetadata(chat), toolActions("tool"));
+    store.mutations.applyAction(chat, {
       type: "chat/toolCallConfirmed",
       turnId: "turn",
       toolCallId: "tool",
@@ -319,8 +318,8 @@ it("keeps replacement versions readable for replay, cleans disposed content afte
     replaceLetter(store, chat, "b");
     const second = resultReference(store, chat);
     expect(first).not.toBe(second);
-    expect(store.readResource(first).data).toBe("a".repeat(LARGE_BYTES));
-    const before = store.readSnapshot(chat);
+    expect(store.queries.readResource(first).data).toBe("a".repeat(LARGE_BYTES));
+    const before = store.queries.readSnapshot(chat);
 
     const { count } = state.storage.sql
       .exec<{ count: number }>("SELECT COUNT(*) AS count FROM contents")
@@ -332,21 +331,24 @@ it("keeps replacement versions readable for replay, cleans disposed content afte
     expect(() => {
       replaceLetter(store, chat, "c");
     }).toThrow("content failure");
-    expect(store.readSnapshot(chat)).toEqual(before);
+    expect(store.queries.readSnapshot(chat)).toEqual(before);
     expect(
       state.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM contents").one()
         .count,
     ).toBe(count);
     state.storage.sql.exec("DROP TRIGGER fail_content");
-    store.deleteSession(SESSION);
-    expect(store.readResource(first).data).toBe("a".repeat(LARGE_BYTES));
+    store.mutations.deleteSession(SESSION);
+    expect(store.queries.readResource(first).data).toBe("a".repeat(LARGE_BYTES));
     createSession(store, SESSION, "new-generation");
 
     for (let index = 0; index < JOURNAL_COUNT; index++) {
-      store.applyAction(SESSION, { type: "session/titleChanged", title: `title-${index}` });
+      store.mutations.applyAction(SESSION, {
+        type: "session/titleChanged",
+        title: `title-${index}`,
+      });
     }
 
-    expect(() => store.readResource(first)).toThrow("expired");
+    expect(() => store.queries.readResource(first)).toThrow("expired");
     expect(
       state.storage.sql
         .exec<{ count: number }>("SELECT COUNT(*) AS count FROM content_pieces")
@@ -357,11 +359,11 @@ it("keeps replacement versions readable for replay, cleans disposed content afte
 
 it("deduplicates large ACP metadata within a transaction and bounds incoming content", async () => {
   await withStore((store, state, chat) => {
-    store.applyAction(chat, start());
-    store.applyChatActions(store.requireMetadata(chat), toolActions("tool"));
+    store.mutations.applyAction(chat, start());
+    store.mutations.applyChatActions(store.queries.requireMetadata(chat), toolActions("tool"));
     const metadata = { acp: { rawOutput: "x".repeat(LARGE_BYTES) } };
 
-    const publication = store.applyAction(chat, {
+    const publication = store.mutations.applyAction(chat, {
       type: "chat/toolCallComplete",
       turnId: "turn",
       toolCallId: "tool",
@@ -381,27 +383,27 @@ it("deduplicates large ACP metadata within a transaction and bounds incoming con
     }
 
     const ref = ContentRefSchema.parse(action._meta?.contentRef);
-    const savedMetadata: unknown = JSON.parse(store.readResource(ref.uri).data);
+    const savedMetadata: unknown = JSON.parse(store.queries.readResource(ref.uri).data);
     expect(savedMetadata).toEqual(metadata);
-    const before = store.readSnapshot(chat);
+    const before = store.queries.readSnapshot(chat);
     expect(() =>
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/responsePart",
         turnId: "turn",
         part: { kind: "contentRef", uri: `data:text/plain,${"x".repeat(OVERSIZED_BYTES)}` },
       }),
     ).toThrow("resource response budget");
-    expect(store.readSnapshot(chat)).toEqual(before);
+    expect(store.queries.readSnapshot(chat)).toEqual(before);
     expect(() =>
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/responsePart",
         turnId: "turn",
         part: { kind: "contentRef", uri: `data:text/plain,${"%00".repeat(ESCAPED_CHARACTERS)}` },
       }),
     ).toThrow("resource response budget");
-    expect(store.readSnapshot(chat)).toEqual(before);
+    expect(store.queries.readSnapshot(chat)).toEqual(before);
 
-    const conversion = store.applyAction(chat, {
+    const conversion = store.mutations.applyAction(chat, {
       type: "chat/responsePart",
       turnId: "turn",
       part: { kind: "contentRef", uri: `data:text/plain,${"x".repeat(ENCODING_BYTES)}` },
@@ -417,34 +419,34 @@ it("deduplicates large ACP metadata within a transaction and bounds incoming con
     }
 
     const { uri } = converted.action.part;
-    expect(store.readResource(uri).data.length).toBe(ENCODING_BYTES);
-    expect(() => store.readResource(uri, "base64")).toThrow("encoding budget");
+    expect(store.queries.readResource(uri).data.length).toBe(ENCODING_BYTES);
+    expect(() => store.queries.readResource(uri, "base64")).toThrow("encoding budget");
   });
 });
 
 it("recovers a saved normalized turn across real eviction without resending", async () => {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   await runInDurableObject(stub, (_instance, state) => {
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     createSession(store, SESSION, "saved-key");
-    store.bindAgentSession(SESSION, "saved-agent");
-    store.applyAction(SESSION, { type: "session/ready" });
-    const chat = store.requireMetadata(SESSION).chatUri;
-    store.applyAction(chat, start());
-    store.applyAction(chat, {
+    store.mutations.bindAgentSession(SESSION, "saved-agent");
+    store.mutations.applyAction(SESSION, { type: "session/ready" });
+    const chat = store.queries.requireMetadata(SESSION).chatUri;
+    store.mutations.applyAction(chat, start());
+    store.mutations.applyAction(chat, {
       type: "chat/responsePart",
       turnId: "turn",
       part: { kind: "markdown", id: "text", content: "accepted 😀" },
     });
-    expect(store.requireWithActiveOutput(chat).chat.activeTurn?.responseParts).toEqual([
+    expect(store.queries.requireWithActiveOutput(chat).chat.activeTurn?.responseParts).toEqual([
       { kind: "markdown", id: "text", content: "accepted 😀" },
     ]);
   });
   await evictDurableObject(stub);
   await runInDurableObject(stub, (_instance, state) => {
-    const store = new HostStore(state);
-    const record = store.requireMetadata(SESSION);
-    const chat = ChatStateSchema.parse(store.readSnapshot(record.chatUri).state);
+    const store = createHostState(state.storage);
+    const record = store.queries.requireMetadata(SESSION);
+    const chat = ChatStateSchema.parse(store.queries.readSnapshot(record.chatUri).state);
     expect(chat.activeTurn).toBeUndefined();
     expect(chat.turns[0]?.responseParts).toMatchObject([
       { kind: "markdown", content: "accepted 😀" },
@@ -457,8 +459,8 @@ it("recovers a saved normalized turn across real eviction without resending", as
 
 it("reads metadata, live state and snapshots without opening transactions or writing records", async () => {
   await withStore((store, state, chat) => {
-    store.applyAction(chat, start());
-    store.applyAction(chat, {
+    store.mutations.applyAction(chat, start());
+    store.mutations.applyAction(chat, {
       type: "chat/responsePart",
       turnId: "turn",
       part: { kind: "markdown", id: "text", content: "accepted" },
@@ -467,11 +469,11 @@ it("reads metadata, live state and snapshots without opening transactions or wri
     const queries = vi.spyOn(state.storage.sql, "exec");
 
     try {
-      expect(store.lookupMetadata(chat)?.chat.activeTurn?.responseParts).toEqual([]);
-      expect(store.lookupWithActiveOutput(chat)?.chat.activeTurn?.responseParts).toEqual([
+      expect(store.queries.lookupMetadata(chat)?.chat.activeTurn?.responseParts).toEqual([]);
+      expect(store.queries.lookupWithActiveOutput(chat)?.chat.activeTurn?.responseParts).toEqual([
         { kind: "markdown", id: "text", content: "accepted" },
       ]);
-      const snapshot = store.readSnapshot(chat);
+      const snapshot = store.queries.readSnapshot(chat);
       const saved = ChatStateSchema.parse(snapshot.state);
       expect(saved.activeTurn?.responseParts).toEqual([
         { kind: "markdown", id: "text", content: "accepted" },
@@ -491,17 +493,17 @@ it("serves resources only after initialization and only from the owning host", a
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
 
   const uri = await runInDurableObject(stub, (_instance, state) => {
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     createSession(store, SESSION, "generation");
-    const chat = store.requireMetadata(SESSION).chatUri;
-    store.applyAction(chat, start());
-    store.applyAction(chat, {
+    const chat = store.queries.requireMetadata(SESSION).chatUri;
+    store.mutations.applyAction(chat, start());
+    store.mutations.applyAction(chat, {
       type: "chat/responsePart",
       turnId: "turn",
       part: { kind: "contentRef", uri: "data:text/plain;charset=utf-8,%F0%9F%98%80" },
     });
 
-    const saved = ChatStateSchema.parse(store.readSnapshot(chat).state).activeTurn
+    const saved = ChatStateSchema.parse(store.queries.readSnapshot(chat).state).activeTurn
       ?.responseParts[0];
 
     const resource = ContentRefSchema.strip().parse(saved).uri;

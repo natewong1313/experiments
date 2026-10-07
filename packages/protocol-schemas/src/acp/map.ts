@@ -1,4 +1,4 @@
-import type { ChatAction } from "../ahp/channels/chat/actions";
+import type { ChatAction, ChatToolCallReadyAction } from "../ahp/channels/chat/actions";
 import type { ActiveTurn } from "../ahp/channels/chat/state";
 import type { SessionNotification } from "./session";
 import type { Message } from "../ahp/channels/chat/message";
@@ -225,9 +225,7 @@ type ToolUpdate = Extract<
   { sessionUpdate: "tool_call" | "tool_call_update" }
 >;
 
-function toolInputFields<T>(
-  value: T,
-): Pick<Extract<ChatAction, { type: "chat/toolCallReady" }>, "toolInput"> {
+function toolInputFields<T>(value: T): Pick<ChatToolCallReadyAction, "toolInput"> {
   try {
     const toolInput = JSON.stringify(value);
 

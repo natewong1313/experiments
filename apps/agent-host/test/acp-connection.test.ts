@@ -2,8 +2,7 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import { AgentConnections } from "../src/agent/acp";
-import { HostStore } from "../src/state/store";
-import { createSession } from "./config";
+import { createHostState, createSession } from "./config";
 
 import {
   agent as createAgent,
@@ -31,7 +30,7 @@ it("aborts a stalled connector and disposes a stream returned after its deadline
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   await runInDurableObject(stub, async (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     const uri = "ahp-session:/timeout";
     createSession(store, uri, "timeout-key");
     const pending = Promise.withResolvers<Stream>();
@@ -51,7 +50,7 @@ it("aborts a stalled connector and disposes a stream returned after its deadline
     vi.useFakeTimers();
 
     try {
-      const record = store.requireWithActiveOutput(uri);
+      const record = store.queries.requireWithActiveOutput(uri);
       const failed = connectionError(agents.get(record));
       await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
       expect(await failed).toMatchObject({

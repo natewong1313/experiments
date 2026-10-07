@@ -1,12 +1,13 @@
 import type { DispatchActionParams } from "@experiments/protocol-schemas/ahp";
 import type { Connection } from "./protocol";
 import { rejection } from "./validation";
-import type { HostStore } from "../state/store";
+import type { HostQueries, HostMutations } from "../state";
 import type { AhpClients } from "./clients";
 import type { TurnExecution } from "../sessions/turns";
 
 type ActionDispatchParams = {
-  store: HostStore;
+  queries: HostQueries;
+  mutations: HostMutations;
   clients: AhpClients;
   turns: TurnExecution;
 };
@@ -14,12 +15,14 @@ type ActionDispatchParams = {
 type ReadyConnection = Extract<Connection, { phase: "ready" }>;
 
 class ActionDispatch {
-  private readonly store: HostStore;
+  private readonly queries: HostQueries;
+  private readonly mutations: HostMutations;
   private readonly clients: AhpClients;
   private readonly turns: TurnExecution;
 
-  constructor({ store, clients, turns }: ActionDispatchParams) {
-    this.store = store;
+  constructor({ queries, mutations, clients, turns }: ActionDispatchParams) {
+    this.queries = queries;
+    this.mutations = mutations;
     this.clients = clients;
     this.turns = turns;
   }
@@ -32,7 +35,7 @@ class ActionDispatch {
       action: input.action,
     });
 
-    const previous = this.store.lookupDispatchResult(origin);
+    const previous = this.queries.lookupDispatchResult(origin);
 
     if (previous) {
       const envelope =
@@ -42,7 +45,7 @@ class ActionDispatch {
               channel: input.channel,
               action: input.action,
               origin,
-              serverSeq: this.store.sequence,
+              serverSeq: this.queries.sequence,
               rejectionReason: "Client sequence was reused for another action",
             };
 
@@ -51,21 +54,21 @@ class ActionDispatch {
       return;
     }
 
-    const record = this.store.lookupMetadata(input.channel);
+    const record = this.queries.lookupMetadata(input.channel);
 
     if (!record) {
       return;
     }
 
     let reason = rejection(record, input.channel, input.action, (turnId) =>
-      this.store.hasCompletedTurn(record.chatUri, turnId),
+      this.queries.hasCompletedTurn(record.chatUri, turnId),
     );
 
     if (input.action.type === "chat/turnStarted" && this.turns.isRunning(record)) {
       reason = "The previous agent turn is still stopping";
     }
 
-    const dispatch: Parameters<HostStore["commitDispatch"]>[0] = {
+    const dispatch: Parameters<HostMutations["commitDispatch"]>[0] = {
       ...input,
       record,
       origin,
@@ -76,7 +79,7 @@ class ActionDispatch {
       dispatch.rejection = reason;
     }
 
-    const publication = this.store.commitDispatch(dispatch);
+    const publication = this.mutations.commitDispatch(dispatch);
 
     const [acknowledgement] = publication.actions;
 

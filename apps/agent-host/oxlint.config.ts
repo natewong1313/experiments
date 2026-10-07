@@ -7,6 +7,40 @@ export default defineConfig({
   ignorePatterns: ["worker-configuration.d.ts"],
   overrides: [
     {
+      files: ["src/**/*.ts"],
+      excludeFiles: ["src/state/**/*.ts"],
+      rules: {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: ["**/state/**"],
+                message: "Import the state entry point; stores and composition are internal.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      files: ["src/state/**/*.ts"],
+      rules: {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: ["**/sessions", "**/sessions/**", "**/agent", "**/agent/**"],
+                message:
+                  "State owns its record types and must not depend on session execution or ACP connections.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
       files: ["test/**/*.ts"],
       rules: {
         "eslint/max-nested-callbacks": [

@@ -1,17 +1,15 @@
 import { and, asc, eq, gt, min, sql, inArray } from "drizzle-orm";
-import type { drizzle } from "drizzle-orm/durable-sqlite";
 import type { ActionEnvelope, ActionOrigin, StateAction } from "@experiments/protocol-schemas/ahp";
-import { hostTable, actionsTable, dispatchesTable } from "./schema";
-import { MAX_REPLAY_BYTES, jsonSize } from "../memory";
-import { MAX_FRAME_BYTES } from "../ahp/protocol";
+import { hostTable, actionsTable, dispatchesTable } from "../persistence/schema";
+import { MAX_REPLAY_BYTES, jsonSize } from "../../memory";
+import { MAX_FRAME_BYTES } from "../../ahp/protocol";
+import type { Database } from "../persistence/database";
 
 const HOST_ID = 1;
 
 const SEQUENCE_INCREMENT = 1;
 
 const REPLAY_LIMIT = 1000;
-
-type Database = ReturnType<typeof drizzle>;
 
 type SaveDispatchResultParams = {
   origin: ActionOrigin;

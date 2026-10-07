@@ -7,7 +7,7 @@ import {
   type SessionSummary,
   type SessionAction,
 } from "@experiments/protocol-schemas/ahp";
-import type { LiveSession } from "../sessions/record";
+import type { LiveSession } from "./records";
 
 const ChatChangesSchema = ChatSummarySchema.omit({ resource: true });
 

@@ -7,9 +7,8 @@ import {
   InitializeResultSchema,
   SubscribeResultSchema,
 } from "@experiments/protocol-schemas/ahp";
-import { HostStore } from "../src/state/store";
+import { createHostState, type HostState, createSession } from "./config";
 import { MemoryLimitError, MAX_TURN_BYTES, MAX_REPLAY_BYTES } from "../src/memory";
-import { createSession } from "./config";
 import { connectPeer, Peer } from "./peer";
 import { reduceChat } from "../src/state/reducers";
 
@@ -25,19 +24,19 @@ const HISTORY_TURNS = 7;
 
 const DUPLICATE_SUBSCRIPTIONS = 64;
 
-function completeTurn(store: HostStore, chat: string, id: string): void {
-  store.applyAction(chat, {
+function completeTurn(store: HostState, chat: string, id: string): void {
+  store.mutations.applyAction(chat, {
     type: "chat/turnStarted",
     turnId: id,
     startedAt: STARTED_AT,
     message: { text: "Hello", origin: { kind: "user" } },
   });
-  store.applyAction(chat, {
+  store.mutations.applyAction(chat, {
     type: "chat/responsePart",
     turnId: id,
     part: { kind: "markdown", id, content: "x".repeat(TURN_BYTES) },
   });
-  store.applyAction(chat, { type: "chat/turnComplete", turnId: id, duration: 1 });
+  store.mutations.applyAction(chat, { type: "chat/turnComplete", turnId: id, duration: 1 });
 }
 
 async function populatedHost(): Promise<{
@@ -48,10 +47,10 @@ async function populatedHost(): Promise<{
 
   const chat = await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     createSession(store, SESSION, "memory");
-    store.applyAction(SESSION, { type: "session/ready" });
-    const record = store.requireWithActiveOutput(SESSION);
+    store.mutations.applyAction(SESSION, { type: "session/ready" });
+    const record = store.queries.requireWithActiveOutput(SESSION);
 
     for (let index = 0; index < HISTORY_TURNS; index++) {
       completeTurn(store, record.chatUri, `turn-${index}`);
@@ -67,11 +66,11 @@ it("rejects oversized history before assembling turns and leaves history intact"
   const { stub, chat } = await populatedHost();
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     const parse = vi.spyOn(JSON, "parse");
 
     try {
-      expect(() => store.readSnapshot(chat)).toThrow(MemoryLimitError);
+      expect(() => store.queries.readSnapshot(chat)).toThrow(MemoryLimitError);
       expect(parse.mock.calls.every(([text]) => text.length < TURN_BYTES)).toBe(true);
     } finally {
       parse.mockRestore();
@@ -80,7 +79,7 @@ it("rejects oversized history before assembling turns and leaves history intact"
     expect(
       state.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM turns").one().count,
     ).toBe(HISTORY_TURNS);
-    const snapshot = ChatStateSchema.parse(store.readSnapshot(chat, 1).state);
+    const snapshot = ChatStateSchema.parse(store.queries.readSnapshot(chat, 1).state);
     expect(snapshot.turns.map((turn) => turn.id)).toEqual([`turn-${HISTORY_TURNS - 1}`]);
     expect(snapshot.turnsNextCursor).toBeDefined();
   });
@@ -126,8 +125,8 @@ it("pages history over AHP in order without reinserting persisted turns", async 
         state.storage.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM turns").one()
           .count,
       ).toBe(HISTORY_TURNS);
-      const store = new HostStore(state);
-      expect(store.requireWithActiveOutput(chat).chat.turns).toEqual([]);
+      const store = createHostState(state.storage);
+      expect(store.queries.requireWithActiveOutput(chat).chat.turns).toEqual([]);
     });
     const wrongCursor = JSON.stringify({ channel: "another-chat", before: 1 });
     await expect(
@@ -204,7 +203,7 @@ it("filters replay in SQL and falls back before parsing an oversized selected re
   const { stub, chat } = await populatedHost();
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
 
     const total = state.storage.sql
       .exec<{ bytes: number }>("SELECT SUM(LENGTH(envelope)) AS bytes FROM actions")
@@ -214,9 +213,9 @@ it("filters replay in SQL and falls back before parsing an oversized selected re
     const parse = vi.spyOn(JSON, "parse");
 
     try {
-      expect(store.readReplay(0, [chat])).toBeNull();
-      expect(store.readReplay(store.sequence, [])).toEqual([]);
-      const root = store.readReplay(store.sequence, [ROOT]);
+      expect(store.queries.readReplay(0, [chat])).toBeNull();
+      expect(store.queries.readReplay(store.queries.sequence, [])).toEqual([]);
+      const root = store.queries.readReplay(store.queries.sequence, [ROOT]);
       expect(root?.every((envelope) => envelope.channel === ROOT)).toBe(true);
       expect(parse.mock.calls.every(([text]) => text.length < TURN_BYTES)).toBe(true);
     } finally {
@@ -229,11 +228,11 @@ it("checks aggregate snapshot size before loading any subscribed chat", async ()
   const { stub, chat } = await populatedHost();
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     const parse = vi.spyOn(JSON, "parse");
 
     try {
-      expect(() => store.readSnapshots([ROOT, SESSION, chat])).toThrow(MemoryLimitError);
+      expect(() => store.queries.readSnapshots([ROOT, SESSION, chat])).toThrow(MemoryLimitError);
       expect(parse).not.toHaveBeenCalled();
     } finally {
       parse.mockRestore();
@@ -245,16 +244,16 @@ it("rolls back oversized live updates", async () => {
   const { stub, chat } = await populatedHost();
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
-    store.applyAction(chat, {
+    const store = createHostState(state.storage);
+    store.mutations.applyAction(chat, {
       type: "chat/turnStarted",
       turnId: "oversized",
       startedAt: STARTED_AT,
       message: { text: "Hello", origin: { kind: "user" } },
     });
-    const { sequence } = store;
+    const { sequence } = store.queries;
     expect(() =>
-      store.applyAction(chat, {
+      store.mutations.applyAction(chat, {
         type: "chat/responsePart",
         turnId: "oversized",
         part: {
@@ -264,9 +263,9 @@ it("rolls back oversized live updates", async () => {
         },
       }),
     ).toThrow(MemoryLimitError);
-    expect(store.sequence).toBe(sequence);
-    expect(store.requireWithActiveOutput(chat).chat.activeTurn?.responseParts).toEqual([]);
-    store.applyAction(chat, {
+    expect(store.queries.sequence).toBe(sequence);
+    expect(store.queries.requireWithActiveOutput(chat).chat.activeTurn?.responseParts).toEqual([]);
+    store.mutations.applyAction(chat, {
       type: "chat/turnComplete",
       turnId: "oversized",
       duration: 1,
@@ -278,14 +277,14 @@ it("recovers only interrupted sessions without loading unrelated chat output", a
   const { stub } = await populatedHost();
   await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     const creating = "ahp-session:/creating";
     createSession(store, creating, "creating");
     const active = "ahp-session:/active";
     createSession(store, active, "active");
-    store.applyAction(active, { type: "session/ready" });
-    const live = store.requireWithActiveOutput(active);
-    store.applyAction(live.chatUri, {
+    store.mutations.applyAction(active, { type: "session/ready" });
+    const live = store.queries.requireWithActiveOutput(active);
+    store.mutations.applyAction(live.chatUri, {
       type: "chat/turnStarted",
       turnId: "active",
       startedAt: STARTED_AT,
@@ -295,7 +294,7 @@ it("recovers only interrupted sessions without loading unrelated chat output", a
     const queries = vi.spyOn(state.storage.sql, "exec");
 
     try {
-      const interrupted = Array.from(store.recoverableSessions(), (record) => record.uri);
+      const interrupted = Array.from(store.queries.recoverableSessions(), (record) => record.uri);
       expect(interrupted).toEqual([active, creating]);
       expect(queries.mock.calls.some(([query]) => query.includes("FROM text_pieces"))).toBe(false);
       expect(queries.mock.calls.some(([query]) => query.includes("FROM reply_parts"))).toBe(false);

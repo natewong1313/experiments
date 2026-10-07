@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { HostStore } from "../src/state/store";
+import { createHostState } from "./config";
 import { expect, it, vi } from "vitest";
 import {
   ChatStateSchema,
@@ -35,7 +35,7 @@ it("keeps two streaming clients, snapshots, replay and immutable resource versio
 
   const record = await vi.waitFor(async () => {
     const saved = await runInDurableObject(stub, (_instance, state) =>
-      new HostStore(state).requireMetadata(SESSION),
+      createHostState(state.storage).queries.requireMetadata(SESSION),
     );
 
     expect(saved.session.lifecycle).toBe("ready");

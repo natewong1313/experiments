@@ -12,7 +12,7 @@ import {
   type Connection,
 } from "./protocol";
 import type { ActionEnvelope, SessionSummary } from "@experiments/protocol-schemas/ahp";
-import type { Publication } from "../state/store";
+import type { Publication } from "../state";
 import { MAX_SNAPSHOT_BYTES, RESPONSE_RESERVE_BYTES, checkBytes } from "../memory";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;

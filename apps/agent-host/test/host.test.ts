@@ -16,9 +16,8 @@ import { expect, it, vi } from "vitest";
 import { AgentConnections } from "../src/agent/acp";
 import { websocketStream } from "@experiments/agent-host/helpers";
 import type { ContentBlock } from "@experiments/protocol-schemas/acp";
-import { HostStore } from "../src/state/store";
+import { createHostState, createSession } from "./config";
 import { connectPeer, type Peer } from "./peer";
-import { createSession } from "./config";
 import { connectAcp } from "./worker";
 import { withAcpAgent } from "./acp-host";
 
@@ -502,11 +501,11 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
 
   const chat = await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     createSession(store, SESSION, "timestamp-generation");
-    store.applyAction(SESSION, { type: "session/ready" });
+    store.mutations.applyAction(SESSION, { type: "session/ready" });
 
-    return store.requireWithActiveOutput(SESSION).chatUri;
+    return store.queries.requireWithActiveOutput(SESSION).chatUri;
   });
 
   const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -540,8 +539,8 @@ it("acknowledges a non-ISO timestamp rejection without invoking the agent", asyn
     expect(snapshot).toMatchObject({ snapshot: { state: { turns: [] } } });
     await runInDurableObject(stub, (instance, state) => {
       expect(instance).toBeDefined();
-      const store = new HostStore(state);
-      const stateSnapshot = ChatStateSchema.parse(store.readSnapshot(chat).state);
+      const store = createHostState(state.storage);
+      const stateSnapshot = ChatStateSchema.parse(store.queries.readSnapshot(chat).state);
       expect(stateSnapshot.activeTurn).toBeUndefined();
     });
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -583,9 +582,9 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
   try {
     await runInDurableObject(stub, async (instance, state) => {
       expect(instance).toBeDefined();
-      const store = new HostStore(state);
+      const store = createHostState(state.storage);
       createSession(store, SESSION, "old-generation");
-      const original = store.requireWithActiveOutput(SESSION);
+      const original = store.queries.requireWithActiveOutput(SESSION);
 
       const agents = new AgentConnections({
         connect: connectAcp,
@@ -594,9 +593,9 @@ it("releasing an old generation keeps a replacement ACP connection usable", asyn
 
       try {
         const old = await agents.get(original);
-        store.deleteSession(SESSION);
+        store.mutations.deleteSession(SESSION);
         createSession(store, SESSION, "replacement-generation");
-        const replacement = store.requireWithActiveOutput(SESSION);
+        const replacement = store.queries.requireWithActiveOutput(SESSION);
         const current = await agents.get(replacement);
         expect(current.sessionId).not.toBe(old.sessionId);
         await agents.release(original);

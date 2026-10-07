@@ -1,63 +1,13 @@
-import * as z from "zod";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import type { drizzle } from "drizzle-orm/durable-sqlite";
-import { replyPartsTable, textPiecesTable, turnRecordsTable } from "./schema";
-import {
-  type metaSchema,
-  ResponsePartSchema,
-  type ResponsePart,
-  type StateAction,
-  type ChatState,
-  type Turn,
-  type ActiveTurn,
-  type ContentRef,
-  type ResourceReadResult,
-} from "@experiments/protocol-schemas/ahp";
-import { checkBytes } from "../memory";
-
-const PIECE_CHARACTERS = 16_384;
-
-const JSON_PIECE_CHARACTERS = 8192;
-
-const HIGH_SURROGATE_START = 0xd8_00;
-
-const HIGH_SURROGATE_END = 0xdb_ff;
+import { replyPartsTable, textPiecesTable, turnRecordsTable } from "../persistence/schema";
+import { ResponsePartSchema, type ResponsePart } from "@experiments/protocol-schemas/ahp";
+import { checkBytes } from "../../memory";
+import { encodedSize, pieceEnd, readPiece, JSON_PIECE_CHARACTERS } from "../persistence/encoding";
+import type { Database } from "../persistence/database";
 
 const STRING_QUOTES = 2;
 
 const MAX_PART_METADATA_BYTES = 65_536;
-
-type StoredValue =
-  | StateAction
-  | ChatState
-  | Turn
-  | ActiveTurn
-  | ResponsePart
-  | ContentRef
-  | ResourceReadResult
-  | string
-  | ReturnType<typeof metaSchema.parse>;
-
-function encodedSize(value: StoredValue): number {
-  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
-}
-
-function pieceEnd(text: string, offset: number, limit = PIECE_CHARACTERS): number {
-  const end = Math.min(offset + limit, text.length);
-  const last = text.charCodeAt(end - 1);
-
-  return end < text.length && last >= HIGH_SURROGATE_START && last <= HIGH_SURROGATE_END
-    ? end - 1
-    : end;
-}
-
-type StoredPiece = { data: string };
-
-function readPiece(piece: StoredPiece): string {
-  const text: unknown = JSON.parse(piece.data);
-
-  return z.string().parse(text);
-}
 
 function blocking(part: ResponsePart): number {
   return part.kind === "toolCall" &&
@@ -73,8 +23,6 @@ function openInput(part: ResponsePart): number {
 }
 
 type PartRow = typeof replyPartsTable.$inferSelect;
-
-type Database = ReturnType<typeof drizzle>;
 
 type TextPartIdentity = Pick<Extract<ResponsePart, { id: string }>, "kind" | "id">;
 
@@ -93,7 +41,7 @@ type AppendPiecesParams = {
   text: string;
 };
 
-class Parts {
+class PartsStore {
   private readonly db: Database;
 
   constructor(db: Database) {
@@ -331,22 +279,6 @@ class Parts {
 
     this.db.update(replyPartsTable).set({ pieces: piece }).where(match).run();
   }
-
-  deleteTurnRecords(chat: string, turn?: string): void {
-    for (const table of [replyPartsTable, textPiecesTable, turnRecordsTable]) {
-      const match = and(eq(table.chatUri, chat), turn === void 0 ? void 0 : eq(table.turnId, turn));
-
-      this.db.delete(table).where(match).run();
-    }
-  }
 }
 
-export {
-  Parts,
-  encodedSize,
-  pieceEnd,
-  readPiece,
-  JSON_PIECE_CHARACTERS,
-  type StoredPiece,
-  type PartRow,
-};
+export { PartsStore };

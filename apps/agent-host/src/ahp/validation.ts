@@ -1,5 +1,5 @@
 import { isoTimestampSchema, type StateAction } from "@experiments/protocol-schemas/ahp";
-import type { LiveSession } from "../sessions/record";
+import type { LiveSession } from "../state";
 import { ahpMessageToAcpPrompt } from "@experiments/protocol-schemas/acp";
 
 function rejection(

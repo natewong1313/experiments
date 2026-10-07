@@ -3,11 +3,10 @@ import { runInDurableObject } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { expect, it, vi } from "vitest";
 import type { ChatAction } from "@experiments/protocol-schemas/ahp";
-import { HostStore } from "../src/state/store";
+import { createHostState, type HostState, createSession } from "./config";
 import { DocumentBaseline } from "./document-baseline";
-import { ActionJournal } from "../src/storage/journal";
+import { ActionJournal } from "../src/state/replay/journal";
 import { reduceChat } from "../src/state/reducers";
-import { createSession } from "./config";
 
 const STARTED = "2026-10-01T00:00:00.000Z";
 
@@ -88,7 +87,7 @@ function audit(sql: SqlStorage): void {
     CREATE TRIGGER audit_action AFTER INSERT ON actions BEGIN INSERT INTO write_audit VALUES (LENGTH(CAST(NEW.envelope AS BLOB))); END;`);
 }
 
-function seed(store: HostStore, fixture: Fixture, chat: string): ChatAction[] {
+function seed(store: HostState, fixture: Fixture, chat: string): ChatAction[] {
   const actions: ChatAction[] = [
     {
       type: "chat/turnStarted",
@@ -145,7 +144,7 @@ function seed(store: HostStore, fixture: Fixture, chat: string): ChatAction[] {
     );
   }
 
-  store.applyChatActions(store.requireMetadata(chat), actions);
+  store.mutations.applyChatActions(store.queries.requireMetadata(chat), actions);
 
   return actions;
 }
@@ -170,10 +169,10 @@ it.each(CASES)("measures storage work for $name", async (fixture) => {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
 
   const result = await runInDurableObject(stub, (_instance, state) => {
-    const store = new HostStore(state);
+    const store = createHostState(state.storage);
     createSession(store, "ahp-session:/work", "generation");
-    const chat = store.requireMetadata("ahp-session:/work").chatUri;
-    const empty = store.requireMetadata(chat).chat;
+    const chat = store.queries.requireMetadata("ahp-session:/work").chatUri;
+    const empty = store.queries.requireMetadata(chat).chat;
     const actions = seed(store, fixture, chat);
 
     let baselineState = empty;
@@ -206,21 +205,21 @@ it.each(CASES)("measures storage work for $name", async (fixture) => {
 
     const normalized = measure(state.storage.sql, () => {
       for (const action of updates) {
-        store.applyAction(chat, action);
+        store.mutations.applyAction(chat, action);
       }
     });
 
-    const cut = store.sequence;
+    const cut = store.queries.sequence;
 
     const snapshot = measure(state.storage.sql, () => {
-      store.readSnapshot(chat, 0);
+      store.queries.readSnapshot(chat, 0);
     });
 
     const complete = measure(state.storage.sql, () => {
-      store.applyAction(chat, { type: "chat/turnComplete", turnId: "turn", duration: 1 });
+      store.mutations.applyAction(chat, { type: "chat/turnComplete", turnId: "turn", duration: 1 });
     });
 
-    expect(store.sequence).toBeGreaterThan(cut);
+    expect(store.queries.sequence).toBeGreaterThan(cut);
 
     return { name: fixture.name, baseline, normalized, snapshot, complete };
   });

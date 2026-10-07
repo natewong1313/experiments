@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { expect, it, vi } from "vitest";
-import { HostStore } from "../src/state/store";
+import { createHostState, type HostState } from "./config";
 import { Peer } from "./peer";
 
 const ROOT = "ahp-root://";
@@ -44,18 +44,18 @@ async function openHost(): Promise<{
 
 async function recordFor(
   stub: DurableObjectStub,
-): Promise<ReturnType<HostStore["requireWithActiveOutput"]>> {
+): Promise<ReturnType<HostState["queries"]["requireWithActiveOutput"]>> {
   return await runInDurableObject(stub, (instance, state) => {
     expect(instance).toBeDefined();
 
-    return new HostStore(state).requireWithActiveOutput(SESSION);
+    return createHostState(state.storage).queries.requireWithActiveOutput(SESSION);
   });
 }
 
 async function create(
   peer: Peer,
   stub: DurableObjectStub,
-): Promise<ReturnType<HostStore["requireWithActiveOutput"]>> {
+): Promise<ReturnType<HostState["queries"]["requireWithActiveOutput"]>> {
   await peer.request("createSession", {
     channel: SESSION,
     provider: "custom",
@@ -142,7 +142,7 @@ it("reopens the same ACP conversation and session key after host eviction", asyn
     const sequence = await runInDurableObject(stub, (instance, state) => {
       expect(instance).toBeDefined();
 
-      return new HostStore(state).sequence;
+      return createHostState(state.storage).queries.sequence;
     });
 
     await backend.closeConnections();
@@ -152,9 +152,9 @@ it("reopens the same ACP conversation and session key after host eviction", asyn
     expect(reopened.acpSession).toBe(original.acpSession);
     await runInDurableObject(stub, (instance, state) => {
       expect(instance).toBeDefined();
-      const store = new HostStore(state);
-      expect(store.sequence).toBe(sequence);
-      expect(store.readSnapshot(ROOT).state).toMatchObject({
+      const store = createHostState(state.storage);
+      expect(store.queries.sequence).toBe(sequence);
+      expect(store.queries.readSnapshot(ROOT).state).toMatchObject({
         agents: [{ provider: "custom" }],
       });
 

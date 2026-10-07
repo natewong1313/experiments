@@ -1,6 +1,6 @@
 import type { Stream } from "@agentclientprotocol/sdk";
 import { DurableObject } from "cloudflare:workers";
-import { HostStore } from "./state/store";
+import { createHostState } from "./state";
 import { AgentConnections } from "./agent/acp";
 import { AhpClients } from "./ahp/clients";
 import { AhpRpc } from "./ahp/rpc";
@@ -20,13 +20,15 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const store = new HostStore(ctx);
+    const state = createHostState(ctx.storage);
+    const { queries, mutations } = state;
     this.clients = new AhpClients({ ctx });
     this.rpc = ctx.blockConcurrencyWhile(async () => {
+      await state.migrate();
+
       // Let subclass fields initialize before invoking its configuration hook.
-      await Promise.resolve();
       const config = AgentConfigSchema.parse(this.getAgentConfig());
-      const publication = store.configureAgent(config.agent);
+      const publication = mutations.configureAgent(config.agent);
 
       if (publication) {
         this.clients.broadcast(publication);
@@ -44,14 +46,16 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
       }
 
       const turns = new TurnExecution({
-        store,
+        queries,
+        mutations,
         agents,
         clients: this.clients,
         waitUntil,
       });
 
       const sessions = new SessionLifecycle({
-        store,
+        queries,
+        mutations,
         agents,
         clients: this.clients,
         hostId: ctx.id.toString(),
@@ -60,20 +64,22 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
       });
 
       const dispatcher = new ActionDispatch({
-        store,
+        queries,
+        mutations,
         clients: this.clients,
         turns,
       });
 
       const rpc = new AhpRpc({
-        store,
+        queries,
+        mutations,
         clients: this.clients,
         sessions,
         dispatcher,
         defaultDirectory: workingDirectory(config.cwd),
       });
 
-      for (const record of store.recoverableSessions()) {
+      for (const record of queries.recoverableSessions()) {
         turns.recover(record);
         sessions.recover(record);
       }

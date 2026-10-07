@@ -125,27 +125,60 @@ backend.
 `src/agent-host.ts` constructs the host components and delegates Durable Object
 callbacks. The implementation is grouped by responsibility:
 
-| Directory       | Responsibility                                                                         |
-| --------------- | -------------------------------------------------------------------------------------- |
-| `src/ahp/`      | Client connections, RPC handling, subscriptions, and client-action acceptance.         |
-| `src/sessions/` | Session lifecycle, turn execution, cancellation, and restart recovery.                 |
-| `src/agent/`    | ACP connections and backend conversations, including request validation and deadlines. |
-| `src/state/`    | Authoritative transitions, reducers, and summary projections.                          |
-| `src/storage/`  | Normalized chats, ordered parts, text pieces, content, and replay/acknowledgements.    |
-| `drizzle/`      | Generated SQL migrations, migration journal, schema snapshots, and the runtime bundle. |
+| Directory       | Responsibility                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| `src/ahp/`      | Client connections, RPC handling, subscriptions, and client-action acceptance.              |
+| `src/sessions/` | Session lifecycle, turn execution, cancellation, and restart recovery.                      |
+| `src/agent/`    | ACP connections and backend conversations, including request validation and deadlines.      |
+| `src/state/`    | The authoritative state subsystem, including queries, mutations, reducers, and persistence. |
+| `drizzle/`      | Generated SQL migrations, migration journal, schema snapshots, and the runtime bundle.      |
+
+`createHostState(storage)` in `src/state/index.ts` is the entry point used by both
+`AgentHost` and test fixtures. Its result exposes `queries`, `mutations`, and
+`migrate()`. The factory in `create-state.ts` constructs all stores and connects
+their dependencies. Production callers import only the state entry point;
+Oxlint rejects imports of state internals outside the subsystem. Storage tests
+can inspect internals when they need to measure database work.
+
+`HostQueries` reads session summaries, metadata, active output, snapshots, replay,
+saved dispatch results, and content resources. `HostMutations` owns synchronous
+transactions and coordinates state changes, content extraction, projections,
+journal entries, and dispatch acknowledgements. It returns publications after
+the transaction commits. Callers then deliver those publications and start
+backend work.
+
+The state subsystem has these internal owners:
+
+| Directory            | Responsibility                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `state/host/`        | Root state and session record persistence, listing, and recovery selection.                          |
+| `state/chat/`        | Normalized chat transitions, turn records, response parts, completed history, and snapshot assembly. |
+| `state/content/`     | Action payload extraction and immutable resource persistence, reads, and retention cleanup.          |
+| `state/replay/`      | Sequence allocation, bounded action replay, and saved client dispatch results.                       |
+| `state/persistence/` | Database setup, migrations, the transaction primitive, schema, and shared piece encoding.            |
+
+Chat transitions receive chat, turn, part, and history stores directly. Turn
+storage owns turn metadata, budgets, and deletion of a turn's records. Part
+writes update their turn's byte, part, blocking, and input counters in the same
+transaction. History owns the completed-turn index and pagination. Snapshots
+assemble active output and history only when requested. Metadata reads and
+incremental updates avoid assembling earlier text or unrelated tool results.
+
+`ActionContent` rewrites large action payloads to references through
+`ResourceStore`; it has no database connection. `ResourceStore` owns resource
+creation, reads, response encoding, retirement, and collection. Mutation
+coordination collects retired content using the journal's retention floor.
+All stores participate in their caller's transaction. Queries remain synchronous
+and do not open transactions or write records. Snapshots capture state and
+`fromSeq` without an asynchronous gap.
 
 Protocol conversion functions live in `@experiments/protocol-schemas/acp`.
 The ACP adapter uses those functions; turn execution checks session generation
 and turn identity before publishing results. A session generation uses its
 unique backend session key, so delayed work cannot affect a session recreated
-at the same URI. Turn execution reads chat and turn metadata plus indexed part identities.
-Snapshots assemble text, ordered parts, and requested completed history separately.
-
-Client dispatch commits state, projected actions, and acknowledgements in one
-`HostStore` transaction. Only after that commit does the host deliver the
-publication and start backend work. The journal participates in the caller's
-transaction. Socket attachments remain the source of client subscriptions
-across hibernation.
+at the same URI. The state subsystem owns its session record types; session
+execution defines the smaller generation and backend-binding types it needs.
+Socket attachments remain the source of client subscriptions across hibernation.
 
 ## AHP protocol support
 
@@ -397,7 +430,7 @@ No production-backend smoke test or new external conformance run was performed.
 
 ## Database migrations
 
-Edit `src/storage/schema.ts`, then generate a migration:
+Edit `src/state/persistence/schema.ts`, then generate a migration:
 
 ```sh
 pnpm --filter @experiments/agent-host db:generate --name=describe_change
@@ -445,32 +478,20 @@ or turn records.
 RPC names remain `fetchTurns` and `resourceRead`; their store methods describe the
 work they perform.
 
-| Previous method                                   | Current method                                  | Behavior                                                                       |
-| ------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------ |
-| `HostStore.exists`                                | `hasSessionChannel`                             | Checks for a session or chat channel, excluding root.                          |
-| `HostStore.list`                                  | `listSessions`                                  | Reads a page of session summaries.                                             |
-| `HostStore.mappingState`                          | `readAgentUpdateContext`                        | Reads part counts and identities needed to map agent updates.                  |
-| `HostStore.hasTurn`                               | `hasCompletedTurn`                              | Checks the completed-history index, excluding the active turn.                 |
-| `HostStore.create` / `remove`                     | `createSession` / `deleteSession`               | Mutates session storage and journals the root session count.                   |
-| `HostStore.bindAgent`                             | `bindAgentSession`                              | Saves the backend conversation ID.                                             |
-| `HostStore.apply`                                 | `applyAction`                                   | Applies and journals one action.                                               |
-| `HostStore.updateChat` / `updateAgent`            | `applyChatActions` / `applyAgentActions`        | Applies and journals a batch in one transaction.                               |
-| `HostStore.fetchTurns`                            | `publishHistoryPage`                            | Reads history and journals a `turnsLoaded` event; the caller delivers it.      |
-| `HostStore.previous` / `dispatch`                 | `lookupDispatchResult` / `commitDispatch`       | Reads a saved dispatch result or atomically commits a dispatch and its result. |
-| `ChatStore.current` / `live`                      | `readMetadata` / `readWithActiveOutput`         | Makes the active-output loading choice explicit.                               |
-| `ChatStore.save`                                  | `createChat`                                    | Inserts an empty chat; it does not update existing chats.                      |
-| `ChatStore.liveSize` / `size`                     | `activeStateBytes` / `snapshotBytes`            | Counts chat metadata and active output, or adds completed history.             |
-| `ChatStore.fetchTurns` / `TurnHistory.fetchTurns` | `readHistoryPage` / `readPage`                  | Reads a history page without journaling an event.                              |
-| `ContentStore.normalize`                          | `storeActionContent`                            | Persists extracted content and rewrites actions to reference it.               |
-| `ContentStore.retire` / `collect`                 | `retireChatContent` / `deleteRetiredContent`    | Marks content retired or deletes it once replay no longer needs it.            |
-| `ActionJournal.previous` / `remember`             | `lookupDispatchResult` / `saveDispatchResult`   | Looks up or stores a result by client action origin.                           |
-| `Parts.read` / `assemble` / `append`              | `parseMetadata` / `readWithText` / `appendText` | Parses part metadata, reads complete parts, or appends text pieces.            |
-| `Parts.remove`                                    | `deleteTurnRecords`                             | Deletes turn metadata, parts, and text for one turn or an entire chat.         |
+| Operation                         | Entry point                                           | Behavior                                                                    |
+| --------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
+| Session or chat channel existence | `queries.hasSessionChannel`                           | Checks session and chat channels, excluding root.                           |
+| Agent update context              | `queries.readAgentUpdateContext`                      | Reads counts and indexed part identities without assembling output.         |
+| Completed-turn existence          | `queries.hasCompletedTurn`                            | Checks the completed-history index, excluding the active turn.              |
+| Replay and acknowledgements       | `queries.readReplay` / `queries.lookupDispatchResult` | Reads retained actions or a saved dispatch result.                          |
+| Content resources                 | `queries.readResource`                                | Reads immutable content owned by this host.                                 |
+| Session creation and deletion     | `mutations.createSession` / `mutations.deleteSession` | Mutates state and journals the root session count atomically.               |
+| Agent actions                     | `mutations.applyAgentActions`                         | Stores content and applies a batch in one transaction.                      |
+| History delivery                  | `mutations.publishHistoryPage`                        | Reads history and journals a `turnsLoaded` event for the caller to deliver. |
+| Client dispatch                   | `mutations.commitDispatch`                            | Commits state, projected actions, and the saved acknowledgement atomically. |
 
-Names that already describe their operation, such as `recoverableSessions`,
-`configureAgent`, `ActionJournal.append`, and `TurnHistory.readTurn`, are retained.
-Storage helpers use their caller's transaction. Renaming does not change the
-transaction boundaries, persisted schema, or protocol methods.
+The reorganization preserves the persisted schema, migration history, protocol
+methods, transaction boundaries, and metadata versus output loading choices.
 
 ## Checks
 

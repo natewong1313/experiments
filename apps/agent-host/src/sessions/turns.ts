@@ -7,9 +7,9 @@ import type { StateAction } from "@experiments/protocol-schemas/ahp";
 import { errorMessage } from "../ahp/protocol";
 import { withDeadline } from "../deadline";
 import type { AhpClients } from "../ahp/clients";
-import type { HostStore } from "../state/store";
+import type { HostQueries, HostMutations, LiveSession } from "../state";
 import type { AgentConnections } from "../agent/acp";
-import type { LiveSession, SessionGeneration } from "./record";
+import type { SessionGeneration } from "./record";
 import { MemoryLimitError } from "../memory";
 
 const CANCEL_TIMEOUT_MS = 10_000;
@@ -21,7 +21,8 @@ function turnDuration(startedAt: string): number {
 }
 
 type TurnExecutionParams = {
-  store: HostStore;
+  queries: HostQueries;
+  mutations: HostMutations;
   agents: AgentConnections;
   clients: AhpClients;
   waitUntil: WaitUntil;
@@ -29,13 +30,15 @@ type TurnExecutionParams = {
 
 class TurnExecution {
   private readonly running: Map<string, Promise<void>> = new Map();
-  private readonly store: HostStore;
+  private readonly queries: HostQueries;
+  private readonly mutations: HostMutations;
   private readonly agents: AgentConnections;
   private readonly clients: AhpClients;
   private readonly waitUntil: WaitUntil;
 
-  constructor({ store, agents, clients, waitUntil }: TurnExecutionParams) {
-    this.store = store;
+  constructor({ queries, mutations, agents, clients, waitUntil }: TurnExecutionParams) {
+    this.queries = queries;
+    this.mutations = mutations;
     this.agents = agents;
     this.clients = clients;
     this.waitUntil = waitUntil;
@@ -66,7 +69,7 @@ class TurnExecution {
     notification: SessionNotification,
     rootSessionId: string,
   ): void {
-    const record = this.store.lookupMetadata(identity.uri);
+    const record = this.queries.lookupMetadata(identity.uri);
 
     if (
       !record ||
@@ -82,7 +85,7 @@ class TurnExecution {
           ? notification.update.toolCallId
           : void 0;
 
-      const mapping = this.store.readAgentUpdateContext(record.chatUri, toolId);
+      const mapping = this.queries.readAgentUpdateContext(record.chatUri, toolId);
 
       const actions = acpUpdateToChatActions(
         record.chat.activeTurn,
@@ -98,7 +101,7 @@ class TurnExecution {
         record.chat.activeTurn !== void 0,
       );
 
-      for (const publication of this.store.applyAgentActions(record, sessionActions, actions)) {
+      for (const publication of this.mutations.applyAgentActions(record, sessionActions, actions)) {
         this.clients.broadcast(publication);
       }
     } catch (error) {
@@ -142,7 +145,7 @@ class TurnExecution {
     try {
       const agent = await this.agents.get(original);
       agent.activate();
-      const current = this.store.lookupMetadata(uri);
+      const current = this.queries.lookupMetadata(uri);
       const turn = current?.chat.activeTurn;
 
       if (!turn || turn.id !== turnId || current.sessionKey !== original.sessionKey) {
@@ -150,7 +153,7 @@ class TurnExecution {
       }
 
       const outcome = await agent.prompt(turn.message);
-      const latest = this.store.lookupMetadata(uri);
+      const latest = this.queries.lookupMetadata(uri);
 
       if (latest?.chat.activeTurn?.id !== turnId || latest.sessionKey !== original.sessionKey) {
         return;
@@ -179,7 +182,7 @@ class TurnExecution {
     } catch (error) {
       const failure = error instanceof Error ? error : new Error("Agent operation failed");
 
-      const record = this.store.lookupMetadata(uri);
+      const record = this.queries.lookupMetadata(uri);
 
       if (record?.chat.activeTurn?.id === turnId && record.sessionKey === original.sessionKey) {
         this.failTurn(record, errorMessage(failure));
@@ -216,7 +219,7 @@ class TurnExecution {
   }
 
   private publish(channel: string, action: StateAction): void {
-    this.clients.broadcast(this.store.applyAction(channel, action));
+    this.clients.broadcast(this.mutations.applyAction(channel, action));
   }
 }
 

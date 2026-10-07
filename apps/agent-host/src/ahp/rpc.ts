@@ -29,7 +29,7 @@ import {
 } from "./protocol";
 import type { AhpClients } from "./clients";
 import type { ActionDispatch } from "./dispatch";
-import type { HostStore } from "../state/store";
+import type { HostQueries, HostMutations } from "../state";
 import type { SessionLifecycle } from "../sessions/lifecycle";
 
 import { MemoryLimitError } from "../memory";
@@ -37,7 +37,8 @@ import { MemoryLimitError } from "../memory";
 type RpcErrorResponse = { code: number; message: string; data?: JsonValue };
 
 type AhpRpcParams = {
-  store: HostStore;
+  queries: HostQueries;
+  mutations: HostMutations;
   clients: AhpClients;
   sessions: SessionLifecycle;
   dispatcher: ActionDispatch;
@@ -45,14 +46,23 @@ type AhpRpcParams = {
 };
 
 class AhpRpc {
-  private readonly store: HostStore;
+  private readonly queries: HostQueries;
+  private readonly mutations: HostMutations;
   private readonly clients: AhpClients;
   private readonly sessions: SessionLifecycle;
   private readonly dispatcher: ActionDispatch;
   private readonly defaultDirectory: string;
 
-  constructor({ store, clients, sessions, dispatcher, defaultDirectory }: AhpRpcParams) {
-    this.store = store;
+  constructor({
+    queries,
+    mutations,
+    clients,
+    sessions,
+    dispatcher,
+    defaultDirectory,
+  }: AhpRpcParams) {
+    this.queries = queries;
+    this.mutations = mutations;
     this.clients = clients;
     this.sessions = sessions;
     this.dispatcher = dispatcher;
@@ -177,17 +187,17 @@ class AhpRpc {
     const subscriptions = this.clients.validateSubscriptions(
       input.clientId,
       (input.initialSubscriptions ?? []).filter(
-        (channel) => channel === ROOT || this.store.hasSessionChannel(channel),
+        (channel) => channel === ROOT || this.queries.hasSessionChannel(channel),
       ),
     );
 
-    const snapshots = this.store.readSnapshots(subscriptions);
+    const snapshots = this.queries.readSnapshots(subscriptions);
 
     this.clients.attach(socket, input.clientId, subscriptions);
 
     return {
       protocolVersion: PROTOCOL_VERSION,
-      serverSeq: this.store.sequence,
+      serverSeq: this.queries.sequence,
       snapshots,
       serverInfo: { name: "cloudflare-agent-host", version: "0.0.0" },
       defaultDirectory: this.defaultDirectory,
@@ -200,17 +210,17 @@ class AhpRpc {
     const available = this.clients.validateSubscriptions(
       input.clientId,
       input.subscriptions.filter(
-        (channel) => channel === ROOT || this.store.hasSessionChannel(channel),
+        (channel) => channel === ROOT || this.queries.hasSessionChannel(channel),
       ),
     );
 
-    const actions = this.store.readReplay(input.lastSeenServerSeq, available);
+    const actions = this.queries.readReplay(input.lastSeenServerSeq, available);
 
     const result =
       actions === null
         ? {
             type: "snapshot",
-            snapshots: this.store.readSnapshots(available),
+            snapshots: this.queries.readSnapshots(available),
           }
         : {
             type: "replay",
@@ -255,7 +265,7 @@ class AhpRpc {
           channel,
         ]);
 
-        const snapshot = this.store.readSnapshot(channel, view?.turns);
+        const snapshot = this.queries.readSnapshot(channel, view?.turns);
         this.clients.attach(socket, client.clientId, subscriptions);
 
         return { snapshot };
@@ -288,12 +298,12 @@ class AhpRpc {
       case "resourceRead": {
         const input = parseHostParams(ResourceReadParamsSchema, params);
 
-        return this.store.readResource(input.uri, input.encoding);
+        return this.queries.readResource(input.uri, input.encoding);
       }
 
       case "fetchTurns": {
         const input = parseHostParams(FetchTurnsParamsSchema, params);
-        const publication = this.store.publishHistoryPage(input.channel, input.cursor);
+        const publication = this.mutations.publishHistoryPage(input.channel, input.cursor);
 
         if (publication) {
           this.clients.broadcast(publication);
@@ -321,7 +331,7 @@ class AhpRpc {
   private listSessions(params: JsonRpcCall["params"]): RpcResult {
     const input = parseHostParams(ListSessionsParamsSchema, params);
 
-    return this.store.listSessions({
+    return this.queries.listSessions({
       cursor: input.cursor,
       limit: input.limit ?? DEFAULT_PAGE_SIZE,
     });
