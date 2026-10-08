@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import { Tabs as TabsPrimitive } from "radix-ui";
 
-function Tabs({
+export function Tabs({
   className,
   orientation = "horizontal",
   ...props
@@ -20,7 +20,7 @@ function Tabs({
   );
 }
 
-const tabsListVariants = cva(
+export const tabsListVariants = cva(
   "group/tabs-list inline-flex w-fit items-center justify-center p-1 text-muted-foreground group-data-horizontal/tabs:h-10 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col",
   {
     variants: {
@@ -35,7 +35,7 @@ const tabsListVariants = cva(
   },
 );
 
-function TabsList({
+export function TabsList({
   className,
   variant = "default",
   ...props
@@ -50,7 +50,10 @@ function TabsList({
   );
 }
 
-function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+export function TabsTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
@@ -66,7 +69,10 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
   );
 }
 
-function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
+export function TabsContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
@@ -75,5 +81,3 @@ function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPr
     />
   );
 }
-
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants };

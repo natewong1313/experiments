@@ -1,7 +1,7 @@
 import type { SessionUpdate } from "./generated";
 import { contentText } from "./content";
 
-function sessionUpdateText(update: SessionUpdate): string {
+export function sessionUpdateText(update: SessionUpdate): string {
   switch (update.sessionUpdate) {
     case "user_message_chunk":
     case "agent_message_chunk":
@@ -84,5 +84,3 @@ function sessionUpdateText(update: SessionUpdate): string {
     }
   }
 }
-
-export { sessionUpdateText };

@@ -56,27 +56,27 @@ import {
   SubagentSessionCapabilitiesOutboundSchema,
 } from "./schemas-8";
 
-const RequiresActionStateUpdateSchema = z.looseObject({
+export const RequiresActionStateUpdateSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const RequiresActionStateUpdateOutboundSchema = z.strictObject({
+export const RequiresActionStateUpdateOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type RequiresActionStateUpdate = z.output<typeof RequiresActionStateUpdateSchema>;
+export type RequiresActionStateUpdate = z.output<typeof RequiresActionStateUpdateSchema>;
 
-const UnknownStateUpdateSchema = z.looseObject({
+export const UnknownStateUpdateSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const UnknownStateUpdateOutboundSchema = z.strictObject({
+export const UnknownStateUpdateOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type UnknownStateUpdate = z.output<typeof UnknownStateUpdateSchema>;
+export type UnknownStateUpdate = z.output<typeof UnknownStateUpdateSchema>;
 
-const StateUpdateSchema = z.union([
+export const StateUpdateSchema = z.union([
   z.looseObject({
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
     state: z.literal("running"),
@@ -103,7 +103,7 @@ const StateUpdateSchema = z.union([
     ),
 ]);
 
-const StateUpdateOutboundSchema = z.union([
+export const StateUpdateOutboundSchema = z.union([
   z.strictObject({
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
     state: z.literal("running"),
@@ -130,9 +130,9 @@ const StateUpdateOutboundSchema = z.union([
     ),
 ]);
 
-type StateUpdate = z.output<typeof StateUpdateSchema>;
+export type StateUpdate = z.output<typeof StateUpdateSchema>;
 
-const SubagentUpdateSchema = z.looseObject({
+export const SubagentUpdateSchema = z.looseObject({
   sessionId: SessionIdSchema,
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
@@ -141,7 +141,7 @@ const SubagentUpdateSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SubagentUpdateOutboundSchema = z.strictObject({
+export const SubagentUpdateOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
@@ -150,9 +150,9 @@ const SubagentUpdateOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SubagentUpdate = z.output<typeof SubagentUpdateSchema>;
+export type SubagentUpdate = z.output<typeof SubagentUpdateSchema>;
 
-const SessionMessageSchema = z.looseObject({
+export const SessionMessageSchema = z.looseObject({
   messageId: MessageIdSchema,
   senderSessionId: z.union([SessionIdSchema, z.null()]).optional(),
   recipientSessionId: z.union([SessionIdSchema, z.null()]).optional(),
@@ -160,7 +160,7 @@ const SessionMessageSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionMessageOutboundSchema = z.strictObject({
+export const SessionMessageOutboundSchema = z.strictObject({
   messageId: MessageIdOutboundSchema,
   senderSessionId: z.union([SessionIdOutboundSchema, z.null()]).optional(),
   recipientSessionId: z.union([SessionIdOutboundSchema, z.null()]).optional(),
@@ -168,9 +168,9 @@ const SessionMessageOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionMessage = z.output<typeof SessionMessageSchema>;
+export type SessionMessage = z.output<typeof SessionMessageSchema>;
 
-const SessionMessageChunkSchema = z.looseObject({
+export const SessionMessageChunkSchema = z.looseObject({
   messageId: MessageIdSchema,
   senderSessionId: z.union([SessionIdSchema, z.null()]).optional(),
   recipientSessionId: z.union([SessionIdSchema, z.null()]).optional(),
@@ -178,7 +178,7 @@ const SessionMessageChunkSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionMessageChunkOutboundSchema = z.strictObject({
+export const SessionMessageChunkOutboundSchema = z.strictObject({
   messageId: MessageIdOutboundSchema,
   senderSessionId: z.union([SessionIdOutboundSchema, z.null()]).optional(),
   recipientSessionId: z.union([SessionIdOutboundSchema, z.null()]).optional(),
@@ -186,9 +186,9 @@ const SessionMessageChunkOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionMessageChunk = z.output<typeof SessionMessageChunkSchema>;
+export type SessionMessageChunk = z.output<typeof SessionMessageChunkSchema>;
 
-const SessionUpdateSchema = z.union([
+export const SessionUpdateSchema = z.union([
   z.looseObject({
     content: ContentBlockSchema,
     messageId: z.union([MessageIdSchema, z.null()]).optional(),
@@ -324,7 +324,7 @@ const SessionUpdateSchema = z.union([
   }),
 ]);
 
-const SessionUpdateOutboundSchema = z.union([
+export const SessionUpdateOutboundSchema = z.union([
   z.strictObject({
     content: ContentBlockOutboundSchema,
     messageId: z.union([MessageIdOutboundSchema, z.null()]).optional(),
@@ -460,41 +460,43 @@ const SessionUpdateOutboundSchema = z.union([
   }),
 ]);
 
-type SessionUpdate = z.output<typeof SessionUpdateSchema>;
+export type SessionUpdate = z.output<typeof SessionUpdateSchema>;
 
-const SessionNotificationSchema = z.looseObject({
+export const SessionNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   update: SessionUpdateSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionNotificationOutboundSchema = z.strictObject({
+export const SessionNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   update: SessionUpdateOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionNotification = z.output<typeof SessionNotificationSchema>;
+export type SessionNotification = z.output<typeof SessionNotificationSchema>;
 
-const CompleteElicitationNotificationSchema = z.looseObject({
+export const CompleteElicitationNotificationSchema = z.looseObject({
   elicitationId: ElicitationIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CompleteElicitationNotificationOutboundSchema = z.strictObject({
+export const CompleteElicitationNotificationOutboundSchema = z.strictObject({
   elicitationId: ElicitationIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CompleteElicitationNotification = z.output<typeof CompleteElicitationNotificationSchema>;
+export type CompleteElicitationNotification = z.output<
+  typeof CompleteElicitationNotificationSchema
+>;
 
-const ExtNotificationSchema = z.unknown();
+export const ExtNotificationSchema = z.unknown();
 
-const ExtNotificationOutboundSchema = z.unknown();
+export const ExtNotificationOutboundSchema = z.unknown();
 
-type ExtNotification = z.output<typeof ExtNotificationSchema>;
+export type ExtNotification = z.output<typeof ExtNotificationSchema>;
 
-const AgentNotificationSchema = z.looseObject({
+export const AgentNotificationSchema = z.looseObject({
   method: z.string(),
   params: z
     .union([
@@ -508,7 +510,7 @@ const AgentNotificationSchema = z.looseObject({
     .optional(),
 });
 
-const AgentNotificationOutboundSchema = z.strictObject({
+export const AgentNotificationOutboundSchema = z.strictObject({
   method: z.string(),
   params: z
     .union([
@@ -522,163 +524,104 @@ const AgentNotificationOutboundSchema = z.strictObject({
     .optional(),
 });
 
-type AgentNotification = z.output<typeof AgentNotificationSchema>;
+export type AgentNotification = z.output<typeof AgentNotificationSchema>;
 
-const FileSystemCapabilitiesSchema = z.looseObject({
+export const FileSystemCapabilitiesSchema = z.looseObject({
   readTextFile: z.boolean().optional(),
   writeTextFile: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const FileSystemCapabilitiesOutboundSchema = z.strictObject({
+export const FileSystemCapabilitiesOutboundSchema = z.strictObject({
   readTextFile: z.boolean().optional(),
   writeTextFile: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type FileSystemCapabilities = z.output<typeof FileSystemCapabilitiesSchema>;
+export type FileSystemCapabilities = z.output<typeof FileSystemCapabilitiesSchema>;
 
-const CompactionCapabilitiesSchema = z.looseObject({});
+export const CompactionCapabilitiesSchema = z.looseObject({});
 
-const CompactionCapabilitiesOutboundSchema = z.strictObject({});
+export const CompactionCapabilitiesOutboundSchema = z.strictObject({});
 
-type CompactionCapabilities = z.output<typeof CompactionCapabilitiesSchema>;
+export type CompactionCapabilities = z.output<typeof CompactionCapabilitiesSchema>;
 
-const BooleanConfigOptionCapabilitiesSchema = z.looseObject({
+export const BooleanConfigOptionCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const BooleanConfigOptionCapabilitiesOutboundSchema = z.strictObject({
+export const BooleanConfigOptionCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type BooleanConfigOptionCapabilities = z.output<typeof BooleanConfigOptionCapabilitiesSchema>;
+export type BooleanConfigOptionCapabilities = z.output<
+  typeof BooleanConfigOptionCapabilitiesSchema
+>;
 
-const SessionConfigOptionsCapabilitiesSchema = z.looseObject({
+export const SessionConfigOptionsCapabilitiesSchema = z.looseObject({
   boolean: z.union([BooleanConfigOptionCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionConfigOptionsCapabilitiesOutboundSchema = z.strictObject({
+export const SessionConfigOptionsCapabilitiesOutboundSchema = z.strictObject({
   boolean: z.union([BooleanConfigOptionCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionConfigOptionsCapabilities = z.output<typeof SessionConfigOptionsCapabilitiesSchema>;
+export type SessionConfigOptionsCapabilities = z.output<
+  typeof SessionConfigOptionsCapabilitiesSchema
+>;
 
-const NoticeCapabilitiesSchema = z.looseObject({});
+export const NoticeCapabilitiesSchema = z.looseObject({});
 
-const NoticeCapabilitiesOutboundSchema = z.strictObject({});
+export const NoticeCapabilitiesOutboundSchema = z.strictObject({});
 
-type NoticeCapabilities = z.output<typeof NoticeCapabilitiesSchema>;
+export type NoticeCapabilities = z.output<typeof NoticeCapabilitiesSchema>;
 
-const ClientSessionCapabilitiesSchema = z.looseObject({
+export const ClientSessionCapabilitiesSchema = z.looseObject({
   compaction: z.union([CompactionCapabilitiesSchema, z.null()]).optional(),
   configOptions: z.union([SessionConfigOptionsCapabilitiesSchema, z.null()]).optional(),
   notices: z.union([NoticeCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ClientSessionCapabilitiesOutboundSchema = z.strictObject({
+export const ClientSessionCapabilitiesOutboundSchema = z.strictObject({
   compaction: z.union([CompactionCapabilitiesOutboundSchema, z.null()]).optional(),
   configOptions: z.union([SessionConfigOptionsCapabilitiesOutboundSchema, z.null()]).optional(),
   notices: z.union([NoticeCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ClientSessionCapabilities = z.output<typeof ClientSessionCapabilitiesSchema>;
+export type ClientSessionCapabilities = z.output<typeof ClientSessionCapabilitiesSchema>;
 
-const SubagentCapabilitiesSchema = z.looseObject({
+export const SubagentCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SubagentCapabilitiesOutboundSchema = z.strictObject({
+export const SubagentCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SubagentCapabilities = z.output<typeof SubagentCapabilitiesSchema>;
+export type SubagentCapabilities = z.output<typeof SubagentCapabilitiesSchema>;
 
-const PlanCapabilitiesSchema = z.looseObject({
+export const PlanCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PlanCapabilitiesOutboundSchema = z.strictObject({
+export const PlanCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PlanCapabilities = z.output<typeof PlanCapabilitiesSchema>;
+export type PlanCapabilities = z.output<typeof PlanCapabilitiesSchema>;
 
-const AuthCapabilitiesSchema = z.looseObject({
+export const AuthCapabilitiesSchema = z.looseObject({
   terminal: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const AuthCapabilitiesOutboundSchema = z.strictObject({
+export const AuthCapabilitiesOutboundSchema = z.strictObject({
   terminal: z.boolean().optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type AuthCapabilities = z.output<typeof AuthCapabilitiesSchema>;
-
-export {
-  RequiresActionStateUpdateSchema,
-  RequiresActionStateUpdateOutboundSchema,
-  type RequiresActionStateUpdate,
-  UnknownStateUpdateSchema,
-  UnknownStateUpdateOutboundSchema,
-  type UnknownStateUpdate,
-  StateUpdateSchema,
-  StateUpdateOutboundSchema,
-  type StateUpdate,
-  SubagentUpdateSchema,
-  SubagentUpdateOutboundSchema,
-  type SubagentUpdate,
-  SessionMessageSchema,
-  SessionMessageOutboundSchema,
-  type SessionMessage,
-  SessionMessageChunkSchema,
-  SessionMessageChunkOutboundSchema,
-  type SessionMessageChunk,
-  SessionUpdateSchema,
-  SessionUpdateOutboundSchema,
-  type SessionUpdate,
-  SessionNotificationSchema,
-  SessionNotificationOutboundSchema,
-  type SessionNotification,
-  CompleteElicitationNotificationSchema,
-  CompleteElicitationNotificationOutboundSchema,
-  type CompleteElicitationNotification,
-  ExtNotificationSchema,
-  ExtNotificationOutboundSchema,
-  type ExtNotification,
-  AgentNotificationSchema,
-  AgentNotificationOutboundSchema,
-  type AgentNotification,
-  FileSystemCapabilitiesSchema,
-  FileSystemCapabilitiesOutboundSchema,
-  type FileSystemCapabilities,
-  CompactionCapabilitiesSchema,
-  CompactionCapabilitiesOutboundSchema,
-  type CompactionCapabilities,
-  BooleanConfigOptionCapabilitiesSchema,
-  BooleanConfigOptionCapabilitiesOutboundSchema,
-  type BooleanConfigOptionCapabilities,
-  SessionConfigOptionsCapabilitiesSchema,
-  SessionConfigOptionsCapabilitiesOutboundSchema,
-  type SessionConfigOptionsCapabilities,
-  NoticeCapabilitiesSchema,
-  NoticeCapabilitiesOutboundSchema,
-  type NoticeCapabilities,
-  ClientSessionCapabilitiesSchema,
-  ClientSessionCapabilitiesOutboundSchema,
-  type ClientSessionCapabilities,
-  SubagentCapabilitiesSchema,
-  SubagentCapabilitiesOutboundSchema,
-  type SubagentCapabilities,
-  PlanCapabilitiesSchema,
-  PlanCapabilitiesOutboundSchema,
-  type PlanCapabilities,
-  AuthCapabilitiesSchema,
-  AuthCapabilitiesOutboundSchema,
-  type AuthCapabilities,
-};
+export type AuthCapabilities = z.output<typeof AuthCapabilitiesSchema>;

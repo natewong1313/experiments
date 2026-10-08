@@ -8,47 +8,47 @@ import {
 import { ChatInputRequestSchema, ChatInputResponseKindSchema } from "./input";
 import { ToolCallStateSchema } from "./tool-call";
 
-const MarkdownResponsePartSchema = z.strictObject({
+export const MarkdownResponsePartSchema = z.strictObject({
   kind: z.literal("markdown"),
   id: z.string(),
   content: z.string(),
 });
 
-const ResourceResponsePartSchema = z.strictObject({
+export const ResourceResponsePartSchema = z.strictObject({
   ...ContentRefSchema.shape,
   kind: z.literal("contentRef"),
 });
 
-const ToolCallResponsePartSchema = z.strictObject({
+export const ToolCallResponsePartSchema = z.strictObject({
   kind: z.literal("toolCall"),
   toolCall: ToolCallStateSchema,
 });
 
-const ReasoningResponsePartSchema = z.strictObject({
+export const ReasoningResponsePartSchema = z.strictObject({
   kind: z.literal("reasoning"),
   id: z.string(),
   content: z.string(),
 });
 
-const SystemNotificationResponsePartSchema = z.strictObject({
+export const SystemNotificationResponsePartSchema = z.strictObject({
   kind: z.literal("systemNotification"),
   content: StringOrMarkdownSchema,
   _meta: metaSchema.optional(),
 });
 
-const InputRequestResponsePartSchema = z.strictObject({
+export const InputRequestResponsePartSchema = z.strictObject({
   kind: z.literal("inputRequest"),
   request: ChatInputRequestSchema,
   response: ChatInputResponseKindSchema.optional(),
 });
 
-const ErrorResponsePartSchema = z.strictObject({
+export const ErrorResponsePartSchema = z.strictObject({
   kind: z.literal("error"),
   error: ErrorInfoSchema,
   resumable: z.boolean().optional(),
 });
 
-const ResponsePartSchema = z.discriminatedUnion("kind", [
+export const ResponsePartSchema = z.discriminatedUnion("kind", [
   MarkdownResponsePartSchema,
   ResourceResponsePartSchema,
   ToolCallResponsePartSchema,
@@ -58,37 +58,18 @@ const ResponsePartSchema = z.discriminatedUnion("kind", [
   ErrorResponsePartSchema,
 ]);
 
-type MarkdownResponsePart = z.output<typeof MarkdownResponsePartSchema>;
+export type MarkdownResponsePart = z.output<typeof MarkdownResponsePartSchema>;
 
-type ResourceResponsePart = z.output<typeof ResourceResponsePartSchema>;
+export type ResourceResponsePart = z.output<typeof ResourceResponsePartSchema>;
 
-type ToolCallResponsePart = z.output<typeof ToolCallResponsePartSchema>;
+export type ToolCallResponsePart = z.output<typeof ToolCallResponsePartSchema>;
 
-type ReasoningResponsePart = z.output<typeof ReasoningResponsePartSchema>;
+export type ReasoningResponsePart = z.output<typeof ReasoningResponsePartSchema>;
 
-type SystemNotificationResponsePart = z.output<typeof SystemNotificationResponsePartSchema>;
+export type SystemNotificationResponsePart = z.output<typeof SystemNotificationResponsePartSchema>;
 
-type InputRequestResponsePart = z.output<typeof InputRequestResponsePartSchema>;
+export type InputRequestResponsePart = z.output<typeof InputRequestResponsePartSchema>;
 
-type ErrorResponsePart = z.output<typeof ErrorResponsePartSchema>;
+export type ErrorResponsePart = z.output<typeof ErrorResponsePartSchema>;
 
-type ResponsePart = z.output<typeof ResponsePartSchema>;
-
-export {
-  ErrorResponsePartSchema,
-  InputRequestResponsePartSchema,
-  MarkdownResponsePartSchema,
-  ReasoningResponsePartSchema,
-  ResourceResponsePartSchema,
-  ResponsePartSchema,
-  SystemNotificationResponsePartSchema,
-  ToolCallResponsePartSchema,
-  type ErrorResponsePart,
-  type InputRequestResponsePart,
-  type MarkdownResponsePart,
-  type ReasoningResponsePart,
-  type ResourceResponsePart,
-  type ResponsePart,
-  type SystemNotificationResponsePart,
-  type ToolCallResponsePart,
-};
+export type ResponsePart = z.output<typeof ResponsePartSchema>;

@@ -7,7 +7,7 @@ import type {
 } from "@experiments/protocol-schemas/ahp";
 
 // External input is validated by the wire schemas before reaching these reducers.
-function reduceRoot(state: RootState, action: StateAction): RootState {
+export function reduceRoot(state: RootState, action: StateAction): RootState {
   // SAFETY: Persisted state and validated actions use the SDK's wire values for nominal enums.
   // oxlint-disable-next-line typescript/consistent-type-assertions, typescript/no-unsafe-type-assertion
   const sdkState = state as Parameters<typeof rootReducer>[0];
@@ -18,7 +18,7 @@ function reduceRoot(state: RootState, action: StateAction): RootState {
   return rootReducer(sdkState, sdkAction);
 }
 
-function reduceSession(state: SessionState, action: StateAction): SessionState {
+export function reduceSession(state: SessionState, action: StateAction): SessionState {
   // SAFETY: Persisted state and validated actions use the SDK's wire values for nominal enums.
   // oxlint-disable-next-line typescript/consistent-type-assertions, typescript/no-unsafe-type-assertion
   const sdkState = state as Parameters<typeof sessionReducer>[0];
@@ -29,7 +29,7 @@ function reduceSession(state: SessionState, action: StateAction): SessionState {
   return sessionReducer(sdkState, sdkAction);
 }
 
-function reduceChat(state: ChatState, action: StateAction): ChatState {
+export function reduceChat(state: ChatState, action: StateAction): ChatState {
   // SAFETY: Persisted state and validated actions use the SDK's wire values for nominal enums.
   // oxlint-disable-next-line typescript/consistent-type-assertions, typescript/no-unsafe-type-assertion
   const sdkState = state as Parameters<typeof chatReducer>[0];
@@ -39,5 +39,3 @@ function reduceChat(state: ChatState, action: StateAction): ChatState {
 
   return chatReducer(sdkState, sdkAction);
 }
-
-export { reduceRoot, reduceSession, reduceChat };

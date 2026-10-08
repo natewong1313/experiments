@@ -7,7 +7,7 @@ const STATUS_SWITCHING_PROTOCOLS = 101;
 
 type CustomEnv = { ACP_BACKEND: DurableObjectNamespace<AcpBackend> };
 
-class CustomHost extends AgentHost<CustomEnv> {
+export class CustomHost extends AgentHost<CustomEnv> {
   private readonly config: AgentConfig = {
     agent: {
       provider: "custom",
@@ -42,5 +42,3 @@ class CustomHost extends AgentHost<CustomEnv> {
     return websocketStream(response.webSocket);
   }
 }
-
-export { CustomHost };

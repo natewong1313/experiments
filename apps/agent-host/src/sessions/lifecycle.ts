@@ -17,7 +17,7 @@ type SessionLifecycleParams = {
   waitUntil: WaitUntil;
 };
 
-class SessionLifecycle {
+export class SessionLifecycle {
   private readonly queries: HostQueries;
   private readonly mutations: HostMutations;
   private readonly agents: AgentConnections;
@@ -135,5 +135,3 @@ class SessionLifecycle {
     this.clients.broadcast(this.mutations.applyAction(channel, action));
   }
 }
-
-export { SessionLifecycle };

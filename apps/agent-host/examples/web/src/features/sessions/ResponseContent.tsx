@@ -141,6 +141,4 @@ function ResponseContentView({ part }: ResponseContentParams): JSX.Element {
   }
 }
 
-const ResponseContent = memo(ResponseContentView);
-
-export { ResponseContent };
+export const ResponseContent = memo(ResponseContentView);

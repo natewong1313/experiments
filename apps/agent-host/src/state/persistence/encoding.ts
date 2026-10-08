@@ -12,7 +12,7 @@ import type {
 
 const PIECE_CHARACTERS = 16_384;
 
-const JSON_PIECE_CHARACTERS = 8192;
+export const JSON_PIECE_CHARACTERS = 8192;
 
 const HIGH_SURROGATE_START = 0xd8_00;
 
@@ -29,11 +29,11 @@ type StoredValue =
   | string
   | ReturnType<typeof metaSchema.parse>;
 
-function encodedSize(value: StoredValue): number {
+export function encodedSize(value: StoredValue): number {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength;
 }
 
-function pieceEnd(text: string, offset: number, limit = PIECE_CHARACTERS): number {
+export function pieceEnd(text: string, offset: number, limit = PIECE_CHARACTERS): number {
   const end = Math.min(offset + limit, text.length);
   const last = text.charCodeAt(end - 1);
 
@@ -44,10 +44,8 @@ function pieceEnd(text: string, offset: number, limit = PIECE_CHARACTERS): numbe
 
 type StoredPiece = { data: string };
 
-function readPiece(piece: StoredPiece): string {
+export function readPiece(piece: StoredPiece): string {
   const text: unknown = JSON.parse(piece.data);
 
   return z.string().parse(text);
 }
-
-export { encodedSize, pieceEnd, readPiece, JSON_PIECE_CHARACTERS };

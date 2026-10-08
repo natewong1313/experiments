@@ -10,7 +10,7 @@ import { ChatSummarySchema } from "../chat/state";
 import { ChangesetSchema } from "../changeset";
 import { SessionActiveClientSchema, SessionInputRequestSchema } from "./state";
 
-const SessionActionSchema = z.discriminatedUnion("type", [
+export const SessionActionSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("session/ready") }),
   z.strictObject({
     type: z.literal("session/creationFailed"),
@@ -125,6 +125,4 @@ const SessionActionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-type SessionAction = z.output<typeof SessionActionSchema>;
-
-export { SessionActionSchema, type SessionAction };
+export type SessionAction = z.output<typeof SessionActionSchema>;

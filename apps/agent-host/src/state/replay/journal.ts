@@ -17,7 +17,7 @@ type SaveDispatchResultParams = {
   envelope: ActionEnvelope;
 };
 
-class ActionJournal {
+export class ActionJournal {
   private readonly db: Database;
 
   constructor(db: Database) {
@@ -190,5 +190,3 @@ class ActionJournal {
     return row;
   }
 }
-
-export { ActionJournal };

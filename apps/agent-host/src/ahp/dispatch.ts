@@ -14,7 +14,7 @@ type ActionDispatchParams = {
 
 type ReadyConnection = Extract<Connection, { phase: "ready" }>;
 
-class ActionDispatch {
+export class ActionDispatch {
   private readonly queries: HostQueries;
   private readonly mutations: HostMutations;
   private readonly clients: AhpClients;
@@ -100,5 +100,3 @@ class ActionDispatch {
     }
   }
 }
-
-export { ActionDispatch };

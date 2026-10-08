@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { uriSchema } from "../common";
 
-const TerminalLifecycleStateSchema = z.discriminatedUnion("status", [
+export const TerminalLifecycleStateSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("running") }),
   z.strictObject({
     status: z.literal("exited"),
@@ -9,7 +9,7 @@ const TerminalLifecycleStateSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-const TerminalClaimSchema = z.discriminatedUnion("kind", [
+export const TerminalClaimSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("client"),
     clientId: z.string(),
@@ -23,12 +23,12 @@ const TerminalClaimSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const TerminalUnclassifiedPartSchema = z.strictObject({
+export const TerminalUnclassifiedPartSchema = z.strictObject({
   type: z.literal("unclassified"),
   value: z.string(),
 });
 
-const TerminalCommandPartSchema = z.strictObject({
+export const TerminalCommandPartSchema = z.strictObject({
   type: z.literal("command"),
   commandId: z.string(),
   commandLine: z.string(),
@@ -39,19 +39,19 @@ const TerminalCommandPartSchema = z.strictObject({
   durationMs: z.number().optional(),
 });
 
-const TerminalContentPartSchema = z.union([
+export const TerminalContentPartSchema = z.union([
   TerminalUnclassifiedPartSchema,
   TerminalCommandPartSchema,
 ]);
 
-const TerminalInfoSchema = z.strictObject({
+export const TerminalInfoSchema = z.strictObject({
   resource: uriSchema,
   title: z.string(),
   claim: TerminalClaimSchema,
   lifecycle: TerminalLifecycleStateSchema,
 });
 
-const TerminalStateSchema = z.strictObject({
+export const TerminalStateSchema = z.strictObject({
   title: z.string(),
   cwd: uriSchema.optional(),
   cols: z.number().optional(),
@@ -63,7 +63,7 @@ const TerminalStateSchema = z.strictObject({
   isPty: z.boolean().optional(),
 });
 
-const TerminalActionSchema = z.discriminatedUnion("type", [
+export const TerminalActionSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("terminal/data"), data: z.string() }),
   z.strictObject({ type: z.literal("terminal/input"), data: z.string() }),
   z.strictObject({
@@ -100,37 +100,18 @@ const TerminalActionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-type TerminalLifecycleState = z.output<typeof TerminalLifecycleStateSchema>;
+export type TerminalLifecycleState = z.output<typeof TerminalLifecycleStateSchema>;
 
-type TerminalClaim = z.output<typeof TerminalClaimSchema>;
+export type TerminalClaim = z.output<typeof TerminalClaimSchema>;
 
-type TerminalUnclassifiedPart = z.output<typeof TerminalUnclassifiedPartSchema>;
+export type TerminalUnclassifiedPart = z.output<typeof TerminalUnclassifiedPartSchema>;
 
-type TerminalCommandPart = z.output<typeof TerminalCommandPartSchema>;
+export type TerminalCommandPart = z.output<typeof TerminalCommandPartSchema>;
 
-type TerminalContentPart = z.output<typeof TerminalContentPartSchema>;
+export type TerminalContentPart = z.output<typeof TerminalContentPartSchema>;
 
-type TerminalInfo = z.output<typeof TerminalInfoSchema>;
+export type TerminalInfo = z.output<typeof TerminalInfoSchema>;
 
-type TerminalState = z.output<typeof TerminalStateSchema>;
+export type TerminalState = z.output<typeof TerminalStateSchema>;
 
-type TerminalAction = z.output<typeof TerminalActionSchema>;
-
-export {
-  TerminalActionSchema,
-  TerminalClaimSchema,
-  TerminalCommandPartSchema,
-  TerminalContentPartSchema,
-  TerminalInfoSchema,
-  TerminalLifecycleStateSchema,
-  TerminalStateSchema,
-  TerminalUnclassifiedPartSchema,
-  type TerminalAction,
-  type TerminalClaim,
-  type TerminalCommandPart,
-  type TerminalContentPart,
-  type TerminalInfo,
-  type TerminalLifecycleState,
-  type TerminalState,
-  type TerminalUnclassifiedPart,
-};
+export type TerminalAction = z.output<typeof TerminalActionSchema>;

@@ -70,13 +70,18 @@ import {
   NesOpenFileOutboundSchema,
 } from "./schemas-11";
 
-const NesDiagnosticSeveritySchema = z.enum(["error", "warning", "information", "hint"]);
+export const NesDiagnosticSeveritySchema = z.enum(["error", "warning", "information", "hint"]);
 
-const NesDiagnosticSeverityOutboundSchema = z.enum(["error", "warning", "information", "hint"]);
+export const NesDiagnosticSeverityOutboundSchema = z.enum([
+  "error",
+  "warning",
+  "information",
+  "hint",
+]);
 
-type NesDiagnosticSeverity = z.output<typeof NesDiagnosticSeveritySchema>;
+export type NesDiagnosticSeverity = z.output<typeof NesDiagnosticSeveritySchema>;
 
-const NesDiagnosticSchema = z.looseObject({
+export const NesDiagnosticSchema = z.looseObject({
   uri: z.string(),
   range: RangeSchema,
   severity: NesDiagnosticSeveritySchema,
@@ -84,7 +89,7 @@ const NesDiagnosticSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesDiagnosticOutboundSchema = z.strictObject({
+export const NesDiagnosticOutboundSchema = z.strictObject({
   uri: z.string(),
   range: RangeOutboundSchema,
   severity: NesDiagnosticSeverityOutboundSchema,
@@ -92,9 +97,9 @@ const NesDiagnosticOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesDiagnostic = z.output<typeof NesDiagnosticSchema>;
+export type NesDiagnostic = z.output<typeof NesDiagnosticSchema>;
 
-const NesSuggestContextSchema = z.looseObject({
+export const NesSuggestContextSchema = z.looseObject({
   recentFiles: z.union([z.array(NesRecentFileSchema), z.null()]).optional(),
   relatedSnippets: z.union([z.array(NesRelatedSnippetSchema), z.null()]).optional(),
   editHistory: z.union([z.array(NesEditHistoryEntrySchema), z.null()]).optional(),
@@ -104,7 +109,7 @@ const NesSuggestContextSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesSuggestContextOutboundSchema = z.strictObject({
+export const NesSuggestContextOutboundSchema = z.strictObject({
   recentFiles: z.union([z.array(NesRecentFileOutboundSchema), z.null()]).optional(),
   relatedSnippets: z.union([z.array(NesRelatedSnippetOutboundSchema), z.null()]).optional(),
   editHistory: z.union([z.array(NesEditHistoryEntryOutboundSchema), z.null()]).optional(),
@@ -114,9 +119,9 @@ const NesSuggestContextOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesSuggestContext = z.output<typeof NesSuggestContextSchema>;
+export type NesSuggestContext = z.output<typeof NesSuggestContextSchema>;
 
-const SuggestNesRequestSchema = z.looseObject({
+export const SuggestNesRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   uri: z.string(),
   version: z.number().refine(Number.isInteger, { error: "Expected integer" }),
@@ -127,7 +132,7 @@ const SuggestNesRequestSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SuggestNesRequestOutboundSchema = z.strictObject({
+export const SuggestNesRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   uri: z.string(),
   version: z.number().refine(Number.isInteger, { error: "Expected integer" }),
@@ -138,21 +143,21 @@ const SuggestNesRequestOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SuggestNesRequest = z.output<typeof SuggestNesRequestSchema>;
+export type SuggestNesRequest = z.output<typeof SuggestNesRequestSchema>;
 
-const CloseNesRequestSchema = z.looseObject({
+export const CloseNesRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CloseNesRequestOutboundSchema = z.strictObject({
+export const CloseNesRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CloseNesRequest = z.output<typeof CloseNesRequestSchema>;
+export type CloseNesRequest = z.output<typeof CloseNesRequestSchema>;
 
-const ClientRequestSchema = z.looseObject({
+export const ClientRequestSchema = z.looseObject({
   id: RequestIdSchema,
   method: z.string(),
   params: z
@@ -184,7 +189,7 @@ const ClientRequestSchema = z.looseObject({
     .optional(),
 });
 
-const ClientRequestOutboundSchema = z.strictObject({
+export const ClientRequestOutboundSchema = z.strictObject({
   id: RequestIdOutboundSchema,
   method: z.string(),
   params: z
@@ -216,43 +221,43 @@ const ClientRequestOutboundSchema = z.strictObject({
     .optional(),
 });
 
-type ClientRequest = z.output<typeof ClientRequestSchema>;
+export type ClientRequest = z.output<typeof ClientRequestSchema>;
 
-const WriteTextFileResponseSchema = z.looseObject({
+export const WriteTextFileResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const WriteTextFileResponseOutboundSchema = z.strictObject({
+export const WriteTextFileResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type WriteTextFileResponse = z.output<typeof WriteTextFileResponseSchema>;
+export type WriteTextFileResponse = z.output<typeof WriteTextFileResponseSchema>;
 
-const ReadTextFileResponseSchema = z.looseObject({
+export const ReadTextFileResponseSchema = z.looseObject({
   content: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ReadTextFileResponseOutboundSchema = z.strictObject({
+export const ReadTextFileResponseOutboundSchema = z.strictObject({
   content: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ReadTextFileResponse = z.output<typeof ReadTextFileResponseSchema>;
+export type ReadTextFileResponse = z.output<typeof ReadTextFileResponseSchema>;
 
-const SelectedPermissionOutcomeSchema = z.looseObject({
+export const SelectedPermissionOutcomeSchema = z.looseObject({
   optionId: PermissionOptionIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SelectedPermissionOutcomeOutboundSchema = z.strictObject({
+export const SelectedPermissionOutcomeOutboundSchema = z.strictObject({
   optionId: PermissionOptionIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SelectedPermissionOutcome = z.output<typeof SelectedPermissionOutcomeSchema>;
+export type SelectedPermissionOutcome = z.output<typeof SelectedPermissionOutcomeSchema>;
 
-const RequestPermissionOutcomeSchema = z.union([
+export const RequestPermissionOutcomeSchema = z.union([
   z.looseObject({ outcome: z.literal("cancelled") }),
   z.looseObject({
     optionId: PermissionOptionIdSchema,
@@ -261,7 +266,7 @@ const RequestPermissionOutcomeSchema = z.union([
   }),
 ]);
 
-const RequestPermissionOutcomeOutboundSchema = z.union([
+export const RequestPermissionOutcomeOutboundSchema = z.union([
   z.strictObject({ outcome: z.literal("cancelled") }),
   z.strictObject({
     optionId: PermissionOptionIdOutboundSchema,
@@ -270,33 +275,33 @@ const RequestPermissionOutcomeOutboundSchema = z.union([
   }),
 ]);
 
-type RequestPermissionOutcome = z.output<typeof RequestPermissionOutcomeSchema>;
+export type RequestPermissionOutcome = z.output<typeof RequestPermissionOutcomeSchema>;
 
-const RequestPermissionResponseSchema = z.looseObject({
+export const RequestPermissionResponseSchema = z.looseObject({
   outcome: RequestPermissionOutcomeSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const RequestPermissionResponseOutboundSchema = z.strictObject({
+export const RequestPermissionResponseOutboundSchema = z.strictObject({
   outcome: RequestPermissionOutcomeOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type RequestPermissionResponse = z.output<typeof RequestPermissionResponseSchema>;
+export type RequestPermissionResponse = z.output<typeof RequestPermissionResponseSchema>;
 
-const CreateTerminalResponseSchema = z.looseObject({
+export const CreateTerminalResponseSchema = z.looseObject({
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CreateTerminalResponseOutboundSchema = z.strictObject({
+export const CreateTerminalResponseOutboundSchema = z.strictObject({
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CreateTerminalResponse = z.output<typeof CreateTerminalResponseSchema>;
+export type CreateTerminalResponse = z.output<typeof CreateTerminalResponseSchema>;
 
-const TerminalExitStatusSchema = z.looseObject({
+export const TerminalExitStatusSchema = z.looseObject({
   exitCode: z
     .union([
       z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
@@ -307,7 +312,7 @@ const TerminalExitStatusSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const TerminalExitStatusOutboundSchema = z.strictObject({
+export const TerminalExitStatusOutboundSchema = z.strictObject({
   exitCode: z
     .union([
       z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
@@ -318,35 +323,35 @@ const TerminalExitStatusOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type TerminalExitStatus = z.output<typeof TerminalExitStatusSchema>;
+export type TerminalExitStatus = z.output<typeof TerminalExitStatusSchema>;
 
-const TerminalOutputResponseSchema = z.looseObject({
+export const TerminalOutputResponseSchema = z.looseObject({
   output: z.string(),
   truncated: z.boolean(),
   exitStatus: z.union([TerminalExitStatusSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const TerminalOutputResponseOutboundSchema = z.strictObject({
+export const TerminalOutputResponseOutboundSchema = z.strictObject({
   output: z.string(),
   truncated: z.boolean(),
   exitStatus: z.union([TerminalExitStatusOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type TerminalOutputResponse = z.output<typeof TerminalOutputResponseSchema>;
+export type TerminalOutputResponse = z.output<typeof TerminalOutputResponseSchema>;
 
-const ReleaseTerminalResponseSchema = z.looseObject({
+export const ReleaseTerminalResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ReleaseTerminalResponseOutboundSchema = z.strictObject({
+export const ReleaseTerminalResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ReleaseTerminalResponse = z.output<typeof ReleaseTerminalResponseSchema>;
+export type ReleaseTerminalResponse = z.output<typeof ReleaseTerminalResponseSchema>;
 
-const WaitForTerminalExitResponseSchema = z.looseObject({
+export const WaitForTerminalExitResponseSchema = z.looseObject({
   exitCode: z
     .union([
       z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
@@ -357,7 +362,7 @@ const WaitForTerminalExitResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const WaitForTerminalExitResponseOutboundSchema = z.strictObject({
+export const WaitForTerminalExitResponseOutboundSchema = z.strictObject({
   exitCode: z
     .union([
       z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
@@ -368,19 +373,19 @@ const WaitForTerminalExitResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type WaitForTerminalExitResponse = z.output<typeof WaitForTerminalExitResponseSchema>;
+export type WaitForTerminalExitResponse = z.output<typeof WaitForTerminalExitResponseSchema>;
 
-const KillTerminalResponseSchema = z.looseObject({
+export const KillTerminalResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const KillTerminalResponseOutboundSchema = z.strictObject({
+export const KillTerminalResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type KillTerminalResponse = z.output<typeof KillTerminalResponseSchema>;
+export type KillTerminalResponse = z.output<typeof KillTerminalResponseSchema>;
 
-const ElicitationContentValueSchema = z.union([
+export const ElicitationContentValueSchema = z.union([
   z.string(),
   z.number().refine(Number.isInteger, { error: "Expected integer" }),
   z.number(),
@@ -388,7 +393,7 @@ const ElicitationContentValueSchema = z.union([
   z.array(z.string()),
 ]);
 
-const ElicitationContentValueOutboundSchema = z.union([
+export const ElicitationContentValueOutboundSchema = z.union([
   z.string(),
   z.number().refine(Number.isInteger, { error: "Expected integer" }),
   z.number(),
@@ -396,21 +401,21 @@ const ElicitationContentValueOutboundSchema = z.union([
   z.array(z.string()),
 ]);
 
-type ElicitationContentValue = z.output<typeof ElicitationContentValueSchema>;
+export type ElicitationContentValue = z.output<typeof ElicitationContentValueSchema>;
 
-const ElicitationAcceptActionSchema = z.looseObject({
+export const ElicitationAcceptActionSchema = z.looseObject({
   content: z.union([z.record(z.string(), ElicitationContentValueSchema), z.null()]).optional(),
 });
 
-const ElicitationAcceptActionOutboundSchema = z.strictObject({
+export const ElicitationAcceptActionOutboundSchema = z.strictObject({
   content: z
     .union([z.record(z.string(), ElicitationContentValueOutboundSchema), z.null()])
     .optional(),
 });
 
-type ElicitationAcceptAction = z.output<typeof ElicitationAcceptActionSchema>;
+export type ElicitationAcceptAction = z.output<typeof ElicitationAcceptActionSchema>;
 
-const CreateElicitationResponseSchema = z.union([
+export const CreateElicitationResponseSchema = z.union([
   z.looseObject({
     content: z.union([z.record(z.string(), ElicitationContentValueSchema), z.null()]).optional(),
     action: z.literal("accept"),
@@ -434,7 +439,7 @@ const CreateElicitationResponseSchema = z.union([
     }),
 ]);
 
-const CreateElicitationResponseOutboundSchema = z.union([
+export const CreateElicitationResponseOutboundSchema = z.union([
   z.strictObject({
     content: z
       .union([z.record(z.string(), ElicitationContentValueOutboundSchema), z.null()])
@@ -460,67 +465,4 @@ const CreateElicitationResponseOutboundSchema = z.union([
     }),
 ]);
 
-type CreateElicitationResponse = z.output<typeof CreateElicitationResponseSchema>;
-
-export {
-  NesDiagnosticSeveritySchema,
-  NesDiagnosticSeverityOutboundSchema,
-  type NesDiagnosticSeverity,
-  NesDiagnosticSchema,
-  NesDiagnosticOutboundSchema,
-  type NesDiagnostic,
-  NesSuggestContextSchema,
-  NesSuggestContextOutboundSchema,
-  type NesSuggestContext,
-  SuggestNesRequestSchema,
-  SuggestNesRequestOutboundSchema,
-  type SuggestNesRequest,
-  CloseNesRequestSchema,
-  CloseNesRequestOutboundSchema,
-  type CloseNesRequest,
-  ClientRequestSchema,
-  ClientRequestOutboundSchema,
-  type ClientRequest,
-  WriteTextFileResponseSchema,
-  WriteTextFileResponseOutboundSchema,
-  type WriteTextFileResponse,
-  ReadTextFileResponseSchema,
-  ReadTextFileResponseOutboundSchema,
-  type ReadTextFileResponse,
-  SelectedPermissionOutcomeSchema,
-  SelectedPermissionOutcomeOutboundSchema,
-  type SelectedPermissionOutcome,
-  RequestPermissionOutcomeSchema,
-  RequestPermissionOutcomeOutboundSchema,
-  type RequestPermissionOutcome,
-  RequestPermissionResponseSchema,
-  RequestPermissionResponseOutboundSchema,
-  type RequestPermissionResponse,
-  CreateTerminalResponseSchema,
-  CreateTerminalResponseOutboundSchema,
-  type CreateTerminalResponse,
-  TerminalExitStatusSchema,
-  TerminalExitStatusOutboundSchema,
-  type TerminalExitStatus,
-  TerminalOutputResponseSchema,
-  TerminalOutputResponseOutboundSchema,
-  type TerminalOutputResponse,
-  ReleaseTerminalResponseSchema,
-  ReleaseTerminalResponseOutboundSchema,
-  type ReleaseTerminalResponse,
-  WaitForTerminalExitResponseSchema,
-  WaitForTerminalExitResponseOutboundSchema,
-  type WaitForTerminalExitResponse,
-  KillTerminalResponseSchema,
-  KillTerminalResponseOutboundSchema,
-  type KillTerminalResponse,
-  ElicitationContentValueSchema,
-  ElicitationContentValueOutboundSchema,
-  type ElicitationContentValue,
-  ElicitationAcceptActionSchema,
-  ElicitationAcceptActionOutboundSchema,
-  type ElicitationAcceptAction,
-  CreateElicitationResponseSchema,
-  CreateElicitationResponseOutboundSchema,
-  type CreateElicitationResponse,
-};
+export type CreateElicitationResponse = z.output<typeof CreateElicitationResponseSchema>;

@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { RobotIcon } from "@phosphor-icons/react";
 
-function EmptyState(): JSX.Element {
+export function EmptyState(): JSX.Element {
   return (
     <div className="grid justify-items-center gap-3 py-16 text-center">
       <div
@@ -19,5 +19,3 @@ function EmptyState(): JSX.Element {
     </div>
   );
 }
-
-export { EmptyState };

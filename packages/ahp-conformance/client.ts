@@ -17,15 +17,15 @@ import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
 import { expect, test as baseTest } from "vitest";
 import { withCleanup } from "./cleanup";
 
-const ROOT = "ahp-root://";
+export const ROOT = "ahp-root://";
 
-const VERSION = PROTOCOL_VERSION;
+export const VERSION = PROTOCOL_VERSION;
 
-const SESSION = process.env.AHP_SESSION_URI;
+export const SESSION = process.env.AHP_SESSION_URI;
 
-const MUTATIONS = process.env.AHP_TEST_MUTATIONS === "1";
+export const MUTATIONS = process.env.AHP_TEST_MUTATIONS === "1";
 
-function sessionUri(): string {
+export function sessionUri(): string {
   if (!SESSION) {
     throw new Error("Set AHP_SESSION_URI for session probes");
   }
@@ -33,13 +33,13 @@ function sessionUri(): string {
   return SESSION;
 }
 
-const test = baseTest.extend<{ client: AhpClient }>({
+export const test = baseTest.extend<{ client: AhpClient }>({
   client: async ({ task: _task }, use) => {
     await withClient(use);
   },
 });
 
-function endpoint(): string {
+export function endpoint(): string {
   const url = process.env.AHP_URL;
 
   if (!url) {
@@ -49,7 +49,7 @@ function endpoint(): string {
   return url;
 }
 
-async function withClient<T>(
+export async function withClient<T>(
   run: (client: AhpClient) => Promise<T>,
   url: string = endpoint(),
 ): Promise<T> {
@@ -68,7 +68,7 @@ async function withClient<T>(
   );
 }
 
-async function initialized(
+export async function initialized(
   client: AhpClient,
   subscriptions: string[] = [],
 ): Promise<InitializeResult> {
@@ -83,7 +83,7 @@ async function initialized(
 
 type StateParser<T> = { parse(value: ChannelState): T };
 
-function expectState<T>(
+export function expectState<T>(
   snapshot: Snapshot | undefined,
   resource: string,
   parseState: StateParser<T>,
@@ -94,19 +94,19 @@ function expectState<T>(
   return parseState.parse(parsed.state);
 }
 
-function expectRootState(snapshot: Snapshot | undefined): RootState {
+export function expectRootState(snapshot: Snapshot | undefined): RootState {
   return expectState(snapshot, ROOT, RootStateSchema);
 }
 
-function expectSessionState(snapshot: Snapshot | undefined, resource: string): SessionState {
+export function expectSessionState(snapshot: Snapshot | undefined, resource: string): SessionState {
   return expectState(snapshot, resource, SessionStateSchema);
 }
 
-function expectChatState(snapshot: Snapshot | undefined, resource: string): ChatState {
+export function expectChatState(snapshot: Snapshot | undefined, resource: string): ChatState {
   return expectState(snapshot, resource, ChatStateSchema);
 }
 
-async function expectRpcError<T>(run: () => Promise<T>, code: number): Promise<RpcError> {
+export async function expectRpcError<T>(run: () => Promise<T>, code: number): Promise<RpcError> {
   try {
     await run();
   } catch (error) {
@@ -124,7 +124,7 @@ async function expectRpcError<T>(run: () => Promise<T>, code: number): Promise<R
   throw new Error(`Expected AHP error ${code}`);
 }
 
-async function sessionSnapshot(
+export async function sessionSnapshot(
   client: AhpClient,
   resource: string = sessionUri(),
 ): Promise<SessionState> {
@@ -136,7 +136,7 @@ async function sessionSnapshot(
 
 type ChatSnapshot = { uri: string; session: SessionState; state: ChatState };
 
-async function chatSnapshot(
+export async function chatSnapshot(
   client: AhpClient,
   resource: string = sessionUri(),
 ): Promise<ChatSnapshot> {
@@ -168,22 +168,3 @@ async function chatSnapshot(
     state: expectChatState(snapshot, chatResource),
   };
 }
-
-export {
-  chatSnapshot,
-  endpoint,
-  expectChatState,
-  expectRootState,
-  expectRpcError,
-  expectSessionState,
-  expectState,
-  initialized,
-  MUTATIONS,
-  ROOT,
-  SESSION,
-  sessionUri,
-  sessionSnapshot,
-  test,
-  VERSION,
-  withClient,
-};

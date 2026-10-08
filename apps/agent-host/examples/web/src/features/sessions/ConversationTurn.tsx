@@ -3,7 +3,7 @@ import { AgentResponse } from "./AgentResponse";
 import { UserMessage } from "./UserMessage";
 import type { ConversationTurnParams } from "./types";
 
-function ConversationTurn({ turn, streaming }: ConversationTurnParams): JSX.Element {
+export function ConversationTurn({ turn, streaming }: ConversationTurnParams): JSX.Element {
   return (
     <article className="grid gap-4" aria-label={streaming ? "Active turn" : "Completed turn"}>
       <UserMessage turn={turn} />
@@ -11,5 +11,3 @@ function ConversationTurn({ turn, streaming }: ConversationTurnParams): JSX.Elem
     </article>
   );
 }
-
-export { ConversationTurn };

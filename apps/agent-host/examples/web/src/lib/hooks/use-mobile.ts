@@ -20,8 +20,6 @@ function getServerSnapshot(): boolean {
   return false;
 }
 
-function useIsMobile(): boolean {
+export function useIsMobile(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
-
-export { useIsMobile };

@@ -24,7 +24,7 @@ const AcpFailureSchema = JsonRpcFailureSchema.extend({
   result: z.never().optional(),
 });
 
-const AcpMessageSchema = z.union([
+export const AcpMessageSchema = z.union([
   AcpCallSchema.loose(),
   AcpSuccessSchema.loose().transform((value) => ({
     ...value,
@@ -33,24 +33,16 @@ const AcpMessageSchema = z.union([
   AcpFailureSchema.extend({ error: ErrorSchema }).loose(),
 ]);
 
-const AcpOutboundMessageSchema = z.union([
+export const AcpOutboundMessageSchema = z.union([
   AcpCallSchema,
   AcpSuccessSchema.transform((value) => ({ ...value, result: value.result })),
   AcpFailureSchema,
 ]);
 
-type AcpError = z.output<typeof ErrorSchema>;
+export type AcpError = z.output<typeof ErrorSchema>;
 
-type AcpMessage = z.output<typeof AcpMessageSchema>;
+export type AcpMessage = z.output<typeof AcpMessageSchema>;
 
-type AcpOutboundMessage = z.output<typeof AcpOutboundMessageSchema>;
+export type AcpOutboundMessage = z.output<typeof AcpOutboundMessageSchema>;
 
 export * from "../jsonrpc";
-
-export {
-  AcpMessageSchema,
-  AcpOutboundMessageSchema,
-  type AcpError,
-  type AcpMessage,
-  type AcpOutboundMessage,
-};

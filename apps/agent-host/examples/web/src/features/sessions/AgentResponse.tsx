@@ -9,7 +9,7 @@ const NO_PARTS = 0;
 
 const VISIBLE_PARTS = 100;
 
-function AgentResponse({ turn, streaming }: ConversationTurnParams): JSX.Element {
+export function AgentResponse({ turn, streaming }: ConversationTurnParams): JSX.Element {
   const [visibleCount, setVisibleCount] = useState(VISIBLE_PARTS);
   const start = Math.max(NO_PARTS, turn.responseParts.size - visibleCount);
   const thinking = streaming && !turn.responseParts.size;
@@ -52,5 +52,3 @@ function AgentResponse({ turn, streaming }: ConversationTurnParams): JSX.Element
     </div>
   );
 }
-
-export { AgentResponse };

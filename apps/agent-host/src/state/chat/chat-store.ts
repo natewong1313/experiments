@@ -14,7 +14,7 @@ const MAX_CHAT_METADATA_BYTES = 65_536;
 
 type ChatStoreParams = { db: Database; turns: TurnStore };
 
-class ChatStore {
+export class ChatStore {
   private readonly db: Database;
   private readonly turns: TurnStore;
 
@@ -97,5 +97,3 @@ class ChatStore {
     this.db.delete(chatsTable).where(eq(chatsTable.uri, uri)).run();
   }
 }
-
-export { ChatStore };

@@ -6,7 +6,7 @@ function isTcpAddress(value: unknown): value is AddressInfo {
   return value !== null && typeof value === "object" && "port" in value;
 }
 
-async function withPeer<T>(
+export async function withPeer<T>(
   onConnection: (socket: WebSocket) => void,
   run: (url: string) => Promise<T>,
 ): Promise<T> {
@@ -59,5 +59,3 @@ async function withPeer<T>(
     },
   );
 }
-
-export { withPeer };

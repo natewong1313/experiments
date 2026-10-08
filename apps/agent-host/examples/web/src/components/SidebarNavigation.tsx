@@ -16,7 +16,7 @@ import { useAgentHost } from "../lib/hooks/use-agent-host";
 
 const NO_SESSIONS = 0;
 
-function SidebarNavigation(): JSX.Element {
+export function SidebarNavigation(): JSX.Element {
   const { host, view } = useAgentHost();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
@@ -104,5 +104,3 @@ function SidebarNavigation(): JSX.Element {
     </SidebarMenu>
   );
 }
-
-export { SidebarNavigation };

@@ -1,25 +1,25 @@
 import * as z from "zod";
 import { StringOrMarkdownSchema, TextRangeSchema, metaSchema, uriSchema } from "../common";
 
-const AnnotationsSummarySchema = z.strictObject({
+export const AnnotationsSummarySchema = z.strictObject({
   resource: uriSchema,
   annotationCount: z.number(),
   entryCount: z.number(),
 });
 
-const AnnotationOriginSchema = z.strictObject({
+export const AnnotationOriginSchema = z.strictObject({
   session: uriSchema,
   chat: uriSchema.optional(),
   turnId: z.string().optional(),
 });
 
-const AnnotationEntrySchema = z.strictObject({
+export const AnnotationEntrySchema = z.strictObject({
   id: z.string(),
   text: StringOrMarkdownSchema,
   _meta: metaSchema.optional(),
 });
 
-const AnnotationSchema = z.strictObject({
+export const AnnotationSchema = z.strictObject({
   id: z.string(),
   origin: AnnotationOriginSchema,
   resource: uriSchema,
@@ -29,11 +29,11 @@ const AnnotationSchema = z.strictObject({
   _meta: metaSchema.optional(),
 });
 
-const AnnotationsStateSchema = z.strictObject({
+export const AnnotationsStateSchema = z.strictObject({
   annotations: z.array(AnnotationSchema),
 });
 
-const AnnotationsActionSchema = z.discriminatedUnion("type", [
+export const AnnotationsActionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("annotations/set"),
     annotation: AnnotationSchema,
@@ -62,29 +62,14 @@ const AnnotationsActionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-type AnnotationsSummary = z.output<typeof AnnotationsSummarySchema>;
+export type AnnotationsSummary = z.output<typeof AnnotationsSummarySchema>;
 
-type AnnotationOrigin = z.output<typeof AnnotationOriginSchema>;
+export type AnnotationOrigin = z.output<typeof AnnotationOriginSchema>;
 
-type AnnotationEntry = z.output<typeof AnnotationEntrySchema>;
+export type AnnotationEntry = z.output<typeof AnnotationEntrySchema>;
 
-type Annotation = z.output<typeof AnnotationSchema>;
+export type Annotation = z.output<typeof AnnotationSchema>;
 
-type AnnotationsState = z.output<typeof AnnotationsStateSchema>;
+export type AnnotationsState = z.output<typeof AnnotationsStateSchema>;
 
-type AnnotationsAction = z.output<typeof AnnotationsActionSchema>;
-
-export {
-  AnnotationEntrySchema,
-  AnnotationOriginSchema,
-  AnnotationSchema,
-  AnnotationsActionSchema,
-  AnnotationsStateSchema,
-  AnnotationsSummarySchema,
-  type Annotation,
-  type AnnotationEntry,
-  type AnnotationOrigin,
-  type AnnotationsAction,
-  type AnnotationsState,
-  type AnnotationsSummary,
-};
+export type AnnotationsAction = z.output<typeof AnnotationsActionSchema>;

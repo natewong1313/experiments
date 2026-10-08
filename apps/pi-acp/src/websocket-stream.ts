@@ -53,7 +53,7 @@ function sendProtocolError(socket: WebSocket, error: RequestError): void {
   }
 }
 
-function websocketStream(socket: WebSocket): Stream {
+export function websocketStream(socket: WebSocket): Stream {
   // This flag stops duplicate close and error events after the stream ends.
   let ended = false;
 
@@ -136,4 +136,3 @@ function websocketStream(socket: WebSocket): Stream {
 }
 
 // Make a message stream from a WebSocket.
-export { websocketStream };

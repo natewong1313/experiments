@@ -32,87 +32,89 @@ import {
   AuthCapabilitiesOutboundSchema,
 } from "./schemas-9";
 
-const ElicitationFormCapabilitiesSchema = z.looseObject({
+export const ElicitationFormCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ElicitationFormCapabilitiesOutboundSchema = z.strictObject({
+export const ElicitationFormCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ElicitationFormCapabilities = z.output<typeof ElicitationFormCapabilitiesSchema>;
+export type ElicitationFormCapabilities = z.output<typeof ElicitationFormCapabilitiesSchema>;
 
-const ElicitationUrlCapabilitiesSchema = z.looseObject({
+export const ElicitationUrlCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ElicitationUrlCapabilitiesOutboundSchema = z.strictObject({
+export const ElicitationUrlCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ElicitationUrlCapabilities = z.output<typeof ElicitationUrlCapabilitiesSchema>;
+export type ElicitationUrlCapabilities = z.output<typeof ElicitationUrlCapabilitiesSchema>;
 
-const ElicitationCapabilitiesSchema = z.looseObject({
+export const ElicitationCapabilitiesSchema = z.looseObject({
   form: z.union([ElicitationFormCapabilitiesSchema, z.null()]).optional(),
   url: z.union([ElicitationUrlCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ElicitationCapabilitiesOutboundSchema = z.strictObject({
+export const ElicitationCapabilitiesOutboundSchema = z.strictObject({
   form: z.union([ElicitationFormCapabilitiesOutboundSchema, z.null()]).optional(),
   url: z.union([ElicitationUrlCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ElicitationCapabilities = z.output<typeof ElicitationCapabilitiesSchema>;
+export type ElicitationCapabilities = z.output<typeof ElicitationCapabilitiesSchema>;
 
-const NesJumpCapabilitiesSchema = z.looseObject({
+export const NesJumpCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesJumpCapabilitiesOutboundSchema = z.strictObject({
+export const NesJumpCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesJumpCapabilities = z.output<typeof NesJumpCapabilitiesSchema>;
+export type NesJumpCapabilities = z.output<typeof NesJumpCapabilitiesSchema>;
 
-const NesRenameCapabilitiesSchema = z.looseObject({
+export const NesRenameCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesRenameCapabilitiesOutboundSchema = z.strictObject({
+export const NesRenameCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesRenameCapabilities = z.output<typeof NesRenameCapabilitiesSchema>;
+export type NesRenameCapabilities = z.output<typeof NesRenameCapabilitiesSchema>;
 
-const NesSearchAndReplaceCapabilitiesSchema = z.looseObject({
+export const NesSearchAndReplaceCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesSearchAndReplaceCapabilitiesOutboundSchema = z.strictObject({
+export const NesSearchAndReplaceCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesSearchAndReplaceCapabilities = z.output<typeof NesSearchAndReplaceCapabilitiesSchema>;
+export type NesSearchAndReplaceCapabilities = z.output<
+  typeof NesSearchAndReplaceCapabilitiesSchema
+>;
 
-const ClientNesCapabilitiesSchema = z.looseObject({
+export const ClientNesCapabilitiesSchema = z.looseObject({
   jump: z.union([NesJumpCapabilitiesSchema, z.null()]).optional(),
   rename: z.union([NesRenameCapabilitiesSchema, z.null()]).optional(),
   searchAndReplace: z.union([NesSearchAndReplaceCapabilitiesSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ClientNesCapabilitiesOutboundSchema = z.strictObject({
+export const ClientNesCapabilitiesOutboundSchema = z.strictObject({
   jump: z.union([NesJumpCapabilitiesOutboundSchema, z.null()]).optional(),
   rename: z.union([NesRenameCapabilitiesOutboundSchema, z.null()]).optional(),
   searchAndReplace: z.union([NesSearchAndReplaceCapabilitiesOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ClientNesCapabilities = z.output<typeof ClientNesCapabilitiesSchema>;
+export type ClientNesCapabilities = z.output<typeof ClientNesCapabilitiesSchema>;
 
-const ClientCapabilitiesSchema = z.looseObject({
+export const ClientCapabilitiesSchema = z.looseObject({
   fs: FileSystemCapabilitiesSchema.optional(),
   terminal: z.boolean().optional(),
   session: z.union([ClientSessionCapabilitiesSchema, z.null()]).optional(),
@@ -125,7 +127,7 @@ const ClientCapabilitiesSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ClientCapabilitiesOutboundSchema = z.strictObject({
+export const ClientCapabilitiesOutboundSchema = z.strictObject({
   fs: FileSystemCapabilitiesOutboundSchema.optional(),
   terminal: z.boolean().optional(),
   session: z.union([ClientSessionCapabilitiesOutboundSchema, z.null()]).optional(),
@@ -138,47 +140,47 @@ const ClientCapabilitiesOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ClientCapabilities = z.output<typeof ClientCapabilitiesSchema>;
+export type ClientCapabilities = z.output<typeof ClientCapabilitiesSchema>;
 
-const InitializeRequestSchema = z.looseObject({
+export const InitializeRequestSchema = z.looseObject({
   protocolVersion: ProtocolVersionSchema,
   clientCapabilities: ClientCapabilitiesSchema.optional(),
   clientInfo: z.union([ImplementationSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const InitializeRequestOutboundSchema = z.strictObject({
+export const InitializeRequestOutboundSchema = z.strictObject({
   protocolVersion: ProtocolVersionOutboundSchema,
   clientCapabilities: ClientCapabilitiesOutboundSchema.optional(),
   clientInfo: z.union([ImplementationOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type InitializeRequest = z.output<typeof InitializeRequestSchema>;
+export type InitializeRequest = z.output<typeof InitializeRequestSchema>;
 
-const AuthenticateRequestSchema = z.looseObject({
+export const AuthenticateRequestSchema = z.looseObject({
   methodId: AuthMethodIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const AuthenticateRequestOutboundSchema = z.strictObject({
+export const AuthenticateRequestOutboundSchema = z.strictObject({
   methodId: AuthMethodIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type AuthenticateRequest = z.output<typeof AuthenticateRequestSchema>;
+export type AuthenticateRequest = z.output<typeof AuthenticateRequestSchema>;
 
-const ListProvidersRequestSchema = z.looseObject({
+export const ListProvidersRequestSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ListProvidersRequestOutboundSchema = z.strictObject({
+export const ListProvidersRequestOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ListProvidersRequest = z.output<typeof ListProvidersRequestSchema>;
+export type ListProvidersRequest = z.output<typeof ListProvidersRequestSchema>;
 
-const SetProviderRequestSchema = z.looseObject({
+export const SetProviderRequestSchema = z.looseObject({
   providerId: ProviderIdSchema,
   apiType: LlmProtocolSchema,
   baseUrl: z.string(),
@@ -186,7 +188,7 @@ const SetProviderRequestSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SetProviderRequestOutboundSchema = z.strictObject({
+export const SetProviderRequestOutboundSchema = z.strictObject({
   providerId: ProviderIdOutboundSchema,
   apiType: LlmProtocolOutboundSchema,
   baseUrl: z.string(),
@@ -194,91 +196,91 @@ const SetProviderRequestOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SetProviderRequest = z.output<typeof SetProviderRequestSchema>;
+export type SetProviderRequest = z.output<typeof SetProviderRequestSchema>;
 
-const DisableProviderRequestSchema = z.looseObject({
+export const DisableProviderRequestSchema = z.looseObject({
   providerId: ProviderIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DisableProviderRequestOutboundSchema = z.strictObject({
+export const DisableProviderRequestOutboundSchema = z.strictObject({
   providerId: ProviderIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DisableProviderRequest = z.output<typeof DisableProviderRequestSchema>;
+export type DisableProviderRequest = z.output<typeof DisableProviderRequestSchema>;
 
-const LogoutRequestSchema = z.looseObject({
+export const LogoutRequestSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const LogoutRequestOutboundSchema = z.strictObject({
+export const LogoutRequestOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type LogoutRequest = z.output<typeof LogoutRequestSchema>;
+export type LogoutRequest = z.output<typeof LogoutRequestSchema>;
 
-const HttpHeaderSchema = z.looseObject({
+export const HttpHeaderSchema = z.looseObject({
   name: z.string(),
   value: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const HttpHeaderOutboundSchema = z.strictObject({
+export const HttpHeaderOutboundSchema = z.strictObject({
   name: z.string(),
   value: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type HttpHeader = z.output<typeof HttpHeaderSchema>;
+export type HttpHeader = z.output<typeof HttpHeaderSchema>;
 
-const McpServerHttpSchema = z.looseObject({
+export const McpServerHttpSchema = z.looseObject({
   name: z.string(),
   url: z.string(),
   headers: z.array(HttpHeaderSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const McpServerHttpOutboundSchema = z.strictObject({
+export const McpServerHttpOutboundSchema = z.strictObject({
   name: z.string(),
   url: z.string(),
   headers: z.array(HttpHeaderOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type McpServerHttp = z.output<typeof McpServerHttpSchema>;
+export type McpServerHttp = z.output<typeof McpServerHttpSchema>;
 
-const McpServerSseSchema = z.looseObject({
+export const McpServerSseSchema = z.looseObject({
   name: z.string(),
   url: z.string(),
   headers: z.array(HttpHeaderSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const McpServerSseOutboundSchema = z.strictObject({
+export const McpServerSseOutboundSchema = z.strictObject({
   name: z.string(),
   url: z.string(),
   headers: z.array(HttpHeaderOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type McpServerSse = z.output<typeof McpServerSseSchema>;
+export type McpServerSse = z.output<typeof McpServerSseSchema>;
 
-const McpServerAcpSchema = z.looseObject({
+export const McpServerAcpSchema = z.looseObject({
   name: z.string(),
   serverId: McpServerAcpIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const McpServerAcpOutboundSchema = z.strictObject({
+export const McpServerAcpOutboundSchema = z.strictObject({
   name: z.string(),
   serverId: McpServerAcpIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type McpServerAcp = z.output<typeof McpServerAcpSchema>;
+export type McpServerAcp = z.output<typeof McpServerAcpSchema>;
 
-const McpServerStdioSchema = z.looseObject({
+export const McpServerStdioSchema = z.looseObject({
   name: z.string(),
   command: z.string(),
   args: z.array(z.string()),
@@ -286,7 +288,7 @@ const McpServerStdioSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const McpServerStdioOutboundSchema = z.strictObject({
+export const McpServerStdioOutboundSchema = z.strictObject({
   name: z.string(),
   command: z.string(),
   args: z.array(z.string()),
@@ -294,9 +296,9 @@ const McpServerStdioOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type McpServerStdio = z.output<typeof McpServerStdioSchema>;
+export type McpServerStdio = z.output<typeof McpServerStdioSchema>;
 
-const McpServerSchema = z.union([
+export const McpServerSchema = z.union([
   z.looseObject({
     name: z.string(),
     url: z.string(),
@@ -320,7 +322,7 @@ const McpServerSchema = z.union([
   McpServerStdioSchema,
 ]);
 
-const McpServerOutboundSchema = z.union([
+export const McpServerOutboundSchema = z.union([
   z.strictObject({
     name: z.string(),
     url: z.string(),
@@ -344,67 +346,4 @@ const McpServerOutboundSchema = z.union([
   McpServerStdioOutboundSchema,
 ]);
 
-type McpServer = z.output<typeof McpServerSchema>;
-
-export {
-  ElicitationFormCapabilitiesSchema,
-  ElicitationFormCapabilitiesOutboundSchema,
-  type ElicitationFormCapabilities,
-  ElicitationUrlCapabilitiesSchema,
-  ElicitationUrlCapabilitiesOutboundSchema,
-  type ElicitationUrlCapabilities,
-  ElicitationCapabilitiesSchema,
-  ElicitationCapabilitiesOutboundSchema,
-  type ElicitationCapabilities,
-  NesJumpCapabilitiesSchema,
-  NesJumpCapabilitiesOutboundSchema,
-  type NesJumpCapabilities,
-  NesRenameCapabilitiesSchema,
-  NesRenameCapabilitiesOutboundSchema,
-  type NesRenameCapabilities,
-  NesSearchAndReplaceCapabilitiesSchema,
-  NesSearchAndReplaceCapabilitiesOutboundSchema,
-  type NesSearchAndReplaceCapabilities,
-  ClientNesCapabilitiesSchema,
-  ClientNesCapabilitiesOutboundSchema,
-  type ClientNesCapabilities,
-  ClientCapabilitiesSchema,
-  ClientCapabilitiesOutboundSchema,
-  type ClientCapabilities,
-  InitializeRequestSchema,
-  InitializeRequestOutboundSchema,
-  type InitializeRequest,
-  AuthenticateRequestSchema,
-  AuthenticateRequestOutboundSchema,
-  type AuthenticateRequest,
-  ListProvidersRequestSchema,
-  ListProvidersRequestOutboundSchema,
-  type ListProvidersRequest,
-  SetProviderRequestSchema,
-  SetProviderRequestOutboundSchema,
-  type SetProviderRequest,
-  DisableProviderRequestSchema,
-  DisableProviderRequestOutboundSchema,
-  type DisableProviderRequest,
-  LogoutRequestSchema,
-  LogoutRequestOutboundSchema,
-  type LogoutRequest,
-  HttpHeaderSchema,
-  HttpHeaderOutboundSchema,
-  type HttpHeader,
-  McpServerHttpSchema,
-  McpServerHttpOutboundSchema,
-  type McpServerHttp,
-  McpServerSseSchema,
-  McpServerSseOutboundSchema,
-  type McpServerSse,
-  McpServerAcpSchema,
-  McpServerAcpOutboundSchema,
-  type McpServerAcp,
-  McpServerStdioSchema,
-  McpServerStdioOutboundSchema,
-  type McpServerStdio,
-  McpServerSchema,
-  McpServerOutboundSchema,
-  type McpServer,
-};
+export type McpServer = z.output<typeof McpServerSchema>;

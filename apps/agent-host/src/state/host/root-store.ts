@@ -5,7 +5,7 @@ import type { Database } from "../persistence/database";
 
 const HOST_ID = 1;
 
-class RootStore {
+export class RootStore {
   private readonly db: Database;
 
   constructor(db: Database) {
@@ -40,5 +40,3 @@ class RootStore {
     );
   }
 }
-
-export { RootStore };

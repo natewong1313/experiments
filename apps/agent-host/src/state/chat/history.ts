@@ -17,7 +17,7 @@ type HistoryPage = Pick<ChatState, "turns" | "turnsNextCursor">;
 
 type TurnHistoryParams = { db: Database; turns: TurnStore };
 
-class TurnHistory {
+export class TurnHistory {
   private readonly db: Database;
   private readonly turns: TurnStore;
 
@@ -199,5 +199,3 @@ class TurnHistory {
     this.db.delete(turnsTable).where(eq(turnsTable.chatUri, uri)).run();
   }
 }
-
-export { TurnHistory };

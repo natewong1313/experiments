@@ -34,7 +34,7 @@ function parseSession(value: Snapshot["state"]): SessionState {
 
 type UseAhpSessionParams = { sessionUri: string };
 
-function useAhpSession({ sessionUri }: UseAhpSessionParams): SessionView {
+export function useAhpSession({ sessionUri }: UseAhpSessionParams): SessionView {
   const { view } = useAgentHost();
   const client = view.status === "connected" ? view.client : ABSENT;
 
@@ -151,5 +151,3 @@ function useAhpSession({ sessionUri }: UseAhpSessionParams): SessionView {
     loadEarlier,
   };
 }
-
-export { useAhpSession };

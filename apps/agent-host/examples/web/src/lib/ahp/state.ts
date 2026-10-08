@@ -31,15 +31,15 @@ const INPUT_NEEDED = 24;
 
 const IN_PROGRESS = 8;
 
-type IndexedTurn = Omit<Turn, "responseParts"> & { responseParts: List<ResponsePart> };
+export type IndexedTurn = Omit<Turn, "responseParts"> & { responseParts: List<ResponsePart> };
 
-type IndexedActiveTurn = Omit<ActiveTurn, "responseParts"> & {
+export type IndexedActiveTurn = Omit<ActiveTurn, "responseParts"> & {
   responseParts: List<ResponsePart>;
   identities: Map<string, List<number>>;
   blocking: number;
 };
 
-type ClientChatState = Omit<ChatState, "activeTurn" | "turns"> & {
+export type ClientChatState = Omit<ChatState, "activeTurn" | "turns"> & {
   activeTurn?: IndexedActiveTurn;
   turns: IndexedTurn[];
 };
@@ -107,11 +107,11 @@ function indexState(state: ChatState): ClientChatState {
   };
 }
 
-function parseChat(value: Snapshot["state"] | ChatState): ClientChatState {
+export function parseChat(value: Snapshot["state"] | ChatState): ClientChatState {
   return indexState(ChatStateSchema.parse(value));
 }
 
-function wireState(state: ClientChatState): ChatState {
+export function wireState(state: ClientChatState): ChatState {
   const active = state.activeTurn;
 
   return {
@@ -129,7 +129,7 @@ function wireState(state: ClientChatState): ChatState {
   };
 }
 
-function reduceSession(state: SessionState, action: SdkAction): SessionState {
+export function reduceSession(state: SessionState, action: SdkAction): SessionState {
   // SAFETY: The wire schema validates the state before the SDK reducer reads its nominal enum fields.
   // oxlint-disable-next-line typescript/consistent-type-assertions, typescript/no-unsafe-type-assertion
   const sdkState = SessionStateSchema.parse(state) as SdkSessionState;
@@ -156,7 +156,10 @@ function reduceSelected(
   return chatReducer(sdkState, sdkAction);
 }
 
-function reduceChat(state: ClientChatState, incoming: SdkAction | ChatAction): ClientChatState {
+export function reduceChat(
+  state: ClientChatState,
+  incoming: SdkAction | ChatAction,
+): ClientChatState {
   const action = ChatActionSchema.parse(incoming);
   const active = state.activeTurn;
 
@@ -238,13 +241,3 @@ function reduceChat(state: ClientChatState, incoming: SdkAction | ChatAction): C
 
   return { ...state, status, activeTurn: { ...active, responseParts, blocking: blocked } };
 }
-
-export {
-  reduceSession,
-  reduceChat,
-  parseChat,
-  wireState,
-  type ClientChatState,
-  type IndexedTurn,
-  type IndexedActiveTurn,
-};

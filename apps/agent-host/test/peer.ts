@@ -39,7 +39,7 @@ type PeerParams =
   | ResourceReadParams
   | SubscribeParams;
 
-class Peer {
+export class Peer {
   readonly actions: ActionEnvelope[] = [];
   private readonly replies: JsonRpcReply[] = [];
   private readonly socket: WebSocket;
@@ -93,7 +93,10 @@ class Peer {
   }
 }
 
-async function connectPeer(stub: DurableObjectStub, clientId = "test-client"): Promise<Peer> {
+export async function connectPeer(
+  stub: DurableObjectStub,
+  clientId = "test-client",
+): Promise<Peer> {
   const response = await stub.fetch("https://host/ahp", {
     headers: { Upgrade: "websocket" },
   });
@@ -111,5 +114,3 @@ async function connectPeer(stub: DurableObjectStub, clientId = "test-client"): P
 
   return peer;
 }
-
-export { Peer, connectPeer };

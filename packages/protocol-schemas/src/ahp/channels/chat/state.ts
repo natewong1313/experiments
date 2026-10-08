@@ -4,17 +4,17 @@ import { sessionStatusSchema } from "../../primitives";
 import { MessageSchema } from "./message";
 import { ResponsePartSchema } from "./parts";
 
-const PendingMessageSchema = z.strictObject({
+export const PendingMessageSchema = z.strictObject({
   id: z.string(),
   message: MessageSchema,
 });
 
-const SideChatSelectionSchema = z.strictObject({
+export const SideChatSelectionSchema = z.strictObject({
   text: z.string(),
   responsePartId: z.string().optional(),
 });
 
-const ChatOriginSchema = z.discriminatedUnion("kind", [
+export const ChatOriginSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("user") }),
   z.strictObject({
     kind: z.literal("fork"),
@@ -34,7 +34,7 @@ const ChatOriginSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const chatInteractivitySchema = z.enum(["full", "read-only", "hidden"]);
+export const chatInteractivitySchema = z.enum(["full", "read-only", "hidden"]);
 
 const chatSummaryFields = {
   resource: uriSchema,
@@ -47,9 +47,9 @@ const chatSummaryFields = {
   workingDirectories: z.array(uriSchema).optional(),
 };
 
-const ChatSummarySchema = z.strictObject(chatSummaryFields);
+export const ChatSummarySchema = z.strictObject(chatSummaryFields);
 
-const TurnSchema = z.strictObject({
+export const TurnSchema = z.strictObject({
   id: z.string(),
   startedAt: isoTimestampSchema.optional(),
   duration: z.number().optional(),
@@ -59,7 +59,7 @@ const TurnSchema = z.strictObject({
   state: z.enum(["complete", "cancelled", "error"]),
 });
 
-const ActiveTurnSchema = z.strictObject({
+export const ActiveTurnSchema = z.strictObject({
   id: z.string(),
   startedAt: isoTimestampSchema,
   message: MessageSchema,
@@ -67,7 +67,7 @@ const ActiveTurnSchema = z.strictObject({
   usage: UsageInfoSchema.optional(),
 });
 
-const ChatStateSchema = z.strictObject({
+export const ChatStateSchema = z.strictObject({
   ...chatSummaryFields,
   turns: z.array(TurnSchema),
   turnsNextCursor: z.string().optional(),
@@ -78,37 +78,18 @@ const ChatStateSchema = z.strictObject({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-type ChatOrigin = z.output<typeof ChatOriginSchema>;
+export type ChatOrigin = z.output<typeof ChatOriginSchema>;
 
-type ChatInteractivity = z.output<typeof chatInteractivitySchema>;
+export type ChatInteractivity = z.output<typeof chatInteractivitySchema>;
 
-type SideChatSelection = z.output<typeof SideChatSelectionSchema>;
+export type SideChatSelection = z.output<typeof SideChatSelectionSchema>;
 
-type ChatSummary = z.output<typeof ChatSummarySchema>;
+export type ChatSummary = z.output<typeof ChatSummarySchema>;
 
-type Turn = z.output<typeof TurnSchema>;
+export type Turn = z.output<typeof TurnSchema>;
 
-type ActiveTurn = z.output<typeof ActiveTurnSchema>;
+export type ActiveTurn = z.output<typeof ActiveTurnSchema>;
 
-type PendingMessage = z.output<typeof PendingMessageSchema>;
+export type PendingMessage = z.output<typeof PendingMessageSchema>;
 
-type ChatState = z.output<typeof ChatStateSchema>;
-
-export {
-  ActiveTurnSchema,
-  ChatOriginSchema,
-  ChatStateSchema,
-  ChatSummarySchema,
-  chatInteractivitySchema,
-  PendingMessageSchema,
-  SideChatSelectionSchema,
-  TurnSchema,
-  type ActiveTurn,
-  type ChatInteractivity,
-  type ChatOrigin,
-  type ChatState,
-  type ChatSummary,
-  type PendingMessage,
-  type SideChatSelection,
-  type Turn,
-};
+export type ChatState = z.output<typeof ChatStateSchema>;

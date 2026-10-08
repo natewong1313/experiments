@@ -12,7 +12,7 @@ import { RootActionSchema, RootStateSchema } from "./channels/root";
 import { SessionActionSchema } from "./channels/session/actions";
 import { SessionStateSchema } from "./channels/session/state";
 
-const ChannelStateSchema = z.union([
+export const ChannelStateSchema = z.union([
   RootStateSchema,
   SessionStateSchema,
   TerminalStateSchema,
@@ -24,7 +24,7 @@ const ChannelStateSchema = z.union([
   AutomationRunStateSchema,
 ]);
 
-const StateActionSchema = z.union([
+export const StateActionSchema = z.union([
   RootActionSchema,
   SessionActionSchema,
   TerminalActionSchema,
@@ -36,18 +36,18 @@ const StateActionSchema = z.union([
   AutomationRunActionSchema,
 ]);
 
-const SnapshotSchema = z.strictObject({
+export const SnapshotSchema = z.strictObject({
   resource: uriSchema,
   state: ChannelStateSchema,
   fromSeq: seqSchema,
 });
 
-const ActionOriginSchema = z.strictObject({
+export const ActionOriginSchema = z.strictObject({
   clientId: z.string(),
   clientSeq: z.number(),
 });
 
-const ActionEnvelopeSchema = z.strictObject({
+export const ActionEnvelopeSchema = z.strictObject({
   channel: uriSchema,
   action: StateActionSchema,
   serverSeq: seqSchema,
@@ -55,25 +55,12 @@ const ActionEnvelopeSchema = z.strictObject({
   rejectionReason: z.string().optional(),
 });
 
-type ChannelState = z.output<typeof ChannelStateSchema>;
+export type ChannelState = z.output<typeof ChannelStateSchema>;
 
-type StateAction = z.output<typeof StateActionSchema>;
+export type StateAction = z.output<typeof StateActionSchema>;
 
-type Snapshot = z.output<typeof SnapshotSchema>;
+export type Snapshot = z.output<typeof SnapshotSchema>;
 
-type ActionOrigin = z.output<typeof ActionOriginSchema>;
+export type ActionOrigin = z.output<typeof ActionOriginSchema>;
 
-type ActionEnvelope = z.output<typeof ActionEnvelopeSchema>;
-
-export {
-  ActionEnvelopeSchema,
-  ActionOriginSchema,
-  ChannelStateSchema,
-  SnapshotSchema,
-  StateActionSchema,
-  type ActionEnvelope,
-  type ActionOrigin,
-  type ChannelState,
-  type Snapshot,
-  type StateAction,
-};
+export type ActionEnvelope = z.output<typeof ActionEnvelopeSchema>;

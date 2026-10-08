@@ -11,7 +11,7 @@ const ROOT_CHANNEL = "ahp-root://";
 
 const RECONNECT_DELAY_MS = 3000;
 
-type CreateSession = () => Promise<void>;
+export type CreateSession = () => Promise<void>;
 
 type SessionView =
   | { status: "connecting" }
@@ -85,7 +85,7 @@ function applySessionEvent(sessions: SessionCatalog, event: SubscriptionEvent): 
   }
 }
 
-function useSessions(host: string): SessionView {
+export function useSessions(host: string): SessionView {
   const [view, setView] = useState<SessionView>({ status: "connecting" });
 
   useEffect(() => {
@@ -194,7 +194,3 @@ function useSessions(host: string): SessionView {
 
   return view;
 }
-
-export { useSessions };
-
-export type { CreateSession };

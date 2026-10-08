@@ -3,7 +3,7 @@ import { ConfigSchemaSchema, ProtectedResourceMetadataSchema, metaSchema } from 
 import { CustomizationSchema } from "../primitives";
 import { TerminalInfoSchema } from "./terminal";
 
-const AgentCapabilitiesSchema = z.strictObject({
+export const AgentCapabilitiesSchema = z.strictObject({
   multipleChats: z
     .strictObject({
       fork: z.boolean().optional(),
@@ -18,9 +18,9 @@ const AgentCapabilitiesSchema = z.strictObject({
     .optional(),
 });
 
-type AgentCapabilities = z.output<typeof AgentCapabilitiesSchema>;
+export type AgentCapabilities = z.output<typeof AgentCapabilitiesSchema>;
 
-const SessionModelInfoSchema = z.strictObject({
+export const SessionModelInfoSchema = z.strictObject({
   id: z.string(),
   provider: z.string(),
   name: z.string(),
@@ -33,7 +33,7 @@ const SessionModelInfoSchema = z.strictObject({
   _meta: metaSchema.optional(),
 });
 
-const AgentInfoSchema = z.strictObject({
+export const AgentInfoSchema = z.strictObject({
   provider: z.string(),
   displayName: z.string(),
   description: z.string(),
@@ -43,12 +43,12 @@ const AgentInfoSchema = z.strictObject({
   capabilities: AgentCapabilitiesSchema.optional(),
 });
 
-const RootConfigStateSchema = z.strictObject({
+export const RootConfigStateSchema = z.strictObject({
   schema: ConfigSchemaSchema,
   values: z.record(z.string(), z.unknown()),
 });
 
-const RootStateSchema = z.strictObject({
+export const RootStateSchema = z.strictObject({
   agents: z.array(AgentInfoSchema),
   activeSessions: z.number().optional(),
   terminals: z.array(TerminalInfoSchema).optional(),
@@ -56,7 +56,7 @@ const RootStateSchema = z.strictObject({
   _meta: metaSchema.optional(),
 });
 
-const RootActionSchema = z.discriminatedUnion("type", [
+export const RootActionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("root/agentsChanged"),
     agents: z.array(AgentInfoSchema),
@@ -76,27 +76,12 @@ const RootActionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-type SessionModelInfo = z.output<typeof SessionModelInfoSchema>;
+export type SessionModelInfo = z.output<typeof SessionModelInfoSchema>;
 
-type AgentInfo = z.output<typeof AgentInfoSchema>;
+export type AgentInfo = z.output<typeof AgentInfoSchema>;
 
-type RootConfigState = z.output<typeof RootConfigStateSchema>;
+export type RootConfigState = z.output<typeof RootConfigStateSchema>;
 
-type RootState = z.output<typeof RootStateSchema>;
+export type RootState = z.output<typeof RootStateSchema>;
 
-type RootAction = z.output<typeof RootActionSchema>;
-
-export {
-  AgentCapabilitiesSchema,
-  AgentInfoSchema,
-  RootActionSchema,
-  RootConfigStateSchema,
-  RootStateSchema,
-  SessionModelInfoSchema,
-  type AgentCapabilities,
-  type AgentInfo,
-  type RootAction,
-  type RootConfigState,
-  type RootState,
-  type SessionModelInfo,
-};
+export type RootAction = z.output<typeof RootActionSchema>;

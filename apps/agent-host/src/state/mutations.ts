@@ -54,7 +54,7 @@ type HostMutationsParams = {
   queries: HostQueries;
 };
 
-class HostMutations {
+export class HostMutations {
   private readonly database: StateDatabase;
   private readonly root: RootStore;
   private readonly sessions: SessionStore;
@@ -337,5 +337,3 @@ class HostMutations {
     return envelope;
   }
 }
-
-export { HostMutations };

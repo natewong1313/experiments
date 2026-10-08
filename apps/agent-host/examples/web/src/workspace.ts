@@ -2,11 +2,11 @@ import type { DurableObjectStorageLike, Workspace } from "@cloudflare/computer";
 import { createPiTools } from "@cloudflare/computer/tools/pi-ai";
 import type { ToolRegistration } from "@earendil-works/pi-durable";
 
-const JAVASCRIPT_BACKEND = "javascript";
+export const JAVASCRIPT_BACKEND = "javascript";
 
 const REPLAY_SAFE = new Set(["read", "ls", "find", "grep", "write", "delete"]);
 
-function workspaceStorage(storage: DurableObjectStorage): DurableObjectStorageLike {
+export function workspaceStorage(storage: DurableObjectStorage): DurableObjectStorageLike {
   return {
     sql: {
       exec: <Row extends object>(query: string, ...bindings: SqlStorageValue[]) =>
@@ -16,7 +16,7 @@ function workspaceStorage(storage: DurableObjectStorage): DurableObjectStorageLi
   };
 }
 
-function createWorkspaceTools(workspace: Workspace): ToolRegistration[] {
+export function createWorkspaceTools(workspace: Workspace): ToolRegistration[] {
   const { tools, execute } = createPiTools({
     workspace,
     shell: {
@@ -48,5 +48,3 @@ function createWorkspaceTools(workspace: Workspace): ToolRegistration[] {
     return tool.name === "exec" ? { ...registration, executionMode: "sequential" } : registration;
   });
 }
-
-export { JAVASCRIPT_BACKEND, createWorkspaceTools, workspaceStorage };

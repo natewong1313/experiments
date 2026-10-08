@@ -65,7 +65,7 @@ import {
   PositionOutboundSchema,
 } from "./schemas-6";
 
-const NesSuggestionSchema = z.union([
+export const NesSuggestionSchema = z.union([
   z.looseObject({
     id: NesSuggestionIdSchema,
     uri: z.string(),
@@ -100,7 +100,7 @@ const NesSuggestionSchema = z.union([
   }),
 ]);
 
-const NesSuggestionOutboundSchema = z.union([
+export const NesSuggestionOutboundSchema = z.union([
   z.strictObject({
     id: NesSuggestionIdOutboundSchema,
     uri: z.string(),
@@ -135,37 +135,37 @@ const NesSuggestionOutboundSchema = z.union([
   }),
 ]);
 
-type NesSuggestion = z.output<typeof NesSuggestionSchema>;
+export type NesSuggestion = z.output<typeof NesSuggestionSchema>;
 
-const SuggestNesResponseSchema = z.looseObject({
+export const SuggestNesResponseSchema = z.looseObject({
   suggestions: z.array(NesSuggestionSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SuggestNesResponseOutboundSchema = z.strictObject({
+export const SuggestNesResponseOutboundSchema = z.strictObject({
   suggestions: z.array(NesSuggestionOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SuggestNesResponse = z.output<typeof SuggestNesResponseSchema>;
+export type SuggestNesResponse = z.output<typeof SuggestNesResponseSchema>;
 
-const CloseNesResponseSchema = z.looseObject({
+export const CloseNesResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CloseNesResponseOutboundSchema = z.strictObject({
+export const CloseNesResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CloseNesResponse = z.output<typeof CloseNesResponseSchema>;
+export type CloseNesResponse = z.output<typeof CloseNesResponseSchema>;
 
-const ExtResponseSchema = z.unknown();
+export const ExtResponseSchema = z.unknown();
 
-const ExtResponseOutboundSchema = z.unknown();
+export const ExtResponseOutboundSchema = z.unknown();
 
-type ExtResponse = z.output<typeof ExtResponseSchema>;
+export type ExtResponse = z.output<typeof ExtResponseSchema>;
 
-const ErrorCodeSchema = z.union([
+export const ErrorCodeSchema = z.union([
   z.literal(-32700),
   z.literal(-32600),
   z.literal(-32601),
@@ -177,7 +177,7 @@ const ErrorCodeSchema = z.union([
   z.number().refine(Number.isInteger, { error: "Expected integer" }),
 ]);
 
-const ErrorCodeOutboundSchema = z.union([
+export const ErrorCodeOutboundSchema = z.union([
   z.literal(-32700),
   z.literal(-32600),
   z.literal(-32601),
@@ -189,23 +189,23 @@ const ErrorCodeOutboundSchema = z.union([
   z.number().refine(Number.isInteger, { error: "Expected integer" }),
 ]);
 
-type ErrorCode = z.output<typeof ErrorCodeSchema>;
+export type ErrorCode = z.output<typeof ErrorCodeSchema>;
 
-const ErrorSchema = z.looseObject({
+export const ErrorSchema = z.looseObject({
   code: ErrorCodeSchema,
   message: z.string(),
   data: z.unknown().optional(),
 });
 
-const ErrorOutboundSchema = z.strictObject({
+export const ErrorOutboundSchema = z.strictObject({
   code: ErrorCodeOutboundSchema,
   message: z.string(),
   data: z.unknown().optional(),
 });
 
-type Error = z.output<typeof ErrorSchema>;
+export type Error = z.output<typeof ErrorSchema>;
 
-const AgentResponseSchema = z.union([
+export const AgentResponseSchema = z.union([
   z.looseObject({
     id: RequestIdSchema,
     result: z.union([
@@ -234,7 +234,7 @@ const AgentResponseSchema = z.union([
   z.looseObject({ id: RequestIdSchema, error: ErrorSchema }),
 ]);
 
-const AgentResponseOutboundSchema = z.union([
+export const AgentResponseOutboundSchema = z.union([
   z.strictObject({
     id: RequestIdOutboundSchema,
     result: z.union([
@@ -263,29 +263,29 @@ const AgentResponseOutboundSchema = z.union([
   z.strictObject({ id: RequestIdOutboundSchema, error: ErrorOutboundSchema }),
 ]);
 
-type AgentResponse = z.output<typeof AgentResponseSchema>;
+export type AgentResponse = z.output<typeof AgentResponseSchema>;
 
-const MessageIdSchema = z.string();
+export const MessageIdSchema = z.string();
 
-const MessageIdOutboundSchema = z.string();
+export const MessageIdOutboundSchema = z.string();
 
-type MessageId = z.output<typeof MessageIdSchema>;
+export type MessageId = z.output<typeof MessageIdSchema>;
 
-const ContentChunkSchema = z.looseObject({
+export const ContentChunkSchema = z.looseObject({
   content: ContentBlockSchema,
   messageId: z.union([MessageIdSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ContentChunkOutboundSchema = z.strictObject({
+export const ContentChunkOutboundSchema = z.strictObject({
   content: ContentBlockOutboundSchema,
   messageId: z.union([MessageIdOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ContentChunk = z.output<typeof ContentChunkSchema>;
+export type ContentChunk = z.output<typeof ContentChunkSchema>;
 
-const ToolCallSchema = z.looseObject({
+export const ToolCallSchema = z.looseObject({
   toolCallId: ToolCallIdSchema,
   title: z.string(),
   name: z.union([z.string(), z.null()]).optional(),
@@ -298,7 +298,7 @@ const ToolCallSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ToolCallOutboundSchema = z.strictObject({
+export const ToolCallOutboundSchema = z.strictObject({
   toolCallId: ToolCallIdOutboundSchema,
   title: z.string(),
   name: z.union([z.string(), z.null()]).optional(),
@@ -311,97 +311,97 @@ const ToolCallOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ToolCall = z.output<typeof ToolCallSchema>;
+export type ToolCall = z.output<typeof ToolCallSchema>;
 
-const PlanEntryPrioritySchema = z.enum(["high", "medium", "low"]);
+export const PlanEntryPrioritySchema = z.enum(["high", "medium", "low"]);
 
-const PlanEntryPriorityOutboundSchema = z.enum(["high", "medium", "low"]);
+export const PlanEntryPriorityOutboundSchema = z.enum(["high", "medium", "low"]);
 
-type PlanEntryPriority = z.output<typeof PlanEntryPrioritySchema>;
+export type PlanEntryPriority = z.output<typeof PlanEntryPrioritySchema>;
 
-const PlanEntryStatusSchema = z.enum(["pending", "in_progress", "completed"]);
+export const PlanEntryStatusSchema = z.enum(["pending", "in_progress", "completed"]);
 
-const PlanEntryStatusOutboundSchema = z.enum(["pending", "in_progress", "completed"]);
+export const PlanEntryStatusOutboundSchema = z.enum(["pending", "in_progress", "completed"]);
 
-type PlanEntryStatus = z.output<typeof PlanEntryStatusSchema>;
+export type PlanEntryStatus = z.output<typeof PlanEntryStatusSchema>;
 
-const PlanEntrySchema = z.looseObject({
+export const PlanEntrySchema = z.looseObject({
   content: z.string(),
   priority: PlanEntryPrioritySchema,
   status: PlanEntryStatusSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PlanEntryOutboundSchema = z.strictObject({
+export const PlanEntryOutboundSchema = z.strictObject({
   content: z.string(),
   priority: PlanEntryPriorityOutboundSchema,
   status: PlanEntryStatusOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PlanEntry = z.output<typeof PlanEntrySchema>;
+export type PlanEntry = z.output<typeof PlanEntrySchema>;
 
-const PlanSchema = z.looseObject({
+export const PlanSchema = z.looseObject({
   entries: z.array(PlanEntrySchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PlanOutboundSchema = z.strictObject({
+export const PlanOutboundSchema = z.strictObject({
   entries: z.array(PlanEntryOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type Plan = z.output<typeof PlanSchema>;
+export type Plan = z.output<typeof PlanSchema>;
 
-const PlanIdSchema = z.string();
+export const PlanIdSchema = z.string();
 
-const PlanIdOutboundSchema = z.string();
+export const PlanIdOutboundSchema = z.string();
 
-type PlanId = z.output<typeof PlanIdSchema>;
+export type PlanId = z.output<typeof PlanIdSchema>;
 
-const PlanItemsSchema = z.looseObject({
+export const PlanItemsSchema = z.looseObject({
   planId: PlanIdSchema,
   entries: z.array(PlanEntrySchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PlanItemsOutboundSchema = z.strictObject({
+export const PlanItemsOutboundSchema = z.strictObject({
   planId: PlanIdOutboundSchema,
   entries: z.array(PlanEntryOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PlanItems = z.output<typeof PlanItemsSchema>;
+export type PlanItems = z.output<typeof PlanItemsSchema>;
 
-const PlanFileSchema = z.looseObject({
+export const PlanFileSchema = z.looseObject({
   planId: PlanIdSchema,
   uri: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PlanFileOutboundSchema = z.strictObject({
+export const PlanFileOutboundSchema = z.strictObject({
   planId: PlanIdOutboundSchema,
   uri: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PlanFile = z.output<typeof PlanFileSchema>;
+export type PlanFile = z.output<typeof PlanFileSchema>;
 
-const PlanMarkdownSchema = z.looseObject({
+export const PlanMarkdownSchema = z.looseObject({
   planId: PlanIdSchema,
   content: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PlanMarkdownOutboundSchema = z.strictObject({
+export const PlanMarkdownOutboundSchema = z.strictObject({
   planId: PlanIdOutboundSchema,
   content: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PlanMarkdown = z.output<typeof PlanMarkdownSchema>;
+export type PlanMarkdown = z.output<typeof PlanMarkdownSchema>;
 
-const PlanUpdateContentSchema = z.union([
+export const PlanUpdateContentSchema = z.union([
   z.looseObject({
     planId: PlanIdSchema,
     entries: z.array(PlanEntrySchema),
@@ -422,7 +422,7 @@ const PlanUpdateContentSchema = z.union([
   }),
 ]);
 
-const PlanUpdateContentOutboundSchema = z.union([
+export const PlanUpdateContentOutboundSchema = z.union([
   z.strictObject({
     planId: PlanIdOutboundSchema,
     entries: z.array(PlanEntryOutboundSchema),
@@ -443,79 +443,16 @@ const PlanUpdateContentOutboundSchema = z.union([
   }),
 ]);
 
-type PlanUpdateContent = z.output<typeof PlanUpdateContentSchema>;
+export type PlanUpdateContent = z.output<typeof PlanUpdateContentSchema>;
 
-const PlanUpdateSchema = z.looseObject({
+export const PlanUpdateSchema = z.looseObject({
   plan: PlanUpdateContentSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PlanUpdateOutboundSchema = z.strictObject({
+export const PlanUpdateOutboundSchema = z.strictObject({
   plan: PlanUpdateContentOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PlanUpdate = z.output<typeof PlanUpdateSchema>;
-
-export {
-  NesSuggestionSchema,
-  NesSuggestionOutboundSchema,
-  type NesSuggestion,
-  SuggestNesResponseSchema,
-  SuggestNesResponseOutboundSchema,
-  type SuggestNesResponse,
-  CloseNesResponseSchema,
-  CloseNesResponseOutboundSchema,
-  type CloseNesResponse,
-  ExtResponseSchema,
-  ExtResponseOutboundSchema,
-  type ExtResponse,
-  ErrorCodeSchema,
-  ErrorCodeOutboundSchema,
-  type ErrorCode,
-  ErrorSchema,
-  ErrorOutboundSchema,
-  type Error,
-  AgentResponseSchema,
-  AgentResponseOutboundSchema,
-  type AgentResponse,
-  MessageIdSchema,
-  MessageIdOutboundSchema,
-  type MessageId,
-  ContentChunkSchema,
-  ContentChunkOutboundSchema,
-  type ContentChunk,
-  ToolCallSchema,
-  ToolCallOutboundSchema,
-  type ToolCall,
-  PlanEntryPrioritySchema,
-  PlanEntryPriorityOutboundSchema,
-  type PlanEntryPriority,
-  PlanEntryStatusSchema,
-  PlanEntryStatusOutboundSchema,
-  type PlanEntryStatus,
-  PlanEntrySchema,
-  PlanEntryOutboundSchema,
-  type PlanEntry,
-  PlanSchema,
-  PlanOutboundSchema,
-  type Plan,
-  PlanIdSchema,
-  PlanIdOutboundSchema,
-  type PlanId,
-  PlanItemsSchema,
-  PlanItemsOutboundSchema,
-  type PlanItems,
-  PlanFileSchema,
-  PlanFileOutboundSchema,
-  type PlanFile,
-  PlanMarkdownSchema,
-  PlanMarkdownOutboundSchema,
-  type PlanMarkdown,
-  PlanUpdateContentSchema,
-  PlanUpdateContentOutboundSchema,
-  type PlanUpdateContent,
-  PlanUpdateSchema,
-  PlanUpdateOutboundSchema,
-  type PlanUpdate,
-};
+export type PlanUpdate = z.output<typeof PlanUpdateSchema>;

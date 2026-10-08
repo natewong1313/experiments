@@ -17,7 +17,7 @@ import {
 import type { SessionState } from "../ahp/channels/session/state";
 import type { SessionAction } from "../ahp/channels/session/actions";
 
-const AcpSessionStateSchema = z.strictObject({
+export const AcpSessionStateSchema = z.strictObject({
   commands: AvailableCommandsUpdateSchema.optional(),
   config: ConfigOptionUpdateSchema.optional(),
   mode: CurrentModeUpdateSchema.optional(),
@@ -32,11 +32,11 @@ const AcpSessionStateSchema = z.strictObject({
   lastUpdate: SessionNotificationSchema.optional(),
 });
 
-const AcpStateSchema = z.record(z.string(), AcpSessionStateSchema);
+export const AcpStateSchema = z.record(z.string(), AcpSessionStateSchema);
 
-type AcpSessionState = z.output<typeof AcpSessionStateSchema>;
+export type AcpSessionState = z.output<typeof AcpSessionStateSchema>;
 
-type AcpState = z.output<typeof AcpStateSchema>;
+export type AcpState = z.output<typeof AcpStateSchema>;
 
 function applyAcpUpdate(state: AcpSessionState, { update }: SessionNotification): AcpSessionState {
   switch (update.sessionUpdate) {
@@ -167,7 +167,7 @@ function applyAcpUpdate(state: AcpSessionState, { update }: SessionNotification)
   }
 }
 
-function acpUpdateToSessionActions(
+export function acpUpdateToSessionActions(
   session: Pick<SessionState, "_meta">,
   notification: SessionNotification,
   rootSessionId: string,
@@ -199,11 +199,3 @@ function acpUpdateToSessionActions(
 
   return actions;
 }
-
-export {
-  AcpSessionStateSchema,
-  AcpStateSchema,
-  acpUpdateToSessionActions,
-  type AcpState,
-  type AcpSessionState,
-};

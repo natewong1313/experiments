@@ -2,7 +2,7 @@ import type { AgentConfig } from "../src/index";
 import { workingDirectory } from "../src/host-config";
 import type { HostState, Publication } from "../src/state";
 
-const TEST_CONFIG: AgentConfig = {
+export const TEST_CONFIG: AgentConfig = {
   agent: {
     provider: "pi",
     displayName: "Pi",
@@ -12,7 +12,7 @@ const TEST_CONFIG: AgentConfig = {
   cwd: "/workspace",
 };
 
-function createSession(store: HostState, uri: string, sessionKey: string): Publication {
+export function createSession(store: HostState, uri: string, sessionKey: string): Publication {
   return store.mutations.createSession({
     uri,
     sessionKey,
@@ -20,7 +20,5 @@ function createSession(store: HostState, uri: string, sessionKey: string): Publi
     workingDirectory: workingDirectory(TEST_CONFIG.cwd),
   });
 }
-
-export { TEST_CONFIG, createSession };
 
 export { createHostState, type HostState } from "../src/state";

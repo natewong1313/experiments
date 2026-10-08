@@ -24,7 +24,7 @@ type BackendEvent =
   | { kind: "new" | "load"; cwd: string; sessionId: string }
   | { kind: "prompt"; sessionId: string };
 
-class AcpBackend extends DurableObject {
+export class AcpBackend extends DurableObject {
   private controlledTurn: ControlledTurn | null = null;
 
   private readonly connections: Map<WebSocket, AgentConnection> = new Map();
@@ -147,5 +147,3 @@ class AcpBackend extends DurableObject {
     await this.ctx.storage.put("events", [...events, event]);
   }
 }
-
-export { AcpBackend };

@@ -59,7 +59,7 @@ function toSortOrder(value: string): SortOrder {
   return value === "oldest" ? "oldest" : "newest";
 }
 
-function SessionList(): JSX.Element {
+export function SessionList(): JSX.Element {
   const { host, view } = useAgentHost();
 
   const [query, setQuery] = useState("");
@@ -248,5 +248,3 @@ function SessionList(): JSX.Element {
     </section>
   );
 }
-
-export { SessionList };

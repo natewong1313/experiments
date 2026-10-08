@@ -19,7 +19,7 @@ function HostConnection({ host, setHost, children }: HostConnectionParams): JSX.
   return <AgentHostContext value={value}>{children}</AgentHostContext>;
 }
 
-function AgentHostProvider({ children }: AgentHostProviderParams): JSX.Element {
+export function AgentHostProvider({ children }: AgentHostProviderParams): JSX.Element {
   const search = useSearch({ from: "__root__" });
   const navigate = useNavigate();
   const host = search.host ?? "example";
@@ -37,5 +37,3 @@ function AgentHostProvider({ children }: AgentHostProviderParams): JSX.Element {
     </HostConnection>
   );
 }
-
-export { AgentHostProvider };

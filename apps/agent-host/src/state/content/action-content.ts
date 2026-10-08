@@ -20,7 +20,7 @@ const DATA_PREFIX = "data:";
 
 type Metadata = z.output<typeof metaSchema>;
 
-class ActionContent {
+export class ActionContent {
   private readonly resources: ResourceStore;
 
   constructor(resources: ResourceStore) {
@@ -208,5 +208,3 @@ class ActionContent {
     });
   }
 }
-
-export { ActionContent };

@@ -14,9 +14,9 @@ const SESSION_CONTENT_BYTES = 67_108_864;
 
 const PIECE_CHARACTERS = 16_384;
 
-type ContentEncoding = typeof contentsTable.$inferSelect.encoding;
+export type ContentEncoding = typeof contentsTable.$inferSelect.encoding;
 
-class ResourceStore {
+export class ResourceStore {
   private readonly db: Database;
 
   constructor(db: Database) {
@@ -163,5 +163,3 @@ class ResourceStore {
     this.db.delete(contentsTable).where(lte(contentsTable.retiredSeq, floor)).run();
   }
 }
-
-export { ResourceStore, type ContentEncoding };

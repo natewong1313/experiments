@@ -10,7 +10,7 @@ import {
   ProviderCurrentConfigOutboundSchema,
 } from "./schemas-4";
 
-const ProviderInfoSchema = z.looseObject({
+export const ProviderInfoSchema = z.looseObject({
   providerId: ProviderIdSchema,
   supported: z.array(LlmProtocolSchema),
   required: z.boolean(),
@@ -18,7 +18,7 @@ const ProviderInfoSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ProviderInfoOutboundSchema = z.strictObject({
+export const ProviderInfoOutboundSchema = z.strictObject({
   providerId: ProviderIdOutboundSchema,
   supported: z.array(LlmProtocolOutboundSchema),
   required: z.boolean(),
@@ -26,93 +26,93 @@ const ProviderInfoOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ProviderInfo = z.output<typeof ProviderInfoSchema>;
+export type ProviderInfo = z.output<typeof ProviderInfoSchema>;
 
-const ListProvidersResponseSchema = z.looseObject({
+export const ListProvidersResponseSchema = z.looseObject({
   providers: z.array(ProviderInfoSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ListProvidersResponseOutboundSchema = z.strictObject({
+export const ListProvidersResponseOutboundSchema = z.strictObject({
   providers: z.array(ProviderInfoOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ListProvidersResponse = z.output<typeof ListProvidersResponseSchema>;
+export type ListProvidersResponse = z.output<typeof ListProvidersResponseSchema>;
 
-const SetProviderResponseSchema = z.looseObject({
+export const SetProviderResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SetProviderResponseOutboundSchema = z.strictObject({
+export const SetProviderResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SetProviderResponse = z.output<typeof SetProviderResponseSchema>;
+export type SetProviderResponse = z.output<typeof SetProviderResponseSchema>;
 
-const DisableProviderResponseSchema = z.looseObject({
+export const DisableProviderResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DisableProviderResponseOutboundSchema = z.strictObject({
+export const DisableProviderResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DisableProviderResponse = z.output<typeof DisableProviderResponseSchema>;
+export type DisableProviderResponse = z.output<typeof DisableProviderResponseSchema>;
 
-const LogoutResponseSchema = z.looseObject({
+export const LogoutResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const LogoutResponseOutboundSchema = z.strictObject({
+export const LogoutResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type LogoutResponse = z.output<typeof LogoutResponseSchema>;
+export type LogoutResponse = z.output<typeof LogoutResponseSchema>;
 
-const SessionModeIdSchema = z.string();
+export const SessionModeIdSchema = z.string();
 
-const SessionModeIdOutboundSchema = z.string();
+export const SessionModeIdOutboundSchema = z.string();
 
-type SessionModeId = z.output<typeof SessionModeIdSchema>;
+export type SessionModeId = z.output<typeof SessionModeIdSchema>;
 
-const SessionModeSchema = z.looseObject({
+export const SessionModeSchema = z.looseObject({
   id: SessionModeIdSchema,
   name: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionModeOutboundSchema = z.strictObject({
+export const SessionModeOutboundSchema = z.strictObject({
   id: SessionModeIdOutboundSchema,
   name: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionMode = z.output<typeof SessionModeSchema>;
+export type SessionMode = z.output<typeof SessionModeSchema>;
 
-const SessionModeStateSchema = z.looseObject({
+export const SessionModeStateSchema = z.looseObject({
   currentModeId: SessionModeIdSchema,
   availableModes: z.array(SessionModeSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionModeStateOutboundSchema = z.strictObject({
+export const SessionModeStateOutboundSchema = z.strictObject({
   currentModeId: SessionModeIdOutboundSchema,
   availableModes: z.array(SessionModeOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionModeState = z.output<typeof SessionModeStateSchema>;
+export type SessionModeState = z.output<typeof SessionModeStateSchema>;
 
-const SessionConfigIdSchema = z.string();
+export const SessionConfigIdSchema = z.string();
 
-const SessionConfigIdOutboundSchema = z.string();
+export const SessionConfigIdOutboundSchema = z.string();
 
-type SessionConfigId = z.output<typeof SessionConfigIdSchema>;
+export type SessionConfigId = z.output<typeof SessionConfigIdSchema>;
 
-const SessionConfigOptionCategorySchema = z.union([
+export const SessionConfigOptionCategorySchema = z.union([
   z.literal("mode"),
   z.literal("model"),
   z.literal("model_config"),
@@ -120,7 +120,7 @@ const SessionConfigOptionCategorySchema = z.union([
   z.string(),
 ]);
 
-const SessionConfigOptionCategoryOutboundSchema = z.union([
+export const SessionConfigOptionCategoryOutboundSchema = z.union([
   z.literal("mode"),
   z.literal("model"),
   z.literal("model_config"),
@@ -128,83 +128,83 @@ const SessionConfigOptionCategoryOutboundSchema = z.union([
   z.string(),
 ]);
 
-type SessionConfigOptionCategory = z.output<typeof SessionConfigOptionCategorySchema>;
+export type SessionConfigOptionCategory = z.output<typeof SessionConfigOptionCategorySchema>;
 
-const SessionConfigValueIdSchema = z.string();
+export const SessionConfigValueIdSchema = z.string();
 
-const SessionConfigValueIdOutboundSchema = z.string();
+export const SessionConfigValueIdOutboundSchema = z.string();
 
-type SessionConfigValueId = z.output<typeof SessionConfigValueIdSchema>;
+export type SessionConfigValueId = z.output<typeof SessionConfigValueIdSchema>;
 
-const SessionConfigSelectOptionSchema = z.looseObject({
+export const SessionConfigSelectOptionSchema = z.looseObject({
   value: SessionConfigValueIdSchema,
   name: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionConfigSelectOptionOutboundSchema = z.strictObject({
+export const SessionConfigSelectOptionOutboundSchema = z.strictObject({
   value: SessionConfigValueIdOutboundSchema,
   name: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionConfigSelectOption = z.output<typeof SessionConfigSelectOptionSchema>;
+export type SessionConfigSelectOption = z.output<typeof SessionConfigSelectOptionSchema>;
 
-const SessionConfigGroupIdSchema = z.string();
+export const SessionConfigGroupIdSchema = z.string();
 
-const SessionConfigGroupIdOutboundSchema = z.string();
+export const SessionConfigGroupIdOutboundSchema = z.string();
 
-type SessionConfigGroupId = z.output<typeof SessionConfigGroupIdSchema>;
+export type SessionConfigGroupId = z.output<typeof SessionConfigGroupIdSchema>;
 
-const SessionConfigSelectGroupSchema = z.looseObject({
+export const SessionConfigSelectGroupSchema = z.looseObject({
   group: SessionConfigGroupIdSchema,
   name: z.string(),
   options: z.array(SessionConfigSelectOptionSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionConfigSelectGroupOutboundSchema = z.strictObject({
+export const SessionConfigSelectGroupOutboundSchema = z.strictObject({
   group: SessionConfigGroupIdOutboundSchema,
   name: z.string(),
   options: z.array(SessionConfigSelectOptionOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionConfigSelectGroup = z.output<typeof SessionConfigSelectGroupSchema>;
+export type SessionConfigSelectGroup = z.output<typeof SessionConfigSelectGroupSchema>;
 
-const SessionConfigSelectOptionsSchema = z.union([
+export const SessionConfigSelectOptionsSchema = z.union([
   z.array(SessionConfigSelectOptionSchema),
   z.array(SessionConfigSelectGroupSchema),
 ]);
 
-const SessionConfigSelectOptionsOutboundSchema = z.union([
+export const SessionConfigSelectOptionsOutboundSchema = z.union([
   z.array(SessionConfigSelectOptionOutboundSchema),
   z.array(SessionConfigSelectGroupOutboundSchema),
 ]);
 
-type SessionConfigSelectOptions = z.output<typeof SessionConfigSelectOptionsSchema>;
+export type SessionConfigSelectOptions = z.output<typeof SessionConfigSelectOptionsSchema>;
 
-const SessionConfigSelectSchema = z.looseObject({
+export const SessionConfigSelectSchema = z.looseObject({
   currentValue: SessionConfigValueIdSchema,
   options: SessionConfigSelectOptionsSchema,
 });
 
-const SessionConfigSelectOutboundSchema = z.strictObject({
+export const SessionConfigSelectOutboundSchema = z.strictObject({
   currentValue: SessionConfigValueIdOutboundSchema,
   options: SessionConfigSelectOptionsOutboundSchema,
 });
 
-type SessionConfigSelect = z.output<typeof SessionConfigSelectSchema>;
+export type SessionConfigSelect = z.output<typeof SessionConfigSelectSchema>;
 
-const SessionConfigBooleanSchema = z.looseObject({ currentValue: z.boolean() });
+export const SessionConfigBooleanSchema = z.looseObject({ currentValue: z.boolean() });
 
-const SessionConfigBooleanOutboundSchema = z.strictObject({ currentValue: z.boolean() });
+export const SessionConfigBooleanOutboundSchema = z.strictObject({ currentValue: z.boolean() });
 
-type SessionConfigBoolean = z.output<typeof SessionConfigBooleanSchema>;
+export type SessionConfigBoolean = z.output<typeof SessionConfigBooleanSchema>;
 
-const SessionConfigOptionSchema = z.union([
+export const SessionConfigOptionSchema = z.union([
   z.looseObject({
     currentValue: SessionConfigValueIdSchema,
     options: SessionConfigSelectOptionsSchema,
@@ -226,7 +226,7 @@ const SessionConfigOptionSchema = z.union([
   }),
 ]);
 
-const SessionConfigOptionOutboundSchema = z.union([
+export const SessionConfigOptionOutboundSchema = z.union([
   z.strictObject({
     currentValue: SessionConfigValueIdOutboundSchema,
     options: SessionConfigSelectOptionsOutboundSchema,
@@ -248,97 +248,34 @@ const SessionConfigOptionOutboundSchema = z.union([
   }),
 ]);
 
-type SessionConfigOption = z.output<typeof SessionConfigOptionSchema>;
+export type SessionConfigOption = z.output<typeof SessionConfigOptionSchema>;
 
-const NewSessionResponseSchema = z.looseObject({
+export const NewSessionResponseSchema = z.looseObject({
   sessionId: SessionIdSchema,
   modes: z.union([SessionModeStateSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NewSessionResponseOutboundSchema = z.strictObject({
+export const NewSessionResponseOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   modes: z.union([SessionModeStateOutboundSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionOutboundSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NewSessionResponse = z.output<typeof NewSessionResponseSchema>;
+export type NewSessionResponse = z.output<typeof NewSessionResponseSchema>;
 
-const LoadSessionResponseSchema = z.looseObject({
+export const LoadSessionResponseSchema = z.looseObject({
   modes: z.union([SessionModeStateSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const LoadSessionResponseOutboundSchema = z.strictObject({
+export const LoadSessionResponseOutboundSchema = z.strictObject({
   modes: z.union([SessionModeStateOutboundSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionOutboundSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type LoadSessionResponse = z.output<typeof LoadSessionResponseSchema>;
-
-export {
-  ProviderInfoSchema,
-  ProviderInfoOutboundSchema,
-  type ProviderInfo,
-  ListProvidersResponseSchema,
-  ListProvidersResponseOutboundSchema,
-  type ListProvidersResponse,
-  SetProviderResponseSchema,
-  SetProviderResponseOutboundSchema,
-  type SetProviderResponse,
-  DisableProviderResponseSchema,
-  DisableProviderResponseOutboundSchema,
-  type DisableProviderResponse,
-  LogoutResponseSchema,
-  LogoutResponseOutboundSchema,
-  type LogoutResponse,
-  SessionModeIdSchema,
-  SessionModeIdOutboundSchema,
-  type SessionModeId,
-  SessionModeSchema,
-  SessionModeOutboundSchema,
-  type SessionMode,
-  SessionModeStateSchema,
-  SessionModeStateOutboundSchema,
-  type SessionModeState,
-  SessionConfigIdSchema,
-  SessionConfigIdOutboundSchema,
-  type SessionConfigId,
-  SessionConfigOptionCategorySchema,
-  SessionConfigOptionCategoryOutboundSchema,
-  type SessionConfigOptionCategory,
-  SessionConfigValueIdSchema,
-  SessionConfigValueIdOutboundSchema,
-  type SessionConfigValueId,
-  SessionConfigSelectOptionSchema,
-  SessionConfigSelectOptionOutboundSchema,
-  type SessionConfigSelectOption,
-  SessionConfigGroupIdSchema,
-  SessionConfigGroupIdOutboundSchema,
-  type SessionConfigGroupId,
-  SessionConfigSelectGroupSchema,
-  SessionConfigSelectGroupOutboundSchema,
-  type SessionConfigSelectGroup,
-  SessionConfigSelectOptionsSchema,
-  SessionConfigSelectOptionsOutboundSchema,
-  type SessionConfigSelectOptions,
-  SessionConfigSelectSchema,
-  SessionConfigSelectOutboundSchema,
-  type SessionConfigSelect,
-  SessionConfigBooleanSchema,
-  SessionConfigBooleanOutboundSchema,
-  type SessionConfigBoolean,
-  SessionConfigOptionSchema,
-  SessionConfigOptionOutboundSchema,
-  type SessionConfigOption,
-  NewSessionResponseSchema,
-  NewSessionResponseOutboundSchema,
-  type NewSessionResponse,
-  LoadSessionResponseSchema,
-  LoadSessionResponseOutboundSchema,
-  type LoadSessionResponse,
-};
+export type LoadSessionResponse = z.output<typeof LoadSessionResponseSchema>;

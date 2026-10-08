@@ -21,7 +21,7 @@ type UseAhpChannelParams<State> = {
   reduce: ReduceState<State>;
 };
 
-function useAhpChannel<State>({
+export function useAhpChannel<State>({
   client,
   uri,
   parse,
@@ -100,5 +100,3 @@ function useAhpChannel<State>({
 
   return { status: "loading" };
 }
-
-export { useAhpChannel };

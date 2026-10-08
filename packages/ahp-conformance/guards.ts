@@ -1,8 +1,8 @@
-type WireValue = null | boolean | number | string | readonly WireValue[] | WireRecord;
+export type WireValue = null | boolean | number | string | readonly WireValue[] | WireRecord;
 
-type WireRecord = { readonly [key: string]: WireValue };
+export type WireRecord = { readonly [key: string]: WireValue };
 
-function isWireValue(value: unknown): value is WireValue {
+export function isWireValue(value: unknown): value is WireValue {
   if (value === null) {
     return true;
   }
@@ -18,7 +18,7 @@ function isWireValue(value: unknown): value is WireValue {
   return typeof value === "boolean" || typeof value === "number" || typeof value === "string";
 }
 
-function isWireRecord(value: unknown): value is WireRecord {
+export function isWireRecord(value: unknown): value is WireRecord {
   if (value === null || Array.isArray(value)) {
     return false;
   }
@@ -35,5 +35,3 @@ function isWireRecord(value: unknown): value is WireRecord {
 
   return Object.values(value).every((item) => isWireValue(item));
 }
-
-export { isWireRecord, isWireValue, type WireRecord, type WireValue };

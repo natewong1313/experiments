@@ -41,7 +41,7 @@ type AppendPiecesParams = {
   text: string;
 };
 
-class PartsStore {
+export class PartsStore {
   private readonly db: Database;
 
   constructor(db: Database) {
@@ -280,5 +280,3 @@ class PartsStore {
     this.db.update(replyPartsTable).set({ pieces: piece }).where(match).run();
   }
 }
-
-export { PartsStore };

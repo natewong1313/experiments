@@ -13,7 +13,7 @@ type DispatchActionParams = {
   action: StateAction;
 };
 
-async function dispatchAction({
+export async function dispatchAction({
   client,
   clientId,
   channel,
@@ -68,5 +68,3 @@ async function dispatchAction({
     await events.return?.();
   }
 }
-
-export { dispatchAction };

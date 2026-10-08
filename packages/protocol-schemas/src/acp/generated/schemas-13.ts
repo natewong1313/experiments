@@ -48,21 +48,21 @@ import {
   CreateElicitationResponseOutboundSchema,
 } from "./schemas-12";
 
-const McpErrorSchema = z.looseObject({
+export const McpErrorSchema = z.looseObject({
   code: z.number().refine(Number.isInteger, { error: "Expected integer" }),
   message: z.string(),
   data: z.unknown().optional(),
 });
 
-const McpErrorOutboundSchema = z.looseObject({
+export const McpErrorOutboundSchema = z.looseObject({
   code: z.number().refine(Number.isInteger, { error: "Expected integer" }),
   message: z.string(),
   data: z.unknown().optional(),
 });
 
-type McpError = z.output<typeof McpErrorSchema>;
+export type McpError = z.output<typeof McpErrorSchema>;
 
-const MessageMcpResponseSchema = z.union([
+export const MessageMcpResponseSchema = z.union([
   z.looseObject({
     result: z.unknown(),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
@@ -73,7 +73,7 @@ const MessageMcpResponseSchema = z.union([
   }),
 ]);
 
-const MessageMcpResponseOutboundSchema = z.union([
+export const MessageMcpResponseOutboundSchema = z.union([
   z.strictObject({
     result: z.unknown(),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
@@ -84,9 +84,9 @@ const MessageMcpResponseOutboundSchema = z.union([
   }),
 ]);
 
-type MessageMcpResponse = z.output<typeof MessageMcpResponseSchema>;
+export type MessageMcpResponse = z.output<typeof MessageMcpResponseSchema>;
 
-const ClientResponseSchema = z.union([
+export const ClientResponseSchema = z.union([
   z.looseObject({
     id: RequestIdSchema,
     result: z.union([
@@ -106,7 +106,7 @@ const ClientResponseSchema = z.union([
   z.looseObject({ id: RequestIdSchema, error: ErrorSchema }),
 ]);
 
-const ClientResponseOutboundSchema = z.union([
+export const ClientResponseOutboundSchema = z.union([
   z.strictObject({
     id: RequestIdOutboundSchema,
     result: z.union([
@@ -126,21 +126,21 @@ const ClientResponseOutboundSchema = z.union([
   z.strictObject({ id: RequestIdOutboundSchema, error: ErrorOutboundSchema }),
 ]);
 
-type ClientResponse = z.output<typeof ClientResponseSchema>;
+export type ClientResponse = z.output<typeof ClientResponseSchema>;
 
-const CancelNotificationSchema = z.looseObject({
+export const CancelNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CancelNotificationOutboundSchema = z.strictObject({
+export const CancelNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CancelNotification = z.output<typeof CancelNotificationSchema>;
+export type CancelNotification = z.output<typeof CancelNotificationSchema>;
 
-const DidOpenDocumentNotificationSchema = z.looseObject({
+export const DidOpenDocumentNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   uri: z.string(),
   languageId: z.string(),
@@ -149,7 +149,7 @@ const DidOpenDocumentNotificationSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DidOpenDocumentNotificationOutboundSchema = z.strictObject({
+export const DidOpenDocumentNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   uri: z.string(),
   languageId: z.string(),
@@ -158,23 +158,23 @@ const DidOpenDocumentNotificationOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DidOpenDocumentNotification = z.output<typeof DidOpenDocumentNotificationSchema>;
+export type DidOpenDocumentNotification = z.output<typeof DidOpenDocumentNotificationSchema>;
 
-const TextDocumentContentChangeEventSchema = z.looseObject({
+export const TextDocumentContentChangeEventSchema = z.looseObject({
   range: z.union([RangeSchema, z.null()]).optional(),
   text: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const TextDocumentContentChangeEventOutboundSchema = z.strictObject({
+export const TextDocumentContentChangeEventOutboundSchema = z.strictObject({
   range: z.union([RangeOutboundSchema, z.null()]).optional(),
   text: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type TextDocumentContentChangeEvent = z.output<typeof TextDocumentContentChangeEventSchema>;
+export type TextDocumentContentChangeEvent = z.output<typeof TextDocumentContentChangeEventSchema>;
 
-const DidChangeDocumentNotificationSchema = z.looseObject({
+export const DidChangeDocumentNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   uri: z.string(),
   version: z.number().refine(Number.isInteger, { error: "Expected integer" }),
@@ -182,7 +182,7 @@ const DidChangeDocumentNotificationSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DidChangeDocumentNotificationOutboundSchema = z.strictObject({
+export const DidChangeDocumentNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   uri: z.string(),
   version: z.number().refine(Number.isInteger, { error: "Expected integer" }),
@@ -190,37 +190,37 @@ const DidChangeDocumentNotificationOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DidChangeDocumentNotification = z.output<typeof DidChangeDocumentNotificationSchema>;
+export type DidChangeDocumentNotification = z.output<typeof DidChangeDocumentNotificationSchema>;
 
-const DidCloseDocumentNotificationSchema = z.looseObject({
+export const DidCloseDocumentNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   uri: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DidCloseDocumentNotificationOutboundSchema = z.strictObject({
+export const DidCloseDocumentNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   uri: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DidCloseDocumentNotification = z.output<typeof DidCloseDocumentNotificationSchema>;
+export type DidCloseDocumentNotification = z.output<typeof DidCloseDocumentNotificationSchema>;
 
-const DidSaveDocumentNotificationSchema = z.looseObject({
+export const DidSaveDocumentNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   uri: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DidSaveDocumentNotificationOutboundSchema = z.strictObject({
+export const DidSaveDocumentNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   uri: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DidSaveDocumentNotification = z.output<typeof DidSaveDocumentNotificationSchema>;
+export type DidSaveDocumentNotification = z.output<typeof DidSaveDocumentNotificationSchema>;
 
-const DidFocusDocumentNotificationSchema = z.looseObject({
+export const DidFocusDocumentNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   uri: z.string(),
   version: z.number().refine(Number.isInteger, { error: "Expected integer" }),
@@ -229,7 +229,7 @@ const DidFocusDocumentNotificationSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DidFocusDocumentNotificationOutboundSchema = z.strictObject({
+export const DidFocusDocumentNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   uri: z.string(),
   version: z.number().refine(Number.isInteger, { error: "Expected integer" }),
@@ -238,45 +238,50 @@ const DidFocusDocumentNotificationOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DidFocusDocumentNotification = z.output<typeof DidFocusDocumentNotificationSchema>;
+export type DidFocusDocumentNotification = z.output<typeof DidFocusDocumentNotificationSchema>;
 
-const AcceptNesNotificationSchema = z.looseObject({
+export const AcceptNesNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   id: NesSuggestionIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const AcceptNesNotificationOutboundSchema = z.strictObject({
+export const AcceptNesNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   id: NesSuggestionIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type AcceptNesNotification = z.output<typeof AcceptNesNotificationSchema>;
+export type AcceptNesNotification = z.output<typeof AcceptNesNotificationSchema>;
 
-const NesRejectReasonSchema = z.enum(["rejected", "ignored", "replaced", "cancelled"]);
+export const NesRejectReasonSchema = z.enum(["rejected", "ignored", "replaced", "cancelled"]);
 
-const NesRejectReasonOutboundSchema = z.enum(["rejected", "ignored", "replaced", "cancelled"]);
+export const NesRejectReasonOutboundSchema = z.enum([
+  "rejected",
+  "ignored",
+  "replaced",
+  "cancelled",
+]);
 
-type NesRejectReason = z.output<typeof NesRejectReasonSchema>;
+export type NesRejectReason = z.output<typeof NesRejectReasonSchema>;
 
-const RejectNesNotificationSchema = z.looseObject({
+export const RejectNesNotificationSchema = z.looseObject({
   sessionId: SessionIdSchema,
   id: NesSuggestionIdSchema,
   reason: z.union([NesRejectReasonSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const RejectNesNotificationOutboundSchema = z.strictObject({
+export const RejectNesNotificationOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   id: NesSuggestionIdOutboundSchema,
   reason: z.union([NesRejectReasonOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type RejectNesNotification = z.output<typeof RejectNesNotificationSchema>;
+export type RejectNesNotification = z.output<typeof RejectNesNotificationSchema>;
 
-const MessageMcpNotificationSchema = z.looseObject({
+export const MessageMcpNotificationSchema = z.looseObject({
   serverId: McpServerAcpIdSchema,
   requestId: McpRequestIdSchema,
   method: z.string(),
@@ -284,7 +289,7 @@ const MessageMcpNotificationSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const MessageMcpNotificationOutboundSchema = z.strictObject({
+export const MessageMcpNotificationOutboundSchema = z.strictObject({
   serverId: McpServerAcpIdOutboundSchema,
   requestId: McpRequestIdOutboundSchema,
   method: z.string(),
@@ -292,9 +297,9 @@ const MessageMcpNotificationOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type MessageMcpNotification = z.output<typeof MessageMcpNotificationSchema>;
+export type MessageMcpNotification = z.output<typeof MessageMcpNotificationSchema>;
 
-const ClientNotificationSchema = z.looseObject({
+export const ClientNotificationSchema = z.looseObject({
   method: z.string(),
   params: z
     .union([
@@ -315,7 +320,7 @@ const ClientNotificationSchema = z.looseObject({
     .optional(),
 });
 
-const ClientNotificationOutboundSchema = z.strictObject({
+export const ClientNotificationOutboundSchema = z.strictObject({
   method: z.string(),
   params: z
     .union([
@@ -336,67 +341,16 @@ const ClientNotificationOutboundSchema = z.strictObject({
     .optional(),
 });
 
-type ClientNotification = z.output<typeof ClientNotificationSchema>;
+export type ClientNotification = z.output<typeof ClientNotificationSchema>;
 
-const CancelRequestNotificationSchema = z.looseObject({
+export const CancelRequestNotificationSchema = z.looseObject({
   requestId: RequestIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CancelRequestNotificationOutboundSchema = z.strictObject({
+export const CancelRequestNotificationOutboundSchema = z.strictObject({
   requestId: RequestIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CancelRequestNotification = z.output<typeof CancelRequestNotificationSchema>;
-
-export {
-  McpErrorSchema,
-  McpErrorOutboundSchema,
-  type McpError,
-  MessageMcpResponseSchema,
-  MessageMcpResponseOutboundSchema,
-  type MessageMcpResponse,
-  ClientResponseSchema,
-  ClientResponseOutboundSchema,
-  type ClientResponse,
-  CancelNotificationSchema,
-  CancelNotificationOutboundSchema,
-  type CancelNotification,
-  DidOpenDocumentNotificationSchema,
-  DidOpenDocumentNotificationOutboundSchema,
-  type DidOpenDocumentNotification,
-  TextDocumentContentChangeEventSchema,
-  TextDocumentContentChangeEventOutboundSchema,
-  type TextDocumentContentChangeEvent,
-  DidChangeDocumentNotificationSchema,
-  DidChangeDocumentNotificationOutboundSchema,
-  type DidChangeDocumentNotification,
-  DidCloseDocumentNotificationSchema,
-  DidCloseDocumentNotificationOutboundSchema,
-  type DidCloseDocumentNotification,
-  DidSaveDocumentNotificationSchema,
-  DidSaveDocumentNotificationOutboundSchema,
-  type DidSaveDocumentNotification,
-  DidFocusDocumentNotificationSchema,
-  DidFocusDocumentNotificationOutboundSchema,
-  type DidFocusDocumentNotification,
-  AcceptNesNotificationSchema,
-  AcceptNesNotificationOutboundSchema,
-  type AcceptNesNotification,
-  NesRejectReasonSchema,
-  NesRejectReasonOutboundSchema,
-  type NesRejectReason,
-  RejectNesNotificationSchema,
-  RejectNesNotificationOutboundSchema,
-  type RejectNesNotification,
-  MessageMcpNotificationSchema,
-  MessageMcpNotificationOutboundSchema,
-  type MessageMcpNotification,
-  ClientNotificationSchema,
-  ClientNotificationOutboundSchema,
-  type ClientNotification,
-  CancelRequestNotificationSchema,
-  CancelRequestNotificationOutboundSchema,
-  type CancelRequestNotification,
-};
+export type CancelRequestNotification = z.output<typeof CancelRequestNotificationSchema>;

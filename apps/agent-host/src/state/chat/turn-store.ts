@@ -14,7 +14,7 @@ type TurnRow = typeof turnRecordsTable.$inferSelect;
 
 type TurnStoreParams = { db: Database; parts: PartsStore };
 
-class TurnStore {
+export class TurnStore {
   private readonly db: Database;
   private readonly parts: PartsStore;
 
@@ -124,5 +124,3 @@ class TurnStore {
     }
   }
 }
-
-export { TurnStore };

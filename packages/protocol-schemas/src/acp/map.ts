@@ -10,11 +10,11 @@ const NO_ATTACHMENTS = 0;
 
 const LAST_PART_INDEX = -1;
 
-type AcpPromptMapping =
+export type AcpPromptMapping =
   | { ok: true; blocks: PromptRequest["prompt"] }
   | { ok: false; reason: "unsupported-content" };
 
-type AcpTurnOutcome =
+export type AcpTurnOutcome =
   | { outcome: "done"; message: string; stopReason: "end_turn" }
   | { outcome: "cancelled"; message: string; stopReason: "cancelled" }
   | {
@@ -23,7 +23,7 @@ type AcpTurnOutcome =
       stopReason: Exclude<StopReason, "end_turn" | "cancelled">;
     };
 
-function acpStopReasonToOutcome(stopReason: StopReason): AcpTurnOutcome {
+export function acpStopReasonToOutcome(stopReason: StopReason): AcpTurnOutcome {
   switch (stopReason) {
     case "end_turn": {
       return { outcome: "done", message: "", stopReason };
@@ -47,7 +47,9 @@ function acpStopReasonToOutcome(stopReason: StopReason): AcpTurnOutcome {
   }
 }
 
-function ahpMessageToAcpPrompt(message: Pick<Message, "text" | "attachments">): AcpPromptMapping {
+export function ahpMessageToAcpPrompt(
+  message: Pick<Message, "text" | "attachments">,
+): AcpPromptMapping {
   if ((message.attachments?.length ?? NO_ATTACHMENTS) > NO_ATTACHMENTS) {
     return { ok: false, reason: "unsupported-content" };
   }
@@ -62,7 +64,7 @@ type ChatResponsePartIdParts = {
   index: number;
 };
 
-function chatResponsePartId({ turnId, kind, index }: ChatResponsePartIdParts): string {
+export function chatResponsePartId({ turnId, kind, index }: ChatResponsePartIdParts): string {
   return `${turnId}/${kind}/${index}`;
 }
 
@@ -72,7 +74,7 @@ type MappingState = {
   toolExists: boolean;
 };
 
-function acpUpdateToChatActions(
+export function acpUpdateToChatActions(
   turn: Pick<ActiveTurn, "id" | "responseParts"> | undefined,
   notification: SessionNotification,
   rootSessionId = notification.sessionId,
@@ -290,12 +292,3 @@ function systemUpdate(turnId: string, notification: SessionNotification, text: s
     part: { kind: "systemNotification", content: text, _meta: { acp: notification } },
   };
 }
-
-export {
-  acpUpdateToChatActions,
-  chatResponsePartId,
-  acpStopReasonToOutcome,
-  ahpMessageToAcpPrompt,
-  type AcpPromptMapping,
-  type AcpTurnOutcome,
-};

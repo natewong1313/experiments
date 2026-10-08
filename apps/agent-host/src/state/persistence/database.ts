@@ -3,9 +3,9 @@ import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import drizzleMigrations from "../../../drizzle/migrations";
 import * as schema from "./schema";
 
-type Database = ReturnType<typeof drizzle<typeof schema>>;
+export type Database = ReturnType<typeof drizzle<typeof schema>>;
 
-class StateDatabase {
+export class StateDatabase {
   readonly db: Database;
   private readonly storage: DurableObjectStorage;
 
@@ -22,5 +22,3 @@ class StateDatabase {
     return this.storage.transactionSync(work);
   }
 }
-
-export { StateDatabase, type Database };

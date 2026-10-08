@@ -12,7 +12,7 @@ type CreationState =
 
 type CreateSessionButtonParams = { createSession: CreateSession };
 
-function CreateSessionButton({ createSession }: CreateSessionButtonParams): JSX.Element {
+export function CreateSessionButton({ createSession }: CreateSessionButtonParams): JSX.Element {
   const [creation, setCreation] = useState<CreationState>({ status: "idle" });
 
   async function create(): Promise<void> {
@@ -56,5 +56,3 @@ function CreateSessionButton({ createSession }: CreateSessionButtonParams): JSX.
     </div>
   );
 }
-
-export { CreateSessionButton };

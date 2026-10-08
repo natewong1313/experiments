@@ -1,6 +1,6 @@
 import type { SessionUpdate } from "../src/acp";
 
-const ACP_UPDATES = {
+export const ACP_UPDATES = {
   user_message_chunk: {
     sessionUpdate: "user_message_chunk",
     content: { type: "text", text: "User echo" },
@@ -95,5 +95,3 @@ const ACP_UPDATES = {
     content: { type: "text", text: "More details" },
   },
 } satisfies Record<SessionUpdate["sessionUpdate"], SessionUpdate>;
-
-export { ACP_UPDATES };

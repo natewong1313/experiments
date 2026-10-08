@@ -33,7 +33,7 @@ type WithAcpAgentParams = {
   ): Promise<void>;
 };
 
-async function withAcpAgent(options: WithAcpAgentParams): Promise<void> {
+export async function withAcpAgent(options: WithAcpAgentParams): Promise<void> {
   const stub = env.AGENT_HOST.get(env.AGENT_HOST.newUniqueId());
   const sockets: WebSocket[] = [];
   const servers: AgentConnection[] = [];
@@ -133,5 +133,3 @@ async function withAcpAgent(options: WithAcpAgentParams): Promise<void> {
     fetchSpy.mockRestore();
   }
 }
-
-export { withAcpAgent };

@@ -66,7 +66,7 @@ type ChatTransitionsParams = {
   history: TurnHistory;
 };
 
-class ChatTransitions {
+export class ChatTransitions {
   private readonly chats: ChatStore;
 
   private readonly turns: TurnStore;
@@ -407,5 +407,3 @@ class ChatTransitions {
     return next;
   }
 }
-
-export { ChatTransitions };

@@ -28,7 +28,7 @@ type TurnExecutionParams = {
   waitUntil: WaitUntil;
 };
 
-class TurnExecution {
+export class TurnExecution {
   private readonly running: Map<string, Promise<void>> = new Map();
   private readonly queries: HostQueries;
   private readonly mutations: HostMutations;
@@ -222,5 +222,3 @@ class TurnExecution {
     this.clients.broadcast(this.mutations.applyAction(channel, action));
   }
 }
-
-export { TurnExecution };

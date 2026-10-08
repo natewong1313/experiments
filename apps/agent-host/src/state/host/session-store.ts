@@ -9,7 +9,7 @@ const MAX_SESSION_BYTES = 65_536;
 
 type SessionCandidatesParams = { cursor?: string; limit: number };
 
-class SessionStore {
+export class SessionStore {
   private readonly db: Database;
 
   constructor(db: Database) {
@@ -117,5 +117,3 @@ class SessionStore {
     return this.db.select({ value: count() }).from(sessionsTable).get()?.value ?? 0;
   }
 }
-
-export { SessionStore };

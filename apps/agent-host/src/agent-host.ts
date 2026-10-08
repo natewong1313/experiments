@@ -14,7 +14,7 @@ import {
   type AcpConnectionOptions,
 } from "./host-config";
 
-abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
+export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
   private readonly clients: AhpClients;
   private readonly rpc: Promise<AhpRpc>;
 
@@ -110,5 +110,3 @@ abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
     this.clients.error(socket);
   }
 }
-
-export { AgentHost };

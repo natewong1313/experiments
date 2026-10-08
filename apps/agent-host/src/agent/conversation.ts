@@ -22,7 +22,7 @@ type AgentConversationParams = {
   activate(): void;
 };
 
-class AgentConversation {
+export class AgentConversation {
   readonly sessionId: string;
   readonly canReload: boolean;
   private readonly connection: ClientConnection;
@@ -92,5 +92,3 @@ class AgentConversation {
     this.connection.close();
   }
 }
-
-export { AgentConversation };

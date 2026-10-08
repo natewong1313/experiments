@@ -11,9 +11,9 @@ import {
 import { JsonRpcErrorCodes, PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { isWireRecord, isWireValue, type WireValue } from "./guards";
 
-const ROOT = "ahp-root://";
+export const ROOT = "ahp-root://";
 
-const LATEST_VERSION = PROTOCOL_VERSION;
+export const LATEST_VERSION = PROTOCOL_VERSION;
 
 const FIRST_REQUEST_ID = 1;
 
@@ -35,13 +35,13 @@ const LAST_EVENT_OFFSET = -1;
 
 type WireParams = Record<string, WireValue>;
 
-type ActionWaitOptions = {
+export type ActionWaitOptions = {
   after: number;
   predicate?(envelope: ActionEnvelope): boolean;
   timeoutMs?: number;
 };
 
-type ReceivedMessage = Readonly<
+export type ReceivedMessage = Readonly<
   { index: number; raw: string } & (
     | { kind: "action"; message: JsonRpcNotification; action: ActionEnvelope }
     | { kind: "notification"; message: JsonRpcNotification }
@@ -155,7 +155,7 @@ function freezeMessage(event: ReceivedMessage): void {
   Object.freeze(event);
 }
 
-class AhpConnection {
+export class AhpConnection {
   private nextId = FIRST_REQUEST_ID;
   private receiveIndex = INITIAL_RECEIVE_INDEX;
   private readonly transcript: ReceivedMessage[] = [];
@@ -512,7 +512,7 @@ class AhpConnection {
   }
 }
 
-async function initialize(
+export async function initialize(
   connection: AhpConnection,
   subscriptions: string[] = [],
 ): Promise<JsonRpcReply> {
@@ -524,12 +524,3 @@ async function initialize(
     initialSubscriptions: subscriptions,
   });
 }
-
-export {
-  AhpConnection,
-  initialize,
-  ROOT,
-  LATEST_VERSION,
-  type ActionWaitOptions,
-  type ReceivedMessage,
-};

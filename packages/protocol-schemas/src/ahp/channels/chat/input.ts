@@ -1,14 +1,14 @@
 import * as z from "zod";
 import { uriSchema } from "../../common";
 
-const ChatInputOptionSchema = z.strictObject({
+export const ChatInputOptionSchema = z.strictObject({
   id: z.string(),
   label: z.string(),
   description: z.string().optional(),
   recommended: z.boolean().optional(),
 });
 
-const ChatInputQuestionSchema = z.discriminatedUnion("kind", [
+export const ChatInputQuestionSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("text"),
     id: z.string(),
@@ -60,7 +60,7 @@ const ChatInputQuestionSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const ChatInputAnswerValueSchema = z.discriminatedUnion("kind", [
+export const ChatInputAnswerValueSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("text"), value: z.string() }),
   z.strictObject({ kind: z.literal("number"), value: z.number() }),
   z.strictObject({ kind: z.literal("boolean"), value: z.boolean() }),
@@ -76,7 +76,7 @@ const ChatInputAnswerValueSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const ChatInputAnswerSchema = z.union([
+export const ChatInputAnswerSchema = z.union([
   z.strictObject({
     state: z.enum(["draft", "submitted"]),
     value: ChatInputAnswerValueSchema,
@@ -87,7 +87,7 @@ const ChatInputAnswerSchema = z.union([
   }),
 ]);
 
-const ChatInputRequestSchema = z.strictObject({
+export const ChatInputRequestSchema = z.strictObject({
   id: z.string(),
   message: z.string().optional(),
   url: uriSchema.optional(),
@@ -95,31 +95,16 @@ const ChatInputRequestSchema = z.strictObject({
   answers: z.record(z.string(), ChatInputAnswerSchema).optional(),
 });
 
-const ChatInputResponseKindSchema = z.enum(["accept", "decline", "cancel"]);
+export const ChatInputResponseKindSchema = z.enum(["accept", "decline", "cancel"]);
 
-type ChatInputOption = z.output<typeof ChatInputOptionSchema>;
+export type ChatInputOption = z.output<typeof ChatInputOptionSchema>;
 
-type ChatInputQuestion = z.output<typeof ChatInputQuestionSchema>;
+export type ChatInputQuestion = z.output<typeof ChatInputQuestionSchema>;
 
-type ChatInputAnswerValue = z.output<typeof ChatInputAnswerValueSchema>;
+export type ChatInputAnswerValue = z.output<typeof ChatInputAnswerValueSchema>;
 
-type ChatInputAnswer = z.output<typeof ChatInputAnswerSchema>;
+export type ChatInputAnswer = z.output<typeof ChatInputAnswerSchema>;
 
-type ChatInputRequest = z.output<typeof ChatInputRequestSchema>;
+export type ChatInputRequest = z.output<typeof ChatInputRequestSchema>;
 
-type ChatInputResponseKind = z.output<typeof ChatInputResponseKindSchema>;
-
-export {
-  ChatInputAnswerSchema,
-  ChatInputAnswerValueSchema,
-  ChatInputOptionSchema,
-  ChatInputQuestionSchema,
-  ChatInputRequestSchema,
-  ChatInputResponseKindSchema,
-  type ChatInputAnswer,
-  type ChatInputAnswerValue,
-  type ChatInputOption,
-  type ChatInputQuestion,
-  type ChatInputRequest,
-  type ChatInputResponseKind,
-};
+export type ChatInputResponseKind = z.output<typeof ChatInputResponseKindSchema>;

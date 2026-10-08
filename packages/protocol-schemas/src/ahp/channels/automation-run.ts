@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { ErrorInfoSchema, UsageInfoSchema, isoTimestampSchema, uriSchema } from "../common";
 
-const AutomationRunLifecycleSchema = z.discriminatedUnion("status", [
+export const AutomationRunLifecycleSchema = z.discriminatedUnion("status", [
   z.strictObject({
     status: z.literal("pending"),
     createdAt: isoTimestampSchema,
@@ -33,7 +33,7 @@ const AutomationRunLifecycleSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-const AutomationRunOriginSchema = z.discriminatedUnion("kind", [
+export const AutomationRunOriginSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("manual") }),
   z.strictObject({
     kind: z.literal("trigger"),
@@ -44,7 +44,7 @@ const AutomationRunOriginSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const AutomationRunStateSchema = z.strictObject({
+export const AutomationRunStateSchema = z.strictObject({
   resource: uriSchema,
   automation: uriSchema,
   origin: AutomationRunOriginSchema,
@@ -54,7 +54,7 @@ const AutomationRunStateSchema = z.strictObject({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-const AutomationRunSummarySchema = z.strictObject({
+export const AutomationRunSummarySchema = z.strictObject({
   resource: uriSchema,
   automation: uriSchema,
   origin: AutomationRunOriginSchema,
@@ -64,7 +64,7 @@ const AutomationRunSummarySchema = z.strictObject({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-const AutomationRunActionSchema = z.discriminatedUnion("type", [
+export const AutomationRunActionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("automationRun/lifecycleChanged"),
     lifecycle: AutomationRunLifecycleSchema,
@@ -84,25 +84,12 @@ const AutomationRunActionSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("automationRun/cancelRequested") }),
 ]);
 
-type AutomationRunLifecycle = z.output<typeof AutomationRunLifecycleSchema>;
+export type AutomationRunLifecycle = z.output<typeof AutomationRunLifecycleSchema>;
 
-type AutomationRunOrigin = z.output<typeof AutomationRunOriginSchema>;
+export type AutomationRunOrigin = z.output<typeof AutomationRunOriginSchema>;
 
-type AutomationRunState = z.output<typeof AutomationRunStateSchema>;
+export type AutomationRunState = z.output<typeof AutomationRunStateSchema>;
 
-type AutomationRunSummary = z.output<typeof AutomationRunSummarySchema>;
+export type AutomationRunSummary = z.output<typeof AutomationRunSummarySchema>;
 
-type AutomationRunAction = z.output<typeof AutomationRunActionSchema>;
-
-export {
-  AutomationRunActionSchema,
-  AutomationRunLifecycleSchema,
-  AutomationRunOriginSchema,
-  AutomationRunStateSchema,
-  AutomationRunSummarySchema,
-  type AutomationRunAction,
-  type AutomationRunLifecycle,
-  type AutomationRunOrigin,
-  type AutomationRunState,
-  type AutomationRunSummary,
-};
+export type AutomationRunAction = z.output<typeof AutomationRunActionSchema>;

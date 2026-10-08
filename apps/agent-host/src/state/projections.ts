@@ -28,7 +28,7 @@ type SessionSummaryParams = {
   session: SessionState;
 };
 
-function sessionSummary(record: SessionSummaryParams): SessionSummary {
+export function sessionSummary(record: SessionSummaryParams): SessionSummary {
   const { provider, title, status, workingDirectories } = record.session;
   const chatStatus = record.session.chats.at(0)?.status ?? 0;
 
@@ -43,7 +43,7 @@ function sessionSummary(record: SessionSummaryParams): SessionSummary {
   };
 }
 
-function projectChat(
+export function projectChat(
   record: Pick<LiveSession, "chatUri" | "session">,
   chat: ChatState,
 ): SessionAction | undefined {
@@ -59,5 +59,3 @@ function projectChat(
     changes: ChatChangesSchema.strip().parse(summary),
   };
 }
-
-export { projectChat, sessionSummary };

@@ -12,26 +12,26 @@ const MIN_SESSION_ID_LENGTH = 1;
 
 const MIN_ADVISORY_VALUE = 0;
 
-const ChannelParamsSchema = z.strictObject({
+export const ChannelParamsSchema = z.strictObject({
   channel: uriSchema,
   _meta: metaSchema.optional(),
 });
 
-const RootChannelParamsSchema = ChannelParamsSchema.extend({
+export const RootChannelParamsSchema = ChannelParamsSchema.extend({
   channel: z.literal(ROOT_CHANNEL),
 });
 
-const ImplementationSchema = z.strictObject({
+export const ImplementationSchema = z.strictObject({
   name: z.string(),
   version: z.string().optional(),
   title: z.string().optional(),
 });
 
-const ClientCapabilitiesSchema = z.strictObject({
+export const ClientCapabilitiesSchema = z.strictObject({
   mcpApps: z.strictObject({}).optional(),
 });
 
-const InitializeParamsSchema = RootChannelParamsSchema.extend({
+export const InitializeParamsSchema = RootChannelParamsSchema.extend({
   clientId: clientIdSchema,
   protocolVersions: z.tuple([z.string()], z.string()),
   clientInfo: ImplementationSchema.optional(),
@@ -40,26 +40,26 @@ const InitializeParamsSchema = RootChannelParamsSchema.extend({
   capabilities: ClientCapabilitiesSchema.optional(),
 });
 
-const ReconnectParamsSchema = RootChannelParamsSchema.extend({
+export const ReconnectParamsSchema = RootChannelParamsSchema.extend({
   clientId: clientIdSchema,
   lastSeenServerSeq: seqSchema,
   subscriptions: z.array(uriSchema),
 });
 
-const SubscriptionDeliveryOptionsSchema = z.strictObject({
+export const SubscriptionDeliveryOptionsSchema = z.strictObject({
   maxLatencyMs: z.number().min(MIN_ADVISORY_VALUE).optional(),
 });
 
-const SubscribeViewSchema = z.strictObject({
+export const SubscribeViewSchema = z.strictObject({
   turns: z.int().min(MIN_ADVISORY_VALUE).optional(),
 });
 
-const SubscribeParamsSchema = ChannelParamsSchema.extend({
+export const SubscribeParamsSchema = ChannelParamsSchema.extend({
   delivery: SubscriptionDeliveryOptionsSchema.optional(),
   view: SubscribeViewSchema.optional(),
 });
 
-const CreateSessionParamsSchema = ChannelParamsSchema.extend({
+export const CreateSessionParamsSchema = ChannelParamsSchema.extend({
   channel: uriSchema
     .startsWith(SESSION_CHANNEL_PREFIX)
     .min(SESSION_CHANNEL_PREFIX.length + MIN_SESSION_ID_LENGTH),
@@ -70,33 +70,33 @@ const CreateSessionParamsSchema = ChannelParamsSchema.extend({
   progressToken: z.string().optional(),
 });
 
-const ListSessionsParamsSchema = RootChannelParamsSchema.extend({
+export const ListSessionsParamsSchema = RootChannelParamsSchema.extend({
   cursor: z.string().optional(),
   limit: z.int().positive().optional(),
 });
 
-const FetchTurnsParamsSchema = ChannelParamsSchema.extend({
+export const FetchTurnsParamsSchema = ChannelParamsSchema.extend({
   cursor: z.string().optional(),
 });
 
-const ResourceReadParamsSchema = RootChannelParamsSchema.extend({
+export const ResourceReadParamsSchema = RootChannelParamsSchema.extend({
   uri: uriSchema,
   encoding: z.enum(["base64", "utf-8"]).optional(),
 });
 
-const DispatchActionParamsSchema = ChannelParamsSchema.extend({
+export const DispatchActionParamsSchema = ChannelParamsSchema.extend({
   clientSeq: seqSchema,
   action: StateActionSchema,
 });
 
-const AutomationCapabilitiesSchema = z.strictObject({
+export const AutomationCapabilitiesSchema = z.strictObject({
   create: z.strictObject({}).optional(),
   schedules: z.strictObject({ minIntervalMinutes: z.number().optional() }).optional(),
   runCancellation: z.strictObject({}).optional(),
   runHistoryLimit: z.number().optional(),
 });
 
-const InitializeResultSchema = z.strictObject({
+export const InitializeResultSchema = z.strictObject({
   protocolVersion: z.string(),
   serverSeq: seqSchema,
   serverInfo: ImplementationSchema.optional(),
@@ -109,11 +109,11 @@ const InitializeResultSchema = z.strictObject({
   automations: AutomationCapabilitiesSchema.optional(),
 });
 
-const SubscribeResultSchema = z.strictObject({
+export const SubscribeResultSchema = z.strictObject({
   snapshot: SnapshotSchema.optional(),
 });
 
-const ReconnectResultSchema = z.discriminatedUnion("type", [
+export const ReconnectResultSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("replay"),
     actions: z.array(ActionEnvelopeSchema),
@@ -125,20 +125,20 @@ const ReconnectResultSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const ListSessionsResultSchema = z.strictObject({
+export const ListSessionsResultSchema = z.strictObject({
   items: z.array(SessionSummarySchema),
   nextCursor: z.string().optional(),
 });
 
-const FetchTurnsResultSchema = z.strictObject({});
+export const FetchTurnsResultSchema = z.strictObject({});
 
-const ResourceReadResultSchema = z.strictObject({
+export const ResourceReadResultSchema = z.strictObject({
   data: z.string(),
   encoding: z.enum(["base64", "utf-8"]),
   contentType: z.string().optional(),
 });
 
-const ResourceListResultSchema = z.strictObject({
+export const ResourceListResultSchema = z.strictObject({
   entries: z.array(
     z.strictObject({
       name: z.string(),
@@ -147,7 +147,7 @@ const ResourceListResultSchema = z.strictObject({
   ),
 });
 
-const ResourceResolveResultSchema = z.strictObject({
+export const ResourceResolveResultSchema = z.strictObject({
   uri: uriSchema,
   type: z.enum(["file", "directory", "symlink"]),
   size: z.number().optional(),
@@ -157,103 +157,52 @@ const ResourceResolveResultSchema = z.strictObject({
   etag: z.string().optional(),
 });
 
-const ResourceWriteResultSchema = z.strictObject({});
+export const ResourceWriteResultSchema = z.strictObject({});
 
-type Implementation = z.output<typeof ImplementationSchema>;
+export type Implementation = z.output<typeof ImplementationSchema>;
 
-type ChannelParams = z.output<typeof ChannelParamsSchema>;
+export type ChannelParams = z.output<typeof ChannelParamsSchema>;
 
-type RootChannelParams = z.output<typeof RootChannelParamsSchema>;
+export type RootChannelParams = z.output<typeof RootChannelParamsSchema>;
 
-type ClientCapabilities = z.output<typeof ClientCapabilitiesSchema>;
+export type ClientCapabilities = z.output<typeof ClientCapabilitiesSchema>;
 
-type InitializeParams = z.output<typeof InitializeParamsSchema>;
+export type InitializeParams = z.output<typeof InitializeParamsSchema>;
 
-type ReconnectParams = z.output<typeof ReconnectParamsSchema>;
+export type ReconnectParams = z.output<typeof ReconnectParamsSchema>;
 
-type SubscriptionDeliveryOptions = z.output<typeof SubscriptionDeliveryOptionsSchema>;
+export type SubscriptionDeliveryOptions = z.output<typeof SubscriptionDeliveryOptionsSchema>;
 
-type SubscribeView = z.output<typeof SubscribeViewSchema>;
+export type SubscribeView = z.output<typeof SubscribeViewSchema>;
 
-type SubscribeParams = z.output<typeof SubscribeParamsSchema>;
+export type SubscribeParams = z.output<typeof SubscribeParamsSchema>;
 
-type CreateSessionParams = z.output<typeof CreateSessionParamsSchema>;
+export type CreateSessionParams = z.output<typeof CreateSessionParamsSchema>;
 
-type ListSessionsParams = z.output<typeof ListSessionsParamsSchema>;
+export type ListSessionsParams = z.output<typeof ListSessionsParamsSchema>;
 
-type FetchTurnsParams = z.output<typeof FetchTurnsParamsSchema>;
+export type FetchTurnsParams = z.output<typeof FetchTurnsParamsSchema>;
 
-type ResourceReadParams = z.output<typeof ResourceReadParamsSchema>;
+export type ResourceReadParams = z.output<typeof ResourceReadParamsSchema>;
 
-type DispatchActionParams = z.output<typeof DispatchActionParamsSchema>;
+export type DispatchActionParams = z.output<typeof DispatchActionParamsSchema>;
 
-type AutomationCapabilities = z.output<typeof AutomationCapabilitiesSchema>;
+export type AutomationCapabilities = z.output<typeof AutomationCapabilitiesSchema>;
 
-type InitializeResult = z.output<typeof InitializeResultSchema>;
+export type InitializeResult = z.output<typeof InitializeResultSchema>;
 
-type SubscribeResult = z.output<typeof SubscribeResultSchema>;
+export type SubscribeResult = z.output<typeof SubscribeResultSchema>;
 
-type ReconnectResult = z.output<typeof ReconnectResultSchema>;
+export type ReconnectResult = z.output<typeof ReconnectResultSchema>;
 
-type ListSessionsResult = z.output<typeof ListSessionsResultSchema>;
+export type ListSessionsResult = z.output<typeof ListSessionsResultSchema>;
 
-type FetchTurnsResult = z.output<typeof FetchTurnsResultSchema>;
+export type FetchTurnsResult = z.output<typeof FetchTurnsResultSchema>;
 
-type ResourceReadResult = z.output<typeof ResourceReadResultSchema>;
+export type ResourceReadResult = z.output<typeof ResourceReadResultSchema>;
 
-type ResourceListResult = z.output<typeof ResourceListResultSchema>;
+export type ResourceListResult = z.output<typeof ResourceListResultSchema>;
 
-type ResourceResolveResult = z.output<typeof ResourceResolveResultSchema>;
+export type ResourceResolveResult = z.output<typeof ResourceResolveResultSchema>;
 
-type ResourceWriteResult = z.output<typeof ResourceWriteResultSchema>;
-
-export {
-  ChannelParamsSchema,
-  RootChannelParamsSchema,
-  ClientCapabilitiesSchema,
-  InitializeParamsSchema,
-  ReconnectParamsSchema,
-  SubscriptionDeliveryOptionsSchema,
-  SubscribeViewSchema,
-  SubscribeParamsSchema,
-  CreateSessionParamsSchema,
-  ListSessionsParamsSchema,
-  FetchTurnsParamsSchema,
-  DispatchActionParamsSchema,
-  ResourceReadParamsSchema,
-  type ChannelParams,
-  type RootChannelParams,
-  type ClientCapabilities,
-  type InitializeParams,
-  type ReconnectParams,
-  type SubscriptionDeliveryOptions,
-  type SubscribeView,
-  type SubscribeParams,
-  type CreateSessionParams,
-  type ListSessionsParams,
-  type FetchTurnsParams,
-  type DispatchActionParams,
-  type ResourceReadParams,
-  AutomationCapabilitiesSchema,
-  FetchTurnsResultSchema,
-  ImplementationSchema,
-  InitializeResultSchema,
-  ListSessionsResultSchema,
-  ReconnectResultSchema,
-  ResourceListResultSchema,
-  ResourceReadResultSchema,
-  ResourceResolveResultSchema,
-  ResourceWriteResultSchema,
-  SubscribeResultSchema,
-  type AutomationCapabilities,
-  type FetchTurnsResult,
-  type Implementation,
-  type InitializeResult,
-  type ListSessionsResult,
-  type ReconnectResult,
-  type ResourceListResult,
-  type ResourceReadResult,
-  type ResourceResolveResult,
-  type ResourceWriteResult,
-  type SubscribeResult,
-};
+export type ResourceWriteResult = z.output<typeof ResourceWriteResultSchema>;

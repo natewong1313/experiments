@@ -1,15 +1,15 @@
 import type { SessionStatus } from "@microsoft/agent-host-protocol";
 
-const SESSION_STATUS = {
+export const SESSION_STATUS = {
   error: 2,
   inProgress: 8,
   inputNeeded: 24,
   archived: 64,
 } satisfies Record<string, SessionStatus>;
 
-type StatusFilter = "all" | "inProgress" | "inputNeeded" | "idle" | "error";
+export type StatusFilter = "all" | "inProgress" | "inputNeeded" | "idle" | "error";
 
-function sessionStatus(status: SessionStatus): string {
+export function sessionStatus(status: SessionStatus): string {
   if ((status & SESSION_STATUS.inputNeeded) === SESSION_STATUS.inputNeeded) {
     return "Input needed";
   }
@@ -25,7 +25,7 @@ function sessionStatus(status: SessionStatus): string {
   return "Idle";
 }
 
-function statusMatches(status: SessionStatus, filter: StatusFilter): boolean {
+export function statusMatches(status: SessionStatus, filter: StatusFilter): boolean {
   switch (filter) {
     case "all": {
       return true;
@@ -51,7 +51,3 @@ function statusMatches(status: SessionStatus, filter: StatusFilter): boolean {
     }
   }
 }
-
-export { SESSION_STATUS, sessionStatus, statusMatches };
-
-export type { StatusFilter };

@@ -107,7 +107,7 @@ function createWritable(socket: WebSocket): WritableStream<AnyMessage> {
  * Sibling in apps/pi-acp/src/websocket-stream.ts has different failure semantics:
  * it soft-fails protocol errors, while this one closes the socket with code 1007.
  */
-function websocketStream(socket: WebSocket): Stream {
+export function websocketStream(socket: WebSocket): Stream {
   const readable = createReadable(socket);
   const writable = createWritable(socket);
 
@@ -115,5 +115,3 @@ function websocketStream(socket: WebSocket): Stream {
 
   return { readable, writable };
 }
-
-export { websocketStream };

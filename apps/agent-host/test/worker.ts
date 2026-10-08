@@ -7,13 +7,13 @@ import type { AcpBackend } from "./acp-backend";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
-type TestEnv = {
+export type TestEnv = {
   AGENT_HOST: DurableObjectNamespace<AgentHost>;
   CUSTOM_HOST: DurableObjectNamespace<CustomHost>;
   ACP_BACKEND: DurableObjectNamespace<AcpBackend>;
 };
 
-async function connectAcp({ signal }: AcpConnectionOptions): Promise<Stream> {
+export async function connectAcp({ signal }: AcpConnectionOptions): Promise<Stream> {
   const response = await fetch("http://agent.test/acp", {
     headers: { Upgrade: "websocket" },
     signal,
@@ -26,7 +26,7 @@ async function connectAcp({ signal }: AcpConnectionOptions): Promise<Stream> {
   return websocketStream(response.webSocket);
 }
 
-class AgentHost extends BaseAgentHost<TestEnv> {
+export class AgentHost extends BaseAgentHost<TestEnv> {
   protected override getAgentConfig(): AgentConfig {
     return TEST_CONFIG;
   }
@@ -35,10 +35,6 @@ class AgentHost extends BaseAgentHost<TestEnv> {
   }
 }
 
-export { AgentHost, connectAcp };
-
 export { CustomHost } from "./custom-host";
 
 export { AcpBackend } from "./acp-backend";
-
-export type { TestEnv };

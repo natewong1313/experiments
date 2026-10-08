@@ -39,7 +39,7 @@ type SessionPage = { items: SessionSummary[]; nextCursor?: string };
 
 type ListSessionsParams = { cursor?: string; limit: number };
 
-class HostQueries {
+export class HostQueries {
   private readonly root: RootStore;
   private readonly sessions: SessionStore;
   private readonly chats: ChatStore;
@@ -264,5 +264,3 @@ class HostQueries {
     return { resource: channel, state, fromSeq: this.journal.sequence };
   }
 }
-
-export { HostQueries };

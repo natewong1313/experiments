@@ -4,7 +4,7 @@ import type { AgentConfig, AcpConnectionOptions, Stream } from "@experiments/age
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
-class AgentHost extends BaseAgentHost<Env> {
+export class AgentHost extends BaseAgentHost<Env> {
   protected override getAgentConfig(): AgentConfig {
     return {
       agent: {
@@ -35,5 +35,3 @@ class AgentHost extends BaseAgentHost<Env> {
     return websocketStream(socket);
   }
 }
-
-export { AgentHost };

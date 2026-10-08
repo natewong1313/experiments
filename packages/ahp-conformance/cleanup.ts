@@ -1,4 +1,7 @@
-async function withCleanup<T>(run: () => Promise<T>, cleanup: () => Promise<void>): Promise<T> {
+export async function withCleanup<T>(
+  run: () => Promise<T>,
+  cleanup: () => Promise<void>,
+): Promise<T> {
   let result!: T;
   let scenarioFailed = false;
   let scenarioError: unknown;
@@ -36,5 +39,3 @@ async function withCleanup<T>(run: () => Promise<T>, cleanup: () => Promise<void
 
   return result;
 }
-
-export { withCleanup };

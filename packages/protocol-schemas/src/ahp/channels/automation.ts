@@ -4,12 +4,12 @@ import { AgentSelectionSchema, ModelSelectionSchema } from "../primitives";
 import { MessageSchema } from "./chat/message";
 import { AutomationRunSummarySchema } from "./automation-run";
 
-const AutomationScheduleSchema = z.strictObject({
+export const AutomationScheduleSchema = z.strictObject({
   expression: z.string(),
   timeZone: z.string(),
 });
 
-const AutomationTriggerSchema = z.discriminatedUnion("kind", [
+export const AutomationTriggerSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     id: z.string(),
     kind: z.literal("schedule"),
@@ -33,7 +33,7 @@ const AutomationTriggerSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const AutomationTriggerDefinitionSchema = z.strictObject({
+export const AutomationTriggerDefinitionSchema = z.strictObject({
   type: z.string(),
   title: z.string(),
   description: z.string().optional(),
@@ -47,7 +47,7 @@ const AutomationTriggerDefinitionSchema = z.strictObject({
   configSchema: ConfigSchemaSchema.optional(),
 });
 
-const AutomationSessionTemplateSchema = z.strictObject({
+export const AutomationSessionTemplateSchema = z.strictObject({
   provider: z.string().optional(),
   model: ModelSelectionSchema.optional(),
   agent: AgentSelectionSchema.optional(),
@@ -55,7 +55,7 @@ const AutomationSessionTemplateSchema = z.strictObject({
   config: z.record(z.string(), z.unknown()).optional(),
 });
 
-const AutomationDefinitionSchema = z.strictObject({
+export const AutomationDefinitionSchema = z.strictObject({
   title: z.string(),
   message: MessageSchema,
   session: AutomationSessionTemplateSchema,
@@ -64,7 +64,7 @@ const AutomationDefinitionSchema = z.strictObject({
   _meta: metaSchema.optional(),
 });
 
-const AutomationDefinitionPatchSchema = z.strictObject({
+export const AutomationDefinitionPatchSchema = z.strictObject({
   title: z.string().optional(),
   message: MessageSchema.optional(),
   session: AutomationSessionTemplateSchema.optional(),
@@ -73,9 +73,9 @@ const AutomationDefinitionPatchSchema = z.strictObject({
   _meta: metaSchema.optional(),
 });
 
-const AutomationOperationSchema = z.enum(["update", "remove", "run"]);
+export const AutomationOperationSchema = z.enum(["update", "remove", "run"]);
 
-const AutomationEntrySchema = z.strictObject({
+export const AutomationEntrySchema = z.strictObject({
   resource: uriSchema,
   definition: AutomationDefinitionSchema,
   nextRunAt: isoTimestampSchema.optional(),
@@ -87,12 +87,12 @@ const AutomationEntrySchema = z.strictObject({
   _meta: metaSchema.optional(),
 });
 
-const AutomationStateSchema = z.strictObject({
+export const AutomationStateSchema = z.strictObject({
   entries: z.array(AutomationEntrySchema),
   _meta: metaSchema.optional(),
 });
 
-const AutomationActionSchema = z.discriminatedUnion("type", [
+export const AutomationActionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("automation/createRequested"),
     resource: uriSchema,
@@ -113,45 +113,22 @@ const AutomationActionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-type AutomationSchedule = z.output<typeof AutomationScheduleSchema>;
+export type AutomationSchedule = z.output<typeof AutomationScheduleSchema>;
 
-type AutomationTrigger = z.output<typeof AutomationTriggerSchema>;
+export type AutomationTrigger = z.output<typeof AutomationTriggerSchema>;
 
-type AutomationTriggerDefinition = z.output<typeof AutomationTriggerDefinitionSchema>;
+export type AutomationTriggerDefinition = z.output<typeof AutomationTriggerDefinitionSchema>;
 
-type AutomationSessionTemplate = z.output<typeof AutomationSessionTemplateSchema>;
+export type AutomationSessionTemplate = z.output<typeof AutomationSessionTemplateSchema>;
 
-type AutomationDefinition = z.output<typeof AutomationDefinitionSchema>;
+export type AutomationDefinition = z.output<typeof AutomationDefinitionSchema>;
 
-type AutomationDefinitionPatch = z.output<typeof AutomationDefinitionPatchSchema>;
+export type AutomationDefinitionPatch = z.output<typeof AutomationDefinitionPatchSchema>;
 
-type AutomationOperation = z.output<typeof AutomationOperationSchema>;
+export type AutomationOperation = z.output<typeof AutomationOperationSchema>;
 
-type AutomationEntry = z.output<typeof AutomationEntrySchema>;
+export type AutomationEntry = z.output<typeof AutomationEntrySchema>;
 
-type AutomationState = z.output<typeof AutomationStateSchema>;
+export type AutomationState = z.output<typeof AutomationStateSchema>;
 
-type AutomationAction = z.output<typeof AutomationActionSchema>;
-
-export {
-  AutomationActionSchema,
-  AutomationDefinitionPatchSchema,
-  AutomationDefinitionSchema,
-  AutomationEntrySchema,
-  AutomationOperationSchema,
-  AutomationScheduleSchema,
-  AutomationSessionTemplateSchema,
-  AutomationStateSchema,
-  AutomationTriggerDefinitionSchema,
-  AutomationTriggerSchema,
-  type AutomationAction,
-  type AutomationDefinition,
-  type AutomationDefinitionPatch,
-  type AutomationEntry,
-  type AutomationOperation,
-  type AutomationSchedule,
-  type AutomationSessionTemplate,
-  type AutomationState,
-  type AutomationTrigger,
-  type AutomationTriggerDefinition,
-};
+export type AutomationAction = z.output<typeof AutomationActionSchema>;

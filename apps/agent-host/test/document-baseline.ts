@@ -5,7 +5,7 @@ const CHUNK_BYTES = 65_536;
 
 type ChunkRow = { chunk: number; data: ArrayBuffer };
 
-class DocumentBaseline {
+export class DocumentBaseline {
   private readonly sql: SqlStorage;
 
   constructor(sql: SqlStorage) {
@@ -100,5 +100,3 @@ class DocumentBaseline {
     return this.sql.exec<{ bytes: number }>(query, ...bindings).one().bytes;
   }
 }
-
-export { DocumentBaseline };

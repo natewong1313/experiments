@@ -8,23 +8,23 @@ import {
   uriSchema,
 } from "./common";
 
-const sessionStatusSchema = z.number();
+export const sessionStatusSchema = z.number();
 
-const ModelSelectionSchema = z.strictObject({
+export const ModelSelectionSchema = z.strictObject({
   id: z.string(),
   config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
 });
 
-const AgentSelectionSchema = z.strictObject({
+export const AgentSelectionSchema = z.strictObject({
   uri: uriSchema,
 });
 
-const ProjectInfoSchema = z.strictObject({
+export const ProjectInfoSchema = z.strictObject({
   uri: uriSchema,
   displayName: z.string(),
 });
 
-const ToolAnnotationsSchema = z.strictObject({
+export const ToolAnnotationsSchema = z.strictObject({
   title: z.string().optional(),
   readOnlyHint: z.boolean().optional(),
   destructiveHint: z.boolean().optional(),
@@ -38,7 +38,7 @@ const jsonSchemaObjectSchema = z.strictObject({
   required: z.array(z.string()).optional(),
 });
 
-const ToolDefinitionSchema = z.strictObject({
+export const ToolDefinitionSchema = z.strictObject({
   name: z.string(),
   title: z.string().optional(),
   description: z.string().optional(),
@@ -48,12 +48,12 @@ const ToolDefinitionSchema = z.strictObject({
   _meta: metaSchema.optional(),
 });
 
-const McpOAuthClientSchema = z.strictObject({
+export const McpOAuthClientSchema = z.strictObject({
   clientId: z.string(),
   clientSecret: z.string().optional(),
 });
 
-const McpAuthRequirementSchema = z.strictObject({
+export const McpAuthRequirementSchema = z.strictObject({
   reason: z.enum(["required", "expired", "insufficientScope"]),
   oauthClient: McpOAuthClientSchema.optional(),
   resource: ProtectedResourceMetadataSchema,
@@ -61,7 +61,7 @@ const McpAuthRequirementSchema = z.strictObject({
   description: z.string().optional(),
 });
 
-const McpServerStateSchema = z.discriminatedUnion("kind", [
+export const McpServerStateSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("starting") }),
   z.strictObject({ kind: z.literal("ready") }),
   z.strictObject({
@@ -72,7 +72,7 @@ const McpServerStateSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("stopped") }),
 ]);
 
-const CustomizationEnablementSchema = z.discriminatedUnion("kind", [
+export const CustomizationEnablementSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("global"), enabled: z.boolean() }),
   z.strictObject({
     kind: z.literal("workspace"),
@@ -96,7 +96,7 @@ const childCustomizationBaseFields = {
   enabled: z.boolean().optional(),
 };
 
-const AgentCustomizationSchema = z.strictObject({
+export const AgentCustomizationSchema = z.strictObject({
   ...childCustomizationBaseFields,
   type: z.literal("agent"),
   description: z.string().optional(),
@@ -106,7 +106,7 @@ const AgentCustomizationSchema = z.strictObject({
   disableUserInvocation: z.boolean().optional(),
 });
 
-const SkillCustomizationSchema = z.strictObject({
+export const SkillCustomizationSchema = z.strictObject({
   ...childCustomizationBaseFields,
   type: z.literal("skill"),
   description: z.string().optional(),
@@ -114,13 +114,13 @@ const SkillCustomizationSchema = z.strictObject({
   disableUserInvocation: z.boolean().optional(),
 });
 
-const PromptCustomizationSchema = z.strictObject({
+export const PromptCustomizationSchema = z.strictObject({
   ...childCustomizationBaseFields,
   type: z.literal("prompt"),
   description: z.string().optional(),
 });
 
-const RuleCustomizationSchema = z.strictObject({
+export const RuleCustomizationSchema = z.strictObject({
   ...childCustomizationBaseFields,
   type: z.literal("rule"),
   description: z.string().optional(),
@@ -128,7 +128,7 @@ const RuleCustomizationSchema = z.strictObject({
   globs: z.array(z.string()).optional(),
 });
 
-const HookCustomizationSchema = z.strictObject({
+export const HookCustomizationSchema = z.strictObject({
   ...childCustomizationBaseFields,
   type: z.literal("hook"),
 });
@@ -146,7 +146,7 @@ const McpAppCapabilitySchema = z.strictObject({
   capabilities: AhpMcpUiHostCapabilitiesSchema,
 });
 
-const ChildMcpServerCustomizationSchema = z.strictObject({
+export const ChildMcpServerCustomizationSchema = z.strictObject({
   ...childCustomizationBaseFields,
   type: z.literal("mcpServer"),
   state: McpServerStateSchema,
@@ -154,7 +154,7 @@ const ChildMcpServerCustomizationSchema = z.strictObject({
   mcpApp: McpAppCapabilitySchema.optional(),
 });
 
-const ChildCustomizationSchema = z.union([
+export const ChildCustomizationSchema = z.union([
   AgentCustomizationSchema,
   SkillCustomizationSchema,
   PromptCustomizationSchema,
@@ -163,7 +163,7 @@ const ChildCustomizationSchema = z.union([
   ChildMcpServerCustomizationSchema,
 ]);
 
-const CustomizationLoadStateSchema = z.discriminatedUnion("kind", [
+export const CustomizationLoadStateSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("loading") }),
   z.strictObject({ kind: z.literal("loaded") }),
   z.strictObject({ kind: z.literal("degraded"), message: z.string() }),
@@ -177,13 +177,13 @@ const McpServerCustomizationFields = {
   mcpApp: McpAppCapabilitySchema.optional(),
 };
 
-const TopLevelMcpServerCustomizationSchema = z.strictObject({
+export const TopLevelMcpServerCustomizationSchema = z.strictObject({
   ...customizationBaseFields,
   type: z.literal("mcpServer"),
   ...McpServerCustomizationFields,
 });
 
-const PluginCustomizationSchema = z.strictObject({
+export const PluginCustomizationSchema = z.strictObject({
   ...customizationBaseFields,
   type: z.literal("plugin"),
   clientId: z.string().optional(),
@@ -193,12 +193,12 @@ const PluginCustomizationSchema = z.strictObject({
   children: z.array(ChildCustomizationSchema).optional(),
 });
 
-const ClientPluginCustomizationSchema = PluginCustomizationSchema.extend({
+export const ClientPluginCustomizationSchema = PluginCustomizationSchema.extend({
   nonce: z.string().optional(),
   childEnablement: z.record(z.string(), z.array(CustomizationEnablementSchema)).optional(),
 });
 
-const DirectoryCustomizationSchema = z.strictObject({
+export const DirectoryCustomizationSchema = z.strictObject({
   ...customizationBaseFields,
   type: z.literal("directory"),
   clientId: z.string().optional(),
@@ -209,94 +209,48 @@ const DirectoryCustomizationSchema = z.strictObject({
   children: z.array(ChildCustomizationSchema).optional(),
 });
 
-const CustomizationSchema = z.union([
+export const CustomizationSchema = z.union([
   PluginCustomizationSchema,
   DirectoryCustomizationSchema,
   TopLevelMcpServerCustomizationSchema,
 ]);
 
-type SessionStatus = z.output<typeof sessionStatusSchema>;
+export type SessionStatus = z.output<typeof sessionStatusSchema>;
 
-type ModelSelection = z.output<typeof ModelSelectionSchema>;
+export type ModelSelection = z.output<typeof ModelSelectionSchema>;
 
-type AgentSelection = z.output<typeof AgentSelectionSchema>;
+export type AgentSelection = z.output<typeof AgentSelectionSchema>;
 
-type ProjectInfo = z.output<typeof ProjectInfoSchema>;
+export type ProjectInfo = z.output<typeof ProjectInfoSchema>;
 
-type ToolDefinition = z.output<typeof ToolDefinitionSchema>;
+export type ToolDefinition = z.output<typeof ToolDefinitionSchema>;
 
-type ToolAnnotations = z.output<typeof ToolAnnotationsSchema>;
+export type ToolAnnotations = z.output<typeof ToolAnnotationsSchema>;
 
-type McpAuthRequirement = z.output<typeof McpAuthRequirementSchema>;
+export type McpAuthRequirement = z.output<typeof McpAuthRequirementSchema>;
 
-type McpServerState = z.output<typeof McpServerStateSchema>;
+export type McpServerState = z.output<typeof McpServerStateSchema>;
 
-type McpOAuthClient = z.output<typeof McpOAuthClientSchema>;
+export type McpOAuthClient = z.output<typeof McpOAuthClientSchema>;
 
-type CustomizationEnablement = z.output<typeof CustomizationEnablementSchema>;
+export type CustomizationEnablement = z.output<typeof CustomizationEnablementSchema>;
 
-type Customization = z.output<typeof CustomizationSchema>;
+export type Customization = z.output<typeof CustomizationSchema>;
 
-type PluginCustomization = z.output<typeof PluginCustomizationSchema>;
+export type PluginCustomization = z.output<typeof PluginCustomizationSchema>;
 
-type ClientPluginCustomization = z.output<typeof ClientPluginCustomizationSchema>;
+export type ClientPluginCustomization = z.output<typeof ClientPluginCustomizationSchema>;
 
-type DirectoryCustomization = z.output<typeof DirectoryCustomizationSchema>;
+export type DirectoryCustomization = z.output<typeof DirectoryCustomizationSchema>;
 
-type AgentCustomization = z.output<typeof AgentCustomizationSchema>;
+export type AgentCustomization = z.output<typeof AgentCustomizationSchema>;
 
-type SkillCustomization = z.output<typeof SkillCustomizationSchema>;
+export type SkillCustomization = z.output<typeof SkillCustomizationSchema>;
 
-type PromptCustomization = z.output<typeof PromptCustomizationSchema>;
+export type PromptCustomization = z.output<typeof PromptCustomizationSchema>;
 
-type RuleCustomization = z.output<typeof RuleCustomizationSchema>;
+export type RuleCustomization = z.output<typeof RuleCustomizationSchema>;
 
-type HookCustomization = z.output<typeof HookCustomizationSchema>;
+export type HookCustomization = z.output<typeof HookCustomizationSchema>;
 
-type ChildMcpServerCustomization = z.output<typeof ChildMcpServerCustomizationSchema>;
-
-export {
-  AgentCustomizationSchema,
-  AgentSelectionSchema,
-  ChildMcpServerCustomizationSchema,
-  ChildCustomizationSchema,
-  ClientPluginCustomizationSchema,
-  CustomizationEnablementSchema,
-  CustomizationLoadStateSchema,
-  CustomizationSchema,
-  DirectoryCustomizationSchema,
-  HookCustomizationSchema,
-  McpAuthRequirementSchema,
-  McpOAuthClientSchema,
-  McpServerStateSchema,
-  ModelSelectionSchema,
-  PluginCustomizationSchema,
-  ProjectInfoSchema,
-  PromptCustomizationSchema,
-  RuleCustomizationSchema,
-  sessionStatusSchema,
-  SkillCustomizationSchema,
-  ToolAnnotationsSchema,
-  ToolDefinitionSchema,
-  TopLevelMcpServerCustomizationSchema,
-  type AgentCustomization,
-  type AgentSelection,
-  type ChildMcpServerCustomization,
-  type ClientPluginCustomization,
-  type Customization,
-  type CustomizationEnablement,
-  type DirectoryCustomization,
-  type HookCustomization,
-  type McpAuthRequirement,
-  type McpOAuthClient,
-  type McpServerState,
-  type ModelSelection,
-  type PluginCustomization,
-  type ProjectInfo,
-  type PromptCustomization,
-  type RuleCustomization,
-  type SessionStatus,
-  type SkillCustomization,
-  type ToolAnnotations,
-  type ToolDefinition,
-};
+export type ChildMcpServerCustomization = z.output<typeof ChildMcpServerCustomizationSchema>;

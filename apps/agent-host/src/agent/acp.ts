@@ -46,7 +46,7 @@ type OpenSessionParams = {
 /**
  * Manages agent connections across all sessions on a host
  */
-class AgentConnections {
+export class AgentConnections {
   private connect: ConnectAcp;
   private updates: AgentUpdates;
   private sessions: Map<string, ConnectionEntry> = new Map();
@@ -328,5 +328,3 @@ class AgentConnections {
     return sessionId;
   }
 }
-
-export { AgentConnections };

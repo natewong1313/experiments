@@ -12,7 +12,7 @@ type ContentState =
 
 type StoredContentParams = { reference: ContentRef };
 
-function StoredContent({ reference }: StoredContentParams): JSX.Element {
+export function StoredContent({ reference }: StoredContentParams): JSX.Element {
   const { view } = useAgentHost();
   const [state, setState] = useState<ContentState>({ status: "idle" });
 
@@ -79,5 +79,3 @@ function StoredContent({ reference }: StoredContentParams): JSX.Element {
     </div>
   );
 }
-
-export { StoredContent };

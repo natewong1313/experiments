@@ -6,7 +6,7 @@ import type { TurnHistory } from "./history";
 
 type ChatSnapshotsParams = { chats: ChatStore; parts: PartsStore; history: TurnHistory };
 
-class ChatSnapshots {
+export class ChatSnapshots {
   private readonly chats: ChatStore;
   private readonly parts: PartsStore;
   private readonly history: TurnHistory;
@@ -63,5 +63,3 @@ class ChatSnapshots {
     return { ...this.readWithActiveOutput(uri), turns: this.history.readAll(uri) };
   }
 }
-
-export { ChatSnapshots };

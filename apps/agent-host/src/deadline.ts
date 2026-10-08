@@ -1,5 +1,5 @@
 // Race an operation against a timer.
-async function withDeadline<T>(
+export async function withDeadline<T>(
   operation: Promise<T>,
   timeoutMs: number,
   abort: () => void,
@@ -19,5 +19,3 @@ async function withDeadline<T>(
     clearTimeout(timer);
   }
 }
-
-export { withDeadline };

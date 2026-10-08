@@ -13,13 +13,13 @@ import { ActionContent } from "./content/action-content";
 import { HostQueries } from "./queries";
 import { HostMutations } from "./mutations";
 
-type HostState = {
+export type HostState = {
   queries: HostQueries;
   mutations: HostMutations;
   migrate(): Promise<void>;
 };
 
-function createHostState(storage: DurableObjectStorage): HostState {
+export function createHostState(storage: DurableObjectStorage): HostState {
   const database = new StateDatabase(storage);
   const { db } = database;
   const root = new RootStore(db);
@@ -63,5 +63,3 @@ function createHostState(storage: DurableObjectStorage): HostState {
     migrate: (): Promise<void> => database.migrate(),
   };
 }
-
-export { createHostState, type HostState };

@@ -3,9 +3,9 @@ import { ContentRefSchema, FileEditSchema, StringOrMarkdownSchema, uriSchema } f
 import { McpAuthRequirementSchema } from "../../primitives";
 import { MessageSchema } from "./message";
 
-const ToolInputSchema = z.union([z.string(), ContentRefSchema]);
+export const ToolInputSchema = z.union([z.string(), ContentRefSchema]);
 
-const ToolCallContributorSchema = z.discriminatedUnion("kind", [
+export const ToolCallContributorSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("client"), clientId: z.string() }),
   z.strictObject({ kind: z.literal("mcp"), customizationId: z.string() }),
 ]);
@@ -24,7 +24,7 @@ const toolCallParameterFields = {
   toolInput: ToolInputSchema.optional(),
 };
 
-const ToolCallRiskAssessmentSchema = z.discriminatedUnion("status", [
+export const ToolCallRiskAssessmentSchema = z.discriminatedUnion("status", [
   z.strictObject({ kind: z.literal("judge"), status: z.literal("loading") }),
   z.strictObject({
     kind: z.literal("judge"),
@@ -34,20 +34,20 @@ const ToolCallRiskAssessmentSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-const ConfirmationOptionSchema = z.strictObject({
+export const ConfirmationOptionSchema = z.strictObject({
   id: z.string(),
   label: z.string(),
   kind: z.enum(["approve", "deny"]),
   group: z.number().optional(),
 });
 
-const TerminalCommandResultSchema = z.strictObject({
+export const TerminalCommandResultSchema = z.strictObject({
   exitCode: z.number().optional(),
   preview: z.string().optional(),
   truncated: z.boolean().optional(),
 });
 
-const ToolResultContentSchema = z.discriminatedUnion("type", [
+export const ToolResultContentSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("text"), text: z.string() }),
   z.strictObject({
     type: z.literal("embeddedResource"),
@@ -72,7 +72,7 @@ const ToolResultContentSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const ToolCallResultSchema = z.strictObject({
+export const ToolCallResultSchema = z.strictObject({
   success: z.boolean(),
   pastTenseMessage: StringOrMarkdownSchema,
   content: z.array(ToolResultContentSchema).optional(),
@@ -85,7 +85,7 @@ const toolCallPostConfirmationFields = {
   selectedOption: ConfirmationOptionSchema.optional(),
 };
 
-const ToolCallPendingConfirmationStateSchema = z.strictObject({
+export const ToolCallPendingConfirmationStateSchema = z.strictObject({
   ...toolCallBaseFields,
   ...toolCallParameterFields,
   status: z.literal("pending-confirmation"),
@@ -96,7 +96,7 @@ const ToolCallPendingConfirmationStateSchema = z.strictObject({
   options: z.array(ConfirmationOptionSchema).optional(),
 });
 
-const ToolCallPendingResultConfirmationStateSchema = z.strictObject({
+export const ToolCallPendingResultConfirmationStateSchema = z.strictObject({
   ...toolCallBaseFields,
   ...toolCallParameterFields,
   ...toolCallPostConfirmationFields,
@@ -104,7 +104,7 @@ const ToolCallPendingResultConfirmationStateSchema = z.strictObject({
   status: z.literal("pending-result-confirmation"),
 });
 
-const ToolCallRunningStateSchema = z.strictObject({
+export const ToolCallRunningStateSchema = z.strictObject({
   ...toolCallBaseFields,
   ...toolCallParameterFields,
   ...toolCallPostConfirmationFields,
@@ -112,7 +112,7 @@ const ToolCallRunningStateSchema = z.strictObject({
   content: z.array(ToolResultContentSchema).optional(),
 });
 
-const ToolCallAuthRequiredStateSchema = z.strictObject({
+export const ToolCallAuthRequiredStateSchema = z.strictObject({
   ...toolCallBaseFields,
   ...toolCallParameterFields,
   ...toolCallPostConfirmationFields,
@@ -125,7 +125,7 @@ const ToolCallAuthRequiredStateSchema = z.strictObject({
   content: z.array(ToolResultContentSchema).optional(),
 });
 
-const ToolCallStateSchema = z.discriminatedUnion("status", [
+export const ToolCallStateSchema = z.discriminatedUnion("status", [
   z.strictObject({
     ...toolCallBaseFields,
     status: z.literal("streaming"),
@@ -154,55 +154,30 @@ const ToolCallStateSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-type ToolInput = z.output<typeof ToolInputSchema>;
+export type ToolInput = z.output<typeof ToolInputSchema>;
 
-type ToolCallContributor = z.output<typeof ToolCallContributorSchema>;
+export type ToolCallContributor = z.output<typeof ToolCallContributorSchema>;
 
-type ToolCallRiskAssessment = z.output<typeof ToolCallRiskAssessmentSchema>;
+export type ToolCallRiskAssessment = z.output<typeof ToolCallRiskAssessmentSchema>;
 
-type ConfirmationOption = z.output<typeof ConfirmationOptionSchema>;
+export type ConfirmationOption = z.output<typeof ConfirmationOptionSchema>;
 
-type ToolResultContent = z.output<typeof ToolResultContentSchema>;
+export type ToolResultContent = z.output<typeof ToolResultContentSchema>;
 
-type ToolCallResult = z.output<typeof ToolCallResultSchema>;
+export type ToolCallResult = z.output<typeof ToolCallResultSchema>;
 
-type ToolCallState = z.output<typeof ToolCallStateSchema>;
+export type ToolCallState = z.output<typeof ToolCallStateSchema>;
 
-type ToolCallRunningState = z.output<typeof ToolCallRunningStateSchema>;
+export type ToolCallRunningState = z.output<typeof ToolCallRunningStateSchema>;
 
-type ToolCallAuthRequiredState = z.output<typeof ToolCallAuthRequiredStateSchema>;
+export type ToolCallAuthRequiredState = z.output<typeof ToolCallAuthRequiredStateSchema>;
 
-type ToolCallPendingConfirmationState = z.output<typeof ToolCallPendingConfirmationStateSchema>;
+export type ToolCallPendingConfirmationState = z.output<
+  typeof ToolCallPendingConfirmationStateSchema
+>;
 
-type ToolCallPendingResultConfirmationState = z.output<
+export type ToolCallPendingResultConfirmationState = z.output<
   typeof ToolCallPendingResultConfirmationStateSchema
 >;
 
-type TerminalCommandResult = z.output<typeof TerminalCommandResultSchema>;
-
-export {
-  ConfirmationOptionSchema,
-  TerminalCommandResultSchema,
-  ToolCallAuthRequiredStateSchema,
-  ToolCallContributorSchema,
-  ToolCallPendingConfirmationStateSchema,
-  ToolCallPendingResultConfirmationStateSchema,
-  ToolCallResultSchema,
-  ToolCallRiskAssessmentSchema,
-  ToolCallRunningStateSchema,
-  ToolCallStateSchema,
-  ToolInputSchema,
-  ToolResultContentSchema,
-  type ConfirmationOption,
-  type ToolCallAuthRequiredState,
-  type ToolCallContributor,
-  type ToolCallPendingConfirmationState,
-  type ToolCallPendingResultConfirmationState,
-  type ToolCallResult,
-  type ToolCallRiskAssessment,
-  type ToolCallRunningState,
-  type ToolCallState,
-  type ToolInput,
-  type ToolResultContent,
-  type TerminalCommandResult,
-};
+export type TerminalCommandResult = z.output<typeof TerminalCommandResultSchema>;

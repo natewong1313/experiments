@@ -16,7 +16,7 @@ type ChannelLease = {
   release: ReleaseChannel;
 };
 
-function acquireChannel(client: AhpClient, uri: string): ChannelLease {
+export function acquireChannel(client: AhpClient, uri: string): ChannelLease {
   let resources = channels.get(client);
 
   if (!resources) {
@@ -54,5 +54,3 @@ function acquireChannel(client: AhpClient, uri: string): ChannelLease {
 
   return { result, subscription, release };
 }
-
-export { acquireChannel };

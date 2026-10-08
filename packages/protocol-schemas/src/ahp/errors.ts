@@ -1,15 +1,15 @@
 import * as z from "zod";
 import { ProtectedResourceMetadataSchema, uriSchema } from "./common";
 
-const UnsupportedProtocolVersionDataSchema = z.strictObject({
+export const UnsupportedProtocolVersionDataSchema = z.strictObject({
   supportedVersions: z.array(z.string()),
 });
 
-const AuthRequiredDataSchema = z.strictObject({
+export const AuthRequiredDataSchema = z.strictObject({
   resources: z.array(ProtectedResourceMetadataSchema),
 });
 
-const PermissionDeniedDataSchema = z.strictObject({
+export const PermissionDeniedDataSchema = z.strictObject({
   request: z
     .strictObject({
       channel: uriSchema,
@@ -20,27 +20,16 @@ const PermissionDeniedDataSchema = z.strictObject({
     .optional(),
 });
 
-const AhpErrorDataSchema = z.union([
+export const AhpErrorDataSchema = z.union([
   UnsupportedProtocolVersionDataSchema,
   AuthRequiredDataSchema,
   PermissionDeniedDataSchema,
 ]);
 
-type UnsupportedProtocolVersionData = z.output<typeof UnsupportedProtocolVersionDataSchema>;
+export type UnsupportedProtocolVersionData = z.output<typeof UnsupportedProtocolVersionDataSchema>;
 
-type AuthRequiredData = z.output<typeof AuthRequiredDataSchema>;
+export type AuthRequiredData = z.output<typeof AuthRequiredDataSchema>;
 
-type PermissionDeniedData = z.output<typeof PermissionDeniedDataSchema>;
+export type PermissionDeniedData = z.output<typeof PermissionDeniedDataSchema>;
 
-type AhpErrorData = z.output<typeof AhpErrorDataSchema>;
-
-export {
-  AhpErrorDataSchema,
-  AuthRequiredDataSchema,
-  PermissionDeniedDataSchema,
-  UnsupportedProtocolVersionDataSchema,
-  type AhpErrorData,
-  type AuthRequiredData,
-  type PermissionDeniedData,
-  type UnsupportedProtocolVersionData,
-};
+export type AhpErrorData = z.output<typeof AhpErrorDataSchema>;

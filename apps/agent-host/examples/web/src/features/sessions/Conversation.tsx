@@ -17,7 +17,7 @@ const NO_TURNS = 0;
 
 type ConversationParams = { view: ReturnType<typeof useAhpSession> };
 
-function Conversation({ view }: ConversationParams): JSX.Element {
+export function Conversation({ view }: ConversationParams): JSX.Element {
   const [draft, setDraft] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -213,5 +213,3 @@ function Conversation({ view }: ConversationParams): JSX.Element {
     </div>
   );
 }
-
-export { Conversation };

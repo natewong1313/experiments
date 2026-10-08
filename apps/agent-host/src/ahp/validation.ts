@@ -2,7 +2,7 @@ import { isoTimestampSchema, type StateAction } from "@experiments/protocol-sche
 import type { LiveSession } from "../state";
 import { ahpMessageToAcpPrompt } from "@experiments/protocol-schemas/acp";
 
-function rejection(
+export function rejection(
   record: LiveSession,
   channel: string,
   action: StateAction,
@@ -82,5 +82,3 @@ function rejection(
     }
   }
 }
-
-export { rejection };

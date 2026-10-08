@@ -54,7 +54,7 @@ type AhpClientsParams = {
   ctx: Pick<DurableObjectState, "acceptWebSocket" | "getWebSockets">;
 };
 
-class AhpClients {
+export class AhpClients {
   private readonly ctx: Pick<DurableObjectState, "acceptWebSocket" | "getWebSockets">;
 
   constructor({ ctx }: AhpClientsParams) {
@@ -218,5 +218,3 @@ class AhpClients {
     }
   }
 }
-
-export { AhpClients };

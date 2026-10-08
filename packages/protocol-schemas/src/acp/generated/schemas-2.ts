@@ -33,7 +33,7 @@ import {
   EnumOptionOutboundSchema,
 } from "./schemas-1";
 
-const IntegerPropertySchemaSchema = z.looseObject({
+export const IntegerPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minimum: z
@@ -48,7 +48,7 @@ const IntegerPropertySchemaSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const IntegerPropertySchemaOutboundSchema = z.strictObject({
+export const IntegerPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minimum: z
@@ -63,49 +63,49 @@ const IntegerPropertySchemaOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type IntegerPropertySchema = z.output<typeof IntegerPropertySchemaSchema>;
+export type IntegerPropertySchema = z.output<typeof IntegerPropertySchemaSchema>;
 
-const BooleanPropertySchemaSchema = z.looseObject({
+export const BooleanPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   default: z.union([z.boolean(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const BooleanPropertySchemaOutboundSchema = z.strictObject({
+export const BooleanPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   default: z.union([z.boolean(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type BooleanPropertySchema = z.output<typeof BooleanPropertySchemaSchema>;
+export type BooleanPropertySchema = z.output<typeof BooleanPropertySchemaSchema>;
 
-const StringMultiSelectItemsSchema = z.looseObject({
+export const StringMultiSelectItemsSchema = z.looseObject({
   enum: z.array(z.string()),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const StringMultiSelectItemsOutboundSchema = z.strictObject({
+export const StringMultiSelectItemsOutboundSchema = z.strictObject({
   enum: z.array(z.string()),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type StringMultiSelectItems = z.output<typeof StringMultiSelectItemsSchema>;
+export type StringMultiSelectItems = z.output<typeof StringMultiSelectItemsSchema>;
 
-const TitledMultiSelectItemsSchema = z.looseObject({
+export const TitledMultiSelectItemsSchema = z.looseObject({
   anyOf: z.array(EnumOptionSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const TitledMultiSelectItemsOutboundSchema = z.strictObject({
+export const TitledMultiSelectItemsOutboundSchema = z.strictObject({
   anyOf: z.array(EnumOptionOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type TitledMultiSelectItems = z.output<typeof TitledMultiSelectItemsSchema>;
+export type TitledMultiSelectItems = z.output<typeof TitledMultiSelectItemsSchema>;
 
-const MultiSelectItemsSchema = z.union([
+export const MultiSelectItemsSchema = z.union([
   z.looseObject({
     enum: z.array(z.string()),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
@@ -117,7 +117,7 @@ const MultiSelectItemsSchema = z.union([
   TitledMultiSelectItemsSchema,
 ]);
 
-const MultiSelectItemsOutboundSchema = z.union([
+export const MultiSelectItemsOutboundSchema = z.union([
   z.strictObject({
     enum: z.array(z.string()),
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
@@ -129,9 +129,9 @@ const MultiSelectItemsOutboundSchema = z.union([
   TitledMultiSelectItemsOutboundSchema,
 ]);
 
-type MultiSelectItems = z.output<typeof MultiSelectItemsSchema>;
+export type MultiSelectItems = z.output<typeof MultiSelectItemsSchema>;
 
-const MultiSelectPropertySchemaSchema = z.looseObject({
+export const MultiSelectPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minItems: z
@@ -151,7 +151,7 @@ const MultiSelectPropertySchemaSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const MultiSelectPropertySchemaOutboundSchema = z.strictObject({
+export const MultiSelectPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minItems: z
@@ -171,9 +171,9 @@ const MultiSelectPropertySchemaOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type MultiSelectPropertySchema = z.output<typeof MultiSelectPropertySchemaSchema>;
+export type MultiSelectPropertySchema = z.output<typeof MultiSelectPropertySchemaSchema>;
 
-const ElicitationPropertySchemaSchema = z.union([
+export const ElicitationPropertySchemaSchema = z.union([
   z.looseObject({
     title: z.union([z.string(), z.null()]).optional(),
     description: z.union([z.string(), z.null()]).optional(),
@@ -256,7 +256,7 @@ const ElicitationPropertySchemaSchema = z.union([
     ),
 ]);
 
-const ElicitationPropertySchemaOutboundSchema = z.union([
+export const ElicitationPropertySchemaOutboundSchema = z.union([
   z.strictObject({
     title: z.union([z.string(), z.null()]).optional(),
     description: z.union([z.string(), z.null()]).optional(),
@@ -339,9 +339,9 @@ const ElicitationPropertySchemaOutboundSchema = z.union([
     ),
 ]);
 
-type ElicitationPropertySchema = z.output<typeof ElicitationPropertySchemaSchema>;
+export type ElicitationPropertySchema = z.output<typeof ElicitationPropertySchemaSchema>;
 
-const ElicitationSchemaSchema = z.looseObject({
+export const ElicitationSchemaSchema = z.looseObject({
   type: ElicitationSchemaTypeSchema.optional(),
   title: z.union([z.string(), z.null()]).optional(),
   properties: z.record(z.string(), ElicitationPropertySchemaSchema).optional(),
@@ -350,7 +350,7 @@ const ElicitationSchemaSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ElicitationSchemaOutboundSchema = z.strictObject({
+export const ElicitationSchemaOutboundSchema = z.strictObject({
   type: ElicitationSchemaTypeOutboundSchema.optional(),
   title: z.union([z.string(), z.null()]).optional(),
   properties: z.record(z.string(), ElicitationPropertySchemaOutboundSchema).optional(),
@@ -359,29 +359,29 @@ const ElicitationSchemaOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ElicitationSchema = z.output<typeof ElicitationSchemaSchema>;
+export type ElicitationSchema = z.output<typeof ElicitationSchemaSchema>;
 
-const ElicitationSessionScopeSchema = z.looseObject({
+export const ElicitationSessionScopeSchema = z.looseObject({
   sessionId: SessionIdSchema,
   toolCallId: z.union([ToolCallIdSchema, z.null()]).optional(),
 });
 
-const ElicitationSessionScopeOutboundSchema = z.strictObject({
+export const ElicitationSessionScopeOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   toolCallId: z.union([ToolCallIdOutboundSchema, z.null()]).optional(),
 });
 
-type ElicitationSessionScope = z.output<typeof ElicitationSessionScopeSchema>;
+export type ElicitationSessionScope = z.output<typeof ElicitationSessionScopeSchema>;
 
-const ElicitationRequestScopeSchema = z.looseObject({ requestId: RequestIdSchema });
+export const ElicitationRequestScopeSchema = z.looseObject({ requestId: RequestIdSchema });
 
-const ElicitationRequestScopeOutboundSchema = z.strictObject({
+export const ElicitationRequestScopeOutboundSchema = z.strictObject({
   requestId: RequestIdOutboundSchema,
 });
 
-type ElicitationRequestScope = z.output<typeof ElicitationRequestScopeSchema>;
+export type ElicitationRequestScope = z.output<typeof ElicitationRequestScopeSchema>;
 
-const ElicitationFormModeSchema = z.union([
+export const ElicitationFormModeSchema = z.union([
   z.looseObject({
     sessionId: SessionIdSchema,
     toolCallId: z.union([ToolCallIdSchema, z.null()]).optional(),
@@ -390,7 +390,7 @@ const ElicitationFormModeSchema = z.union([
   z.looseObject({ requestId: RequestIdSchema, requestedSchema: ElicitationSchemaSchema }),
 ]);
 
-const ElicitationFormModeOutboundSchema = z.union([
+export const ElicitationFormModeOutboundSchema = z.union([
   z.strictObject({
     sessionId: SessionIdOutboundSchema,
     toolCallId: z.union([ToolCallIdOutboundSchema, z.null()]).optional(),
@@ -402,15 +402,15 @@ const ElicitationFormModeOutboundSchema = z.union([
   }),
 ]);
 
-type ElicitationFormMode = z.output<typeof ElicitationFormModeSchema>;
+export type ElicitationFormMode = z.output<typeof ElicitationFormModeSchema>;
 
-const ElicitationIdSchema = z.string();
+export const ElicitationIdSchema = z.string();
 
-const ElicitationIdOutboundSchema = z.string();
+export const ElicitationIdOutboundSchema = z.string();
 
-type ElicitationId = z.output<typeof ElicitationIdSchema>;
+export type ElicitationId = z.output<typeof ElicitationIdSchema>;
 
-const ElicitationUrlModeSchema = z.union([
+export const ElicitationUrlModeSchema = z.union([
   z.looseObject({
     sessionId: SessionIdSchema,
     toolCallId: z.union([ToolCallIdSchema, z.null()]).optional(),
@@ -424,7 +424,7 @@ const ElicitationUrlModeSchema = z.union([
   }),
 ]);
 
-const ElicitationUrlModeOutboundSchema = z.union([
+export const ElicitationUrlModeOutboundSchema = z.union([
   z.strictObject({
     sessionId: SessionIdOutboundSchema,
     toolCallId: z.union([ToolCallIdOutboundSchema, z.null()]).optional(),
@@ -438,9 +438,9 @@ const ElicitationUrlModeOutboundSchema = z.union([
   }),
 ]);
 
-type ElicitationUrlMode = z.output<typeof ElicitationUrlModeSchema>;
+export type ElicitationUrlMode = z.output<typeof ElicitationUrlModeSchema>;
 
-const CreateElicitationRequestSchema = z.union([
+export const CreateElicitationRequestSchema = z.union([
   z.looseObject({
     sessionId: SessionIdSchema,
     toolCallId: z.union([ToolCallIdSchema, z.null()]).optional(),
@@ -496,7 +496,7 @@ const CreateElicitationRequestSchema = z.union([
     }),
 ]);
 
-const CreateElicitationRequestOutboundSchema = z.union([
+export const CreateElicitationRequestOutboundSchema = z.union([
   z.strictObject({
     sessionId: SessionIdOutboundSchema,
     toolCallId: z.union([ToolCallIdOutboundSchema, z.null()]).optional(),
@@ -552,21 +552,21 @@ const CreateElicitationRequestOutboundSchema = z.union([
     }),
 ]);
 
-type CreateElicitationRequest = z.output<typeof CreateElicitationRequestSchema>;
+export type CreateElicitationRequest = z.output<typeof CreateElicitationRequestSchema>;
 
-const McpServerAcpIdSchema = z.string();
+export const McpServerAcpIdSchema = z.string();
 
-const McpServerAcpIdOutboundSchema = z.string();
+export const McpServerAcpIdOutboundSchema = z.string();
 
-type McpServerAcpId = z.output<typeof McpServerAcpIdSchema>;
+export type McpServerAcpId = z.output<typeof McpServerAcpIdSchema>;
 
-const McpRequestIdSchema = z.string();
+export const McpRequestIdSchema = z.string();
 
-const McpRequestIdOutboundSchema = z.string();
+export const McpRequestIdOutboundSchema = z.string();
 
-type McpRequestId = z.output<typeof McpRequestIdSchema>;
+export type McpRequestId = z.output<typeof McpRequestIdSchema>;
 
-const MessageMcpRequestSchema = z.looseObject({
+export const MessageMcpRequestSchema = z.looseObject({
   serverId: McpServerAcpIdSchema,
   requestId: McpRequestIdSchema,
   method: z.string(),
@@ -574,7 +574,7 @@ const MessageMcpRequestSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const MessageMcpRequestOutboundSchema = z.strictObject({
+export const MessageMcpRequestOutboundSchema = z.strictObject({
   serverId: McpServerAcpIdOutboundSchema,
   requestId: McpRequestIdOutboundSchema,
   method: z.string(),
@@ -582,15 +582,15 @@ const MessageMcpRequestOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type MessageMcpRequest = z.output<typeof MessageMcpRequestSchema>;
+export type MessageMcpRequest = z.output<typeof MessageMcpRequestSchema>;
 
-const ExtRequestSchema = z.unknown();
+export const ExtRequestSchema = z.unknown();
 
-const ExtRequestOutboundSchema = z.unknown();
+export const ExtRequestOutboundSchema = z.unknown();
 
-type ExtRequest = z.output<typeof ExtRequestSchema>;
+export type ExtRequest = z.output<typeof ExtRequestSchema>;
 
-const AgentRequestSchema = z.looseObject({
+export const AgentRequestSchema = z.looseObject({
   id: RequestIdSchema,
   method: z.string(),
   params: z
@@ -613,7 +613,7 @@ const AgentRequestSchema = z.looseObject({
     .optional(),
 });
 
-const AgentRequestOutboundSchema = z.strictObject({
+export const AgentRequestOutboundSchema = z.strictObject({
   id: RequestIdOutboundSchema,
   method: z.string(),
   params: z
@@ -636,81 +636,18 @@ const AgentRequestOutboundSchema = z.strictObject({
     .optional(),
 });
 
-type AgentRequest = z.output<typeof AgentRequestSchema>;
+export type AgentRequest = z.output<typeof AgentRequestSchema>;
 
-const ProtocolVersionSchema = z
+export const ProtocolVersionSchema = z
   .number()
   .refine(Number.isInteger, { error: "Expected integer" })
   .check(z.gte(0))
   .check(z.lte(65535));
 
-const ProtocolVersionOutboundSchema = z
+export const ProtocolVersionOutboundSchema = z
   .number()
   .refine(Number.isInteger, { error: "Expected integer" })
   .check(z.gte(0))
   .check(z.lte(65535));
 
-type ProtocolVersion = z.output<typeof ProtocolVersionSchema>;
-
-export {
-  IntegerPropertySchemaSchema,
-  IntegerPropertySchemaOutboundSchema,
-  type IntegerPropertySchema,
-  BooleanPropertySchemaSchema,
-  BooleanPropertySchemaOutboundSchema,
-  type BooleanPropertySchema,
-  StringMultiSelectItemsSchema,
-  StringMultiSelectItemsOutboundSchema,
-  type StringMultiSelectItems,
-  TitledMultiSelectItemsSchema,
-  TitledMultiSelectItemsOutboundSchema,
-  type TitledMultiSelectItems,
-  MultiSelectItemsSchema,
-  MultiSelectItemsOutboundSchema,
-  type MultiSelectItems,
-  MultiSelectPropertySchemaSchema,
-  MultiSelectPropertySchemaOutboundSchema,
-  type MultiSelectPropertySchema,
-  ElicitationPropertySchemaSchema,
-  ElicitationPropertySchemaOutboundSchema,
-  type ElicitationPropertySchema,
-  ElicitationSchemaSchema,
-  ElicitationSchemaOutboundSchema,
-  type ElicitationSchema,
-  ElicitationSessionScopeSchema,
-  ElicitationSessionScopeOutboundSchema,
-  type ElicitationSessionScope,
-  ElicitationRequestScopeSchema,
-  ElicitationRequestScopeOutboundSchema,
-  type ElicitationRequestScope,
-  ElicitationFormModeSchema,
-  ElicitationFormModeOutboundSchema,
-  type ElicitationFormMode,
-  ElicitationIdSchema,
-  ElicitationIdOutboundSchema,
-  type ElicitationId,
-  ElicitationUrlModeSchema,
-  ElicitationUrlModeOutboundSchema,
-  type ElicitationUrlMode,
-  CreateElicitationRequestSchema,
-  CreateElicitationRequestOutboundSchema,
-  type CreateElicitationRequest,
-  McpServerAcpIdSchema,
-  McpServerAcpIdOutboundSchema,
-  type McpServerAcpId,
-  McpRequestIdSchema,
-  McpRequestIdOutboundSchema,
-  type McpRequestId,
-  MessageMcpRequestSchema,
-  MessageMcpRequestOutboundSchema,
-  type MessageMcpRequest,
-  ExtRequestSchema,
-  ExtRequestOutboundSchema,
-  type ExtRequest,
-  AgentRequestSchema,
-  AgentRequestOutboundSchema,
-  type AgentRequest,
-  ProtocolVersionSchema,
-  ProtocolVersionOutboundSchema,
-  type ProtocolVersion,
-};
+export type ProtocolVersion = z.output<typeof ProtocolVersionSchema>;

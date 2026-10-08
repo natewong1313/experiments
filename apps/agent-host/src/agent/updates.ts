@@ -7,13 +7,13 @@ const MAX_SETUP_BYTES = 1_048_576;
 
 const MAX_SUBAGENTS = 256;
 
-type AgentUpdates = (
+export type AgentUpdates = (
   identity: SessionGeneration,
   notification: SessionNotification,
   rootSessionId: string,
 ) => void;
 
-class SessionUpdates {
+export class SessionUpdates {
   private readonly pending: SessionNotification[] = [];
   private readonly children: Map<string, string> = new Map();
   private pendingBytes = 0;
@@ -129,5 +129,3 @@ function isHistory({ update }: SessionNotification): boolean {
     }
   }
 }
-
-export { SessionUpdates, type AgentUpdates };

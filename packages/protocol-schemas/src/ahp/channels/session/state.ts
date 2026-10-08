@@ -17,9 +17,9 @@ import {
 import { ChangesetSchema } from "../changeset";
 import { AnnotationsSummarySchema } from "../annotations";
 
-const SessionLifecycleSchema = z.enum(["creating", "ready", "failed"]);
+export const SessionLifecycleSchema = z.enum(["creating", "ready", "failed"]);
 
-const SessionMetadataSchema = z.strictObject({
+export const SessionMetadataSchema = z.strictObject({
   provider: z.string(),
   title: z.string(),
   status: sessionStatusSchema,
@@ -43,13 +43,13 @@ const SessionMetadataSchema = z.strictObject({
   annotations: AnnotationsSummarySchema.optional(),
 });
 
-const ChangesSummarySchema = z.strictObject({
+export const ChangesSummarySchema = z.strictObject({
   additions: z.number().optional(),
   deletions: z.number().optional(),
   files: z.number().optional(),
 });
 
-const SessionSummarySchema = z.strictObject({
+export const SessionSummarySchema = z.strictObject({
   ...SessionMetadataSchema.shape,
   resource: uriSchema,
   createdAt: isoTimestampSchema,
@@ -71,25 +71,25 @@ const SessionConfigPropertySchema: z.ZodType<SessionConfigProperty> = z.lazy(() 
 
 const sessionConfigPropertySchemaLazy = SessionConfigPropertySchema;
 
-const SessionConfigSchemaSchema = z.strictObject({
+export const SessionConfigSchemaSchema = z.strictObject({
   type: z.literal("object"),
   properties: z.record(z.string(), SessionConfigPropertySchema),
   required: z.array(z.string()).optional(),
 });
 
-const SessionConfigStateSchema = z.strictObject({
+export const SessionConfigStateSchema = z.strictObject({
   schema: SessionConfigSchemaSchema,
   values: z.record(z.string(), z.unknown()),
 });
 
-const SessionActiveClientSchema = z.strictObject({
+export const SessionActiveClientSchema = z.strictObject({
   clientId: z.string(),
   displayName: z.string().optional(),
   tools: z.array(ToolDefinitionSchema),
   customizations: z.array(ClientPluginCustomizationSchema).optional(),
 });
 
-const SessionInputRequestSchema = z.discriminatedUnion("kind", [
+export const SessionInputRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("chatInput"),
     id: z.string(),
@@ -123,7 +123,7 @@ const SessionInputRequestSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const SessionStateSchema = z.strictObject({
+export const SessionStateSchema = z.strictObject({
   ...SessionMetadataSchema.shape,
   lifecycle: SessionLifecycleSchema,
   creationError: ErrorInfoSchema.optional(),
@@ -138,15 +138,15 @@ const SessionStateSchema = z.strictObject({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-type SessionLifecycle = z.output<typeof SessionLifecycleSchema>;
+export type SessionLifecycle = z.output<typeof SessionLifecycleSchema>;
 
-type SessionMetadata = z.output<typeof SessionMetadataSchema>;
+export type SessionMetadata = z.output<typeof SessionMetadataSchema>;
 
-type ChangesSummary = z.output<typeof ChangesSummarySchema>;
+export type ChangesSummary = z.output<typeof ChangesSummarySchema>;
 
-type SessionSummary = z.output<typeof SessionSummarySchema>;
+export type SessionSummary = z.output<typeof SessionSummarySchema>;
 
-type SessionConfigProperty = {
+export type SessionConfigProperty = {
   type: "string" | "number" | "boolean" | "array" | "object";
   title: string;
   description?: string;
@@ -163,34 +163,12 @@ type SessionConfigProperty = {
   additionalProperties?: SessionConfigProperty;
 };
 
-type SessionConfigSchema = z.output<typeof SessionConfigSchemaSchema>;
+export type SessionConfigSchema = z.output<typeof SessionConfigSchemaSchema>;
 
-type SessionConfigState = z.output<typeof SessionConfigStateSchema>;
+export type SessionConfigState = z.output<typeof SessionConfigStateSchema>;
 
-type SessionActiveClient = z.output<typeof SessionActiveClientSchema>;
+export type SessionActiveClient = z.output<typeof SessionActiveClientSchema>;
 
-type SessionInputRequest = z.output<typeof SessionInputRequestSchema>;
+export type SessionInputRequest = z.output<typeof SessionInputRequestSchema>;
 
-type SessionState = z.output<typeof SessionStateSchema>;
-
-export {
-  SessionActiveClientSchema,
-  SessionConfigSchemaSchema,
-  SessionConfigStateSchema,
-  SessionInputRequestSchema,
-  SessionLifecycleSchema,
-  SessionMetadataSchema,
-  SessionStateSchema,
-  SessionSummarySchema,
-  ChangesSummarySchema,
-  type ChangesSummary,
-  type SessionActiveClient,
-  type SessionConfigProperty,
-  type SessionConfigSchema,
-  type SessionConfigState,
-  type SessionInputRequest,
-  type SessionLifecycle,
-  type SessionMetadata,
-  type SessionState,
-  type SessionSummary,
-};
+export type SessionState = z.output<typeof SessionStateSchema>;

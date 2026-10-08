@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { ErrorInfoSchema, FileEditSchema, StringOrMarkdownSchema } from "../common";
 
-const ChangesetSchema = z.strictObject({
+export const ChangesetSchema = z.strictObject({
   label: z.string(),
   uriTemplate: z.string(),
   description: z.string().optional(),
@@ -13,14 +13,14 @@ const ChangesetSchema = z.strictObject({
     .optional(),
 });
 
-const ChangesetFileSchema = z.strictObject({
+export const ChangesetFileSchema = z.strictObject({
   id: z.string(),
   edit: FileEditSchema,
   reviewed: z.boolean().optional(),
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-const ChangesetOperationSchema = z.strictObject({
+export const ChangesetOperationSchema = z.strictObject({
   id: z.string(),
   label: z.string(),
   description: z.string().optional(),
@@ -32,14 +32,14 @@ const ChangesetOperationSchema = z.strictObject({
   error: ErrorInfoSchema.optional(),
 });
 
-const ChangesetStateSchema = z.strictObject({
+export const ChangesetStateSchema = z.strictObject({
   status: z.enum(["computing", "ready", "error"]),
   error: ErrorInfoSchema.optional(),
   files: z.array(ChangesetFileSchema),
   operations: z.array(ChangesetOperationSchema).optional(),
 });
 
-const ChangesetActionSchema = z.discriminatedUnion("type", [
+export const ChangesetActionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("changeset/statusChanged"),
     status: ChangesetStateSchema.shape.status,
@@ -76,25 +76,12 @@ const ChangesetActionSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("changeset/cleared") }),
 ]);
 
-type Changeset = z.output<typeof ChangesetSchema>;
+export type Changeset = z.output<typeof ChangesetSchema>;
 
-type ChangesetFile = z.output<typeof ChangesetFileSchema>;
+export type ChangesetFile = z.output<typeof ChangesetFileSchema>;
 
-type ChangesetOperation = z.output<typeof ChangesetOperationSchema>;
+export type ChangesetOperation = z.output<typeof ChangesetOperationSchema>;
 
-type ChangesetState = z.output<typeof ChangesetStateSchema>;
+export type ChangesetState = z.output<typeof ChangesetStateSchema>;
 
-type ChangesetAction = z.output<typeof ChangesetActionSchema>;
-
-export {
-  ChangesetActionSchema,
-  ChangesetFileSchema,
-  ChangesetOperationSchema,
-  ChangesetSchema,
-  ChangesetStateSchema,
-  type Changeset,
-  type ChangesetAction,
-  type ChangesetFile,
-  type ChangesetOperation,
-  type ChangesetState,
-};
+export type ChangesetAction = z.output<typeof ChangesetActionSchema>;

@@ -3,7 +3,7 @@ import { AgentHostContext, type AgentHostContextValue } from "./agent-host-conte
 
 const ABSENT = void 0;
 
-function useAgentHost(): AgentHostContextValue {
+export function useAgentHost(): AgentHostContextValue {
   const context = useContext(AgentHostContext);
 
   if (context === ABSENT) {
@@ -12,5 +12,3 @@ function useAgentHost(): AgentHostContextValue {
 
   return context;
 }
-
-export { useAgentHost };

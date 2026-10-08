@@ -9,7 +9,7 @@ type PageHeaderParams = {
   children?: ReactNode;
 };
 
-function PageHeader({
+export function PageHeader({
   breadcrumbs,
   title = "",
   description = "",
@@ -42,5 +42,3 @@ function PageHeader({
     </div>
   );
 }
-
-export { PageHeader };

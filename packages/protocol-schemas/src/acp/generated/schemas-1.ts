@@ -13,25 +13,25 @@ import {
   ContentBlockOutboundSchema,
 } from "./schemas-0";
 
-const TerminalIdSchema = z.string();
+export const TerminalIdSchema = z.string();
 
-const TerminalIdOutboundSchema = z.string();
+export const TerminalIdOutboundSchema = z.string();
 
-type TerminalId = z.output<typeof TerminalIdSchema>;
+export type TerminalId = z.output<typeof TerminalIdSchema>;
 
-const TerminalSchema = z.looseObject({
+export const TerminalSchema = z.looseObject({
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const TerminalOutboundSchema = z.strictObject({
+export const TerminalOutboundSchema = z.strictObject({
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type Terminal = z.output<typeof TerminalSchema>;
+export type Terminal = z.output<typeof TerminalSchema>;
 
-const ToolCallContentSchema = z.union([
+export const ToolCallContentSchema = z.union([
   z.looseObject({
     content: ContentBlockSchema,
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
@@ -51,7 +51,7 @@ const ToolCallContentSchema = z.union([
   }),
 ]);
 
-const ToolCallContentOutboundSchema = z.union([
+export const ToolCallContentOutboundSchema = z.union([
   z.strictObject({
     content: ContentBlockOutboundSchema,
     _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
@@ -71,9 +71,9 @@ const ToolCallContentOutboundSchema = z.union([
   }),
 ]);
 
-type ToolCallContent = z.output<typeof ToolCallContentSchema>;
+export type ToolCallContent = z.output<typeof ToolCallContentSchema>;
 
-const ToolCallLocationSchema = z.looseObject({
+export const ToolCallLocationSchema = z.looseObject({
   path: z.string(),
   line: z
     .union([
@@ -84,7 +84,7 @@ const ToolCallLocationSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ToolCallLocationOutboundSchema = z.strictObject({
+export const ToolCallLocationOutboundSchema = z.strictObject({
   path: z.string(),
   line: z
     .union([
@@ -95,9 +95,9 @@ const ToolCallLocationOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ToolCallLocation = z.output<typeof ToolCallLocationSchema>;
+export type ToolCallLocation = z.output<typeof ToolCallLocationSchema>;
 
-const ToolCallUpdateSchema = z.looseObject({
+export const ToolCallUpdateSchema = z.looseObject({
   toolCallId: ToolCallIdSchema,
   kind: z.union([ToolKindSchema, z.null()]).optional(),
   status: z.union([ToolCallStatusSchema, z.null()]).optional(),
@@ -110,7 +110,7 @@ const ToolCallUpdateSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ToolCallUpdateOutboundSchema = z.strictObject({
+export const ToolCallUpdateOutboundSchema = z.strictObject({
   toolCallId: ToolCallIdOutboundSchema,
   kind: z.union([ToolKindOutboundSchema, z.null()]).optional(),
   status: z.union([ToolCallStatusOutboundSchema, z.null()]).optional(),
@@ -123,77 +123,77 @@ const ToolCallUpdateOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ToolCallUpdate = z.output<typeof ToolCallUpdateSchema>;
+export type ToolCallUpdate = z.output<typeof ToolCallUpdateSchema>;
 
-const PermissionOptionIdSchema = z.string();
+export const PermissionOptionIdSchema = z.string();
 
-const PermissionOptionIdOutboundSchema = z.string();
+export const PermissionOptionIdOutboundSchema = z.string();
 
-type PermissionOptionId = z.output<typeof PermissionOptionIdSchema>;
+export type PermissionOptionId = z.output<typeof PermissionOptionIdSchema>;
 
-const PermissionOptionKindSchema = z.enum([
+export const PermissionOptionKindSchema = z.enum([
   "allow_once",
   "allow_always",
   "reject_once",
   "reject_always",
 ]);
 
-const PermissionOptionKindOutboundSchema = z.enum([
+export const PermissionOptionKindOutboundSchema = z.enum([
   "allow_once",
   "allow_always",
   "reject_once",
   "reject_always",
 ]);
 
-type PermissionOptionKind = z.output<typeof PermissionOptionKindSchema>;
+export type PermissionOptionKind = z.output<typeof PermissionOptionKindSchema>;
 
-const PermissionOptionSchema = z.looseObject({
+export const PermissionOptionSchema = z.looseObject({
   optionId: PermissionOptionIdSchema,
   name: z.string(),
   kind: PermissionOptionKindSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PermissionOptionOutboundSchema = z.strictObject({
+export const PermissionOptionOutboundSchema = z.strictObject({
   optionId: PermissionOptionIdOutboundSchema,
   name: z.string(),
   kind: PermissionOptionKindOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PermissionOption = z.output<typeof PermissionOptionSchema>;
+export type PermissionOption = z.output<typeof PermissionOptionSchema>;
 
-const RequestPermissionRequestSchema = z.looseObject({
+export const RequestPermissionRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   toolCall: ToolCallUpdateSchema,
   options: z.array(PermissionOptionSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const RequestPermissionRequestOutboundSchema = z.strictObject({
+export const RequestPermissionRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   toolCall: ToolCallUpdateOutboundSchema,
   options: z.array(PermissionOptionOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type RequestPermissionRequest = z.output<typeof RequestPermissionRequestSchema>;
+export type RequestPermissionRequest = z.output<typeof RequestPermissionRequestSchema>;
 
-const EnvVariableSchema = z.looseObject({
+export const EnvVariableSchema = z.looseObject({
   name: z.string(),
   value: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const EnvVariableOutboundSchema = z.strictObject({
+export const EnvVariableOutboundSchema = z.strictObject({
   name: z.string(),
   value: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type EnvVariable = z.output<typeof EnvVariableSchema>;
+export type EnvVariable = z.output<typeof EnvVariableSchema>;
 
-const CreateTerminalRequestSchema = z.looseObject({
+export const CreateTerminalRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   command: z.string(),
   args: z.array(z.string()).optional(),
@@ -208,7 +208,7 @@ const CreateTerminalRequestSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CreateTerminalRequestOutboundSchema = z.strictObject({
+export const CreateTerminalRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   command: z.string(),
   args: z.array(z.string()).optional(),
@@ -223,93 +223,93 @@ const CreateTerminalRequestOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CreateTerminalRequest = z.output<typeof CreateTerminalRequestSchema>;
+export type CreateTerminalRequest = z.output<typeof CreateTerminalRequestSchema>;
 
-const TerminalOutputRequestSchema = z.looseObject({
+export const TerminalOutputRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const TerminalOutputRequestOutboundSchema = z.strictObject({
+export const TerminalOutputRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type TerminalOutputRequest = z.output<typeof TerminalOutputRequestSchema>;
+export type TerminalOutputRequest = z.output<typeof TerminalOutputRequestSchema>;
 
-const ReleaseTerminalRequestSchema = z.looseObject({
+export const ReleaseTerminalRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ReleaseTerminalRequestOutboundSchema = z.strictObject({
+export const ReleaseTerminalRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ReleaseTerminalRequest = z.output<typeof ReleaseTerminalRequestSchema>;
+export type ReleaseTerminalRequest = z.output<typeof ReleaseTerminalRequestSchema>;
 
-const WaitForTerminalExitRequestSchema = z.looseObject({
+export const WaitForTerminalExitRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const WaitForTerminalExitRequestOutboundSchema = z.strictObject({
+export const WaitForTerminalExitRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type WaitForTerminalExitRequest = z.output<typeof WaitForTerminalExitRequestSchema>;
+export type WaitForTerminalExitRequest = z.output<typeof WaitForTerminalExitRequestSchema>;
 
-const KillTerminalRequestSchema = z.looseObject({
+export const KillTerminalRequestSchema = z.looseObject({
   sessionId: SessionIdSchema,
   terminalId: TerminalIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const KillTerminalRequestOutboundSchema = z.strictObject({
+export const KillTerminalRequestOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   terminalId: TerminalIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type KillTerminalRequest = z.output<typeof KillTerminalRequestSchema>;
+export type KillTerminalRequest = z.output<typeof KillTerminalRequestSchema>;
 
-const ElicitationSchemaTypeSchema = z.enum(["object"]);
+export const ElicitationSchemaTypeSchema = z.enum(["object"]);
 
-const ElicitationSchemaTypeOutboundSchema = z.enum(["object"]);
+export const ElicitationSchemaTypeOutboundSchema = z.enum(["object"]);
 
-type ElicitationSchemaType = z.output<typeof ElicitationSchemaTypeSchema>;
+export type ElicitationSchemaType = z.output<typeof ElicitationSchemaTypeSchema>;
 
-const StringFormatSchema = z.enum(["email", "uri", "date", "date-time"]);
+export const StringFormatSchema = z.enum(["email", "uri", "date", "date-time"]);
 
-const StringFormatOutboundSchema = z.enum(["email", "uri", "date", "date-time"]);
+export const StringFormatOutboundSchema = z.enum(["email", "uri", "date", "date-time"]);
 
-type StringFormat = z.output<typeof StringFormatSchema>;
+export type StringFormat = z.output<typeof StringFormatSchema>;
 
-const EnumOptionSchema = z.looseObject({
+export const EnumOptionSchema = z.looseObject({
   const: z.string(),
   title: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const EnumOptionOutboundSchema = z.strictObject({
+export const EnumOptionOutboundSchema = z.strictObject({
   const: z.string(),
   title: z.string(),
   description: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type EnumOption = z.output<typeof EnumOptionSchema>;
+export type EnumOption = z.output<typeof EnumOptionSchema>;
 
-const StringPropertySchemaSchema = z.looseObject({
+export const StringPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minLength: z
@@ -332,7 +332,7 @@ const StringPropertySchemaSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const StringPropertySchemaOutboundSchema = z.strictObject({
+export const StringPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minLength: z
@@ -355,9 +355,9 @@ const StringPropertySchemaOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type StringPropertySchema = z.output<typeof StringPropertySchemaSchema>;
+export type StringPropertySchema = z.output<typeof StringPropertySchemaSchema>;
 
-const NumberPropertySchemaSchema = z.looseObject({
+export const NumberPropertySchemaSchema = z.looseObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minimum: z.union([z.number(), z.null()]).optional(),
@@ -366,7 +366,7 @@ const NumberPropertySchemaSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NumberPropertySchemaOutboundSchema = z.strictObject({
+export const NumberPropertySchemaOutboundSchema = z.strictObject({
   title: z.union([z.string(), z.null()]).optional(),
   description: z.union([z.string(), z.null()]).optional(),
   minimum: z.union([z.number(), z.null()]).optional(),
@@ -375,67 +375,4 @@ const NumberPropertySchemaOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NumberPropertySchema = z.output<typeof NumberPropertySchemaSchema>;
-
-export {
-  TerminalIdSchema,
-  TerminalIdOutboundSchema,
-  type TerminalId,
-  TerminalSchema,
-  TerminalOutboundSchema,
-  type Terminal,
-  ToolCallContentSchema,
-  ToolCallContentOutboundSchema,
-  type ToolCallContent,
-  ToolCallLocationSchema,
-  ToolCallLocationOutboundSchema,
-  type ToolCallLocation,
-  ToolCallUpdateSchema,
-  ToolCallUpdateOutboundSchema,
-  type ToolCallUpdate,
-  PermissionOptionIdSchema,
-  PermissionOptionIdOutboundSchema,
-  type PermissionOptionId,
-  PermissionOptionKindSchema,
-  PermissionOptionKindOutboundSchema,
-  type PermissionOptionKind,
-  PermissionOptionSchema,
-  PermissionOptionOutboundSchema,
-  type PermissionOption,
-  RequestPermissionRequestSchema,
-  RequestPermissionRequestOutboundSchema,
-  type RequestPermissionRequest,
-  EnvVariableSchema,
-  EnvVariableOutboundSchema,
-  type EnvVariable,
-  CreateTerminalRequestSchema,
-  CreateTerminalRequestOutboundSchema,
-  type CreateTerminalRequest,
-  TerminalOutputRequestSchema,
-  TerminalOutputRequestOutboundSchema,
-  type TerminalOutputRequest,
-  ReleaseTerminalRequestSchema,
-  ReleaseTerminalRequestOutboundSchema,
-  type ReleaseTerminalRequest,
-  WaitForTerminalExitRequestSchema,
-  WaitForTerminalExitRequestOutboundSchema,
-  type WaitForTerminalExitRequest,
-  KillTerminalRequestSchema,
-  KillTerminalRequestOutboundSchema,
-  type KillTerminalRequest,
-  ElicitationSchemaTypeSchema,
-  ElicitationSchemaTypeOutboundSchema,
-  type ElicitationSchemaType,
-  StringFormatSchema,
-  StringFormatOutboundSchema,
-  type StringFormat,
-  EnumOptionSchema,
-  EnumOptionOutboundSchema,
-  type EnumOption,
-  StringPropertySchemaSchema,
-  StringPropertySchemaOutboundSchema,
-  type StringPropertySchema,
-  NumberPropertySchemaSchema,
-  NumberPropertySchemaOutboundSchema,
-  type NumberPropertySchema,
-};
+export type NumberPropertySchema = z.output<typeof NumberPropertySchemaSchema>;

@@ -45,7 +45,7 @@ type AhpRpcParams = {
   defaultDirectory: string;
 };
 
-class AhpRpc {
+export class AhpRpc {
   private readonly queries: HostQueries;
   private readonly mutations: HostMutations;
   private readonly clients: AhpClients;
@@ -337,5 +337,3 @@ class AhpRpc {
     });
   }
 }
-
-export { AhpRpc };

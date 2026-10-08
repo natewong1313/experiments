@@ -16,7 +16,7 @@ function textReference(text: string): ContentRef {
 
 type ReferencedContent = Exclude<ContentBlock, { type: "text" }>;
 
-function contentReference(content: ReferencedContent): ContentRef {
+export function contentReference(content: ReferencedContent): ContentRef {
   switch (content.type) {
     case "image":
     case "audio": {
@@ -55,7 +55,7 @@ function contentReference(content: ReferencedContent): ContentRef {
   }
 }
 
-function contentText(content: ContentBlock): string {
+export function contentText(content: ContentBlock): string {
   if (content.type === "text") {
     return content.text;
   }
@@ -73,7 +73,7 @@ function contentText(content: ContentBlock): string {
   return `[${content.type}: ${content.mimeType}]`;
 }
 
-function toolContent(item: ToolCallContent): ToolResultContent[] {
+export function toolContent(item: ToolCallContent): ToolResultContent[] {
   switch (item.type) {
     case "content": {
       return item.content.type === "text"
@@ -114,5 +114,3 @@ function toolContent(item: ToolCallContent): ToolResultContent[] {
     }
   }
 }
-
-export { contentReference, contentText, toolContent };

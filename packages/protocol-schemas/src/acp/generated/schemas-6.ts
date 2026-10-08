@@ -8,7 +8,7 @@ import {
   SessionConfigOptionOutboundSchema,
 } from "./schemas-5";
 
-const SessionInfoSchema = z.looseObject({
+export const SessionInfoSchema = z.looseObject({
   sessionId: SessionIdSchema,
   cwd: z.string(),
   additionalDirectories: z.array(z.string()).optional(),
@@ -17,7 +17,7 @@ const SessionInfoSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SessionInfoOutboundSchema = z.strictObject({
+export const SessionInfoOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   cwd: z.string(),
   additionalDirectories: z.array(z.string()).optional(),
@@ -26,95 +26,95 @@ const SessionInfoOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SessionInfo = z.output<typeof SessionInfoSchema>;
+export type SessionInfo = z.output<typeof SessionInfoSchema>;
 
-const ListSessionsResponseSchema = z.looseObject({
+export const ListSessionsResponseSchema = z.looseObject({
   sessions: z.array(SessionInfoSchema),
   nextCursor: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ListSessionsResponseOutboundSchema = z.strictObject({
+export const ListSessionsResponseOutboundSchema = z.strictObject({
   sessions: z.array(SessionInfoOutboundSchema),
   nextCursor: z.union([z.string(), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ListSessionsResponse = z.output<typeof ListSessionsResponseSchema>;
+export type ListSessionsResponse = z.output<typeof ListSessionsResponseSchema>;
 
-const DeleteSessionResponseSchema = z.looseObject({
+export const DeleteSessionResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const DeleteSessionResponseOutboundSchema = z.strictObject({
+export const DeleteSessionResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type DeleteSessionResponse = z.output<typeof DeleteSessionResponseSchema>;
+export type DeleteSessionResponse = z.output<typeof DeleteSessionResponseSchema>;
 
-const ForkSessionResponseSchema = z.looseObject({
+export const ForkSessionResponseSchema = z.looseObject({
   sessionId: SessionIdSchema,
   modes: z.union([SessionModeStateSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ForkSessionResponseOutboundSchema = z.strictObject({
+export const ForkSessionResponseOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   modes: z.union([SessionModeStateOutboundSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionOutboundSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ForkSessionResponse = z.output<typeof ForkSessionResponseSchema>;
+export type ForkSessionResponse = z.output<typeof ForkSessionResponseSchema>;
 
-const ResumeSessionResponseSchema = z.looseObject({
+export const ResumeSessionResponseSchema = z.looseObject({
   modes: z.union([SessionModeStateSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const ResumeSessionResponseOutboundSchema = z.strictObject({
+export const ResumeSessionResponseOutboundSchema = z.strictObject({
   modes: z.union([SessionModeStateOutboundSchema, z.null()]).optional(),
   configOptions: z.union([z.array(SessionConfigOptionOutboundSchema), z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type ResumeSessionResponse = z.output<typeof ResumeSessionResponseSchema>;
+export type ResumeSessionResponse = z.output<typeof ResumeSessionResponseSchema>;
 
-const CloseSessionResponseSchema = z.looseObject({
+export const CloseSessionResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const CloseSessionResponseOutboundSchema = z.strictObject({
+export const CloseSessionResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type CloseSessionResponse = z.output<typeof CloseSessionResponseSchema>;
+export type CloseSessionResponse = z.output<typeof CloseSessionResponseSchema>;
 
-const SetSessionModeResponseSchema = z.looseObject({
+export const SetSessionModeResponseSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SetSessionModeResponseOutboundSchema = z.strictObject({
+export const SetSessionModeResponseOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SetSessionModeResponse = z.output<typeof SetSessionModeResponseSchema>;
+export type SetSessionModeResponse = z.output<typeof SetSessionModeResponseSchema>;
 
-const SetSessionConfigOptionResponseSchema = z.looseObject({
+export const SetSessionConfigOptionResponseSchema = z.looseObject({
   configOptions: z.array(SessionConfigOptionSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const SetSessionConfigOptionResponseOutboundSchema = z.strictObject({
+export const SetSessionConfigOptionResponseOutboundSchema = z.strictObject({
   configOptions: z.array(SessionConfigOptionOutboundSchema),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type SetSessionConfigOptionResponse = z.output<typeof SetSessionConfigOptionResponseSchema>;
+export type SetSessionConfigOptionResponse = z.output<typeof SetSessionConfigOptionResponseSchema>;
 
-const StopReasonSchema = z.enum([
+export const StopReasonSchema = z.enum([
   "end_turn",
   "max_tokens",
   "max_turn_requests",
@@ -122,7 +122,7 @@ const StopReasonSchema = z.enum([
   "cancelled",
 ]);
 
-const StopReasonOutboundSchema = z.enum([
+export const StopReasonOutboundSchema = z.enum([
   "end_turn",
   "max_tokens",
   "max_turn_requests",
@@ -130,9 +130,9 @@ const StopReasonOutboundSchema = z.enum([
   "cancelled",
 ]);
 
-type StopReason = z.output<typeof StopReasonSchema>;
+export type StopReason = z.output<typeof StopReasonSchema>;
 
-const UsageSchema = z.looseObject({
+export const UsageSchema = z.looseObject({
   totalTokens: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   inputTokens: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   outputTokens: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
@@ -157,7 +157,7 @@ const UsageSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const UsageOutboundSchema = z.strictObject({
+export const UsageOutboundSchema = z.strictObject({
   totalTokens: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   inputTokens: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   outputTokens: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
@@ -182,83 +182,83 @@ const UsageOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type Usage = z.output<typeof UsageSchema>;
+export type Usage = z.output<typeof UsageSchema>;
 
-const PromptResponseSchema = z.looseObject({
+export const PromptResponseSchema = z.looseObject({
   stopReason: StopReasonSchema,
   usage: z.union([UsageSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PromptResponseOutboundSchema = z.strictObject({
+export const PromptResponseOutboundSchema = z.strictObject({
   stopReason: StopReasonOutboundSchema,
   usage: z.union([UsageOutboundSchema, z.null()]).optional(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type PromptResponse = z.output<typeof PromptResponseSchema>;
+export type PromptResponse = z.output<typeof PromptResponseSchema>;
 
-const StartNesResponseSchema = z.looseObject({
+export const StartNesResponseSchema = z.looseObject({
   sessionId: SessionIdSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const StartNesResponseOutboundSchema = z.strictObject({
+export const StartNesResponseOutboundSchema = z.strictObject({
   sessionId: SessionIdOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type StartNesResponse = z.output<typeof StartNesResponseSchema>;
+export type StartNesResponse = z.output<typeof StartNesResponseSchema>;
 
-const NesSuggestionIdSchema = z.string();
+export const NesSuggestionIdSchema = z.string();
 
-const NesSuggestionIdOutboundSchema = z.string();
+export const NesSuggestionIdOutboundSchema = z.string();
 
-type NesSuggestionId = z.output<typeof NesSuggestionIdSchema>;
+export type NesSuggestionId = z.output<typeof NesSuggestionIdSchema>;
 
-const PositionSchema = z.looseObject({
+export const PositionSchema = z.looseObject({
   line: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   character: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const PositionOutboundSchema = z.strictObject({
+export const PositionOutboundSchema = z.strictObject({
   line: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   character: z.number().refine(Number.isInteger, { error: "Expected integer" }).check(z.gte(0)),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type Position = z.output<typeof PositionSchema>;
+export type Position = z.output<typeof PositionSchema>;
 
-const RangeSchema = z.looseObject({
+export const RangeSchema = z.looseObject({
   start: PositionSchema,
   end: PositionSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const RangeOutboundSchema = z.strictObject({
+export const RangeOutboundSchema = z.strictObject({
   start: PositionOutboundSchema,
   end: PositionOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type Range = z.output<typeof RangeSchema>;
+export type Range = z.output<typeof RangeSchema>;
 
-const NesTextEditSchema = z.looseObject({
+export const NesTextEditSchema = z.looseObject({
   range: RangeSchema,
   newText: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesTextEditOutboundSchema = z.strictObject({
+export const NesTextEditOutboundSchema = z.strictObject({
   range: RangeOutboundSchema,
   newText: z.string(),
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesTextEdit = z.output<typeof NesTextEditSchema>;
+export type NesTextEdit = z.output<typeof NesTextEditSchema>;
 
-const NesEditSuggestionSchema = z.looseObject({
+export const NesEditSuggestionSchema = z.looseObject({
   id: NesSuggestionIdSchema,
   uri: z.string(),
   edits: z.array(NesTextEditSchema),
@@ -266,7 +266,7 @@ const NesEditSuggestionSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesEditSuggestionOutboundSchema = z.strictObject({
+export const NesEditSuggestionOutboundSchema = z.strictObject({
   id: NesSuggestionIdOutboundSchema,
   uri: z.string(),
   edits: z.array(NesTextEditOutboundSchema),
@@ -274,25 +274,25 @@ const NesEditSuggestionOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesEditSuggestion = z.output<typeof NesEditSuggestionSchema>;
+export type NesEditSuggestion = z.output<typeof NesEditSuggestionSchema>;
 
-const NesJumpSuggestionSchema = z.looseObject({
+export const NesJumpSuggestionSchema = z.looseObject({
   id: NesSuggestionIdSchema,
   uri: z.string(),
   position: PositionSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesJumpSuggestionOutboundSchema = z.strictObject({
+export const NesJumpSuggestionOutboundSchema = z.strictObject({
   id: NesSuggestionIdOutboundSchema,
   uri: z.string(),
   position: PositionOutboundSchema,
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesJumpSuggestion = z.output<typeof NesJumpSuggestionSchema>;
+export type NesJumpSuggestion = z.output<typeof NesJumpSuggestionSchema>;
 
-const NesRenameSuggestionSchema = z.looseObject({
+export const NesRenameSuggestionSchema = z.looseObject({
   id: NesSuggestionIdSchema,
   uri: z.string(),
   position: PositionSchema,
@@ -300,7 +300,7 @@ const NesRenameSuggestionSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesRenameSuggestionOutboundSchema = z.strictObject({
+export const NesRenameSuggestionOutboundSchema = z.strictObject({
   id: NesSuggestionIdOutboundSchema,
   uri: z.string(),
   position: PositionOutboundSchema,
@@ -308,9 +308,9 @@ const NesRenameSuggestionOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesRenameSuggestion = z.output<typeof NesRenameSuggestionSchema>;
+export type NesRenameSuggestion = z.output<typeof NesRenameSuggestionSchema>;
 
-const NesSearchAndReplaceSuggestionSchema = z.looseObject({
+export const NesSearchAndReplaceSuggestionSchema = z.looseObject({
   id: NesSuggestionIdSchema,
   uri: z.string(),
   search: z.string(),
@@ -319,7 +319,7 @@ const NesSearchAndReplaceSuggestionSchema = z.looseObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-const NesSearchAndReplaceSuggestionOutboundSchema = z.strictObject({
+export const NesSearchAndReplaceSuggestionOutboundSchema = z.strictObject({
   id: NesSuggestionIdOutboundSchema,
   uri: z.string(),
   search: z.string(),
@@ -328,67 +328,4 @@ const NesSearchAndReplaceSuggestionOutboundSchema = z.strictObject({
   _meta: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
 });
 
-type NesSearchAndReplaceSuggestion = z.output<typeof NesSearchAndReplaceSuggestionSchema>;
-
-export {
-  SessionInfoSchema,
-  SessionInfoOutboundSchema,
-  type SessionInfo,
-  ListSessionsResponseSchema,
-  ListSessionsResponseOutboundSchema,
-  type ListSessionsResponse,
-  DeleteSessionResponseSchema,
-  DeleteSessionResponseOutboundSchema,
-  type DeleteSessionResponse,
-  ForkSessionResponseSchema,
-  ForkSessionResponseOutboundSchema,
-  type ForkSessionResponse,
-  ResumeSessionResponseSchema,
-  ResumeSessionResponseOutboundSchema,
-  type ResumeSessionResponse,
-  CloseSessionResponseSchema,
-  CloseSessionResponseOutboundSchema,
-  type CloseSessionResponse,
-  SetSessionModeResponseSchema,
-  SetSessionModeResponseOutboundSchema,
-  type SetSessionModeResponse,
-  SetSessionConfigOptionResponseSchema,
-  SetSessionConfigOptionResponseOutboundSchema,
-  type SetSessionConfigOptionResponse,
-  StopReasonSchema,
-  StopReasonOutboundSchema,
-  type StopReason,
-  UsageSchema,
-  UsageOutboundSchema,
-  type Usage,
-  PromptResponseSchema,
-  PromptResponseOutboundSchema,
-  type PromptResponse,
-  StartNesResponseSchema,
-  StartNesResponseOutboundSchema,
-  type StartNesResponse,
-  NesSuggestionIdSchema,
-  NesSuggestionIdOutboundSchema,
-  type NesSuggestionId,
-  PositionSchema,
-  PositionOutboundSchema,
-  type Position,
-  RangeSchema,
-  RangeOutboundSchema,
-  type Range,
-  NesTextEditSchema,
-  NesTextEditOutboundSchema,
-  type NesTextEdit,
-  NesEditSuggestionSchema,
-  NesEditSuggestionOutboundSchema,
-  type NesEditSuggestion,
-  NesJumpSuggestionSchema,
-  NesJumpSuggestionOutboundSchema,
-  type NesJumpSuggestion,
-  NesRenameSuggestionSchema,
-  NesRenameSuggestionOutboundSchema,
-  type NesRenameSuggestion,
-  NesSearchAndReplaceSuggestionSchema,
-  NesSearchAndReplaceSuggestionOutboundSchema,
-  type NesSearchAndReplaceSuggestion,
-};
+export type NesSearchAndReplaceSuggestion = z.output<typeof NesSearchAndReplaceSuggestionSchema>;
