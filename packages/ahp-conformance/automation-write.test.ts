@@ -296,7 +296,6 @@ describe("automation catalogue write path", () => {
         const before = await catalogueSnapshot(connection);
         const { resource, setEnvelope } = await createAutomation(connection);
 
-
         await withCleanup(
           async () => {
             const after = await catalogueSnapshot(connection);
@@ -318,68 +317,63 @@ describe("automation catalogue write path", () => {
     },
   );
 
-  test.skipIf(!MUTATIONS)(
-    "updateRequested replaces only the changed fields",
-    async ({ skip }) => {
-      const connection = await AhpConnection.open(endpoint());
+  test.skipIf(!MUTATIONS)("updateRequested replaces only the changed fields", async ({ skip }) => {
+    const connection = await AhpConnection.open(endpoint());
 
-      try {
-        const init = await initializeFor(connection);
-        skip(!init.automations, "Automations unadvertised");
-        const { resource } = await createAutomation(connection);
+    try {
+      const init = await initializeFor(connection);
+      skip(!init.automations, "Automations unadvertised");
+      const { resource } = await createAutomation(connection);
 
-        await withCleanup(
-          async () => {
-            const before = await catalogueSnapshot(connection);
-            const original = before.entries.find((item) => item.resource === resource);
+      await withCleanup(
+        async () => {
+          const before = await catalogueSnapshot(connection);
+          const original = before.entries.find((item) => item.resource === resource);
 
-            if (!original) {
-              throw new Error("Created automation is missing from the catalogue");
-            }
+          if (!original) {
+            throw new Error("Created automation is missing from the catalogue");
+          }
 
-            const changed = `${original.definition.title} updated`;
-            const { checkpoint } = connection;
+          const changed = `${original.definition.title} updated`;
+          const { checkpoint } = connection;
 
-            dispatch(connection, AUTOMATIONS, 1, {
-              type: "automation/updateRequested",
-              resource,
-              changes: { title: changed },
-            });
+          dispatch(connection, AUTOMATIONS, 1, {
+            type: "automation/updateRequested",
+            resource,
+            changes: { title: changed },
+          });
 
-            const setEnvelope = await waitForSet(connection, resource, checkpoint);
-            const updated = await catalogueSnapshot(connection);
-            const entry = updated.entries.find((item) => item.resource === resource);
+          const setEnvelope = await waitForSet(connection, resource, checkpoint);
+          const updated = await catalogueSnapshot(connection);
+          const entry = updated.entries.find((item) => item.resource === resource);
 
-            if (!entry) {
-              throw new Error("Updated automation is missing from the catalogue");
-            }
+          if (!entry) {
+            throw new Error("Updated automation is missing from the catalogue");
+          }
 
-            expect(entry.definition.title).toBe(changed);
-            expect(entry.definition.message).toEqual(original.definition.message);
-            expect(entry.definition.session).toEqual(original.definition.session);
-            expect(entry.definition.enabled).toBe(original.definition.enabled);
-            expect(entry.definition.triggers).toEqual(original.definition.triggers);
-            expect(setEnvelope).toBeDefined();
-          },
-          async () => {
-            await removeAutomation(connection, resource);
-          },
-        );
-      } finally {
-        await connection.close();
-      }
-    },
-  );
+          expect(entry.definition.title).toBe(changed);
+          expect(entry.definition.message).toEqual(original.definition.message);
+          expect(entry.definition.session).toEqual(original.definition.session);
+          expect(entry.definition.enabled).toBe(original.definition.enabled);
+          expect(entry.definition.triggers).toEqual(original.definition.triggers);
+          expect(setEnvelope).toBeDefined();
+        },
+        async () => {
+          await removeAutomation(connection, resource);
+        },
+      );
+    } finally {
+      await connection.close();
+    }
+  });
 
-  test.skipIf(!MUTATIONS)(
-    "removed deletes the entry from the catalogue",
-    async ({ skip }) => {
-      const connection = await AhpConnection.open(endpoint());
+  test.skipIf(!MUTATIONS)("removed deletes the entry from the catalogue", async ({ skip }) => {
+    const connection = await AhpConnection.open(endpoint());
 
-      try {
-        const init = await initializeFor(connection);
-        skip(!init.automations, "Automations unadvertised");
-        const { resource } = await createAutomation(connection);
+    try {
+      const init = await initializeFor(connection);
+      skip(!init.automations, "Automations unadvertised");
+      const { resource } = await createAutomation(connection);
 
       await withCleanup(
         async () => {

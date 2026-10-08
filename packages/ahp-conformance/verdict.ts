@@ -69,10 +69,7 @@ function verdictFor(counts: Counts): string {
 export default class VerdictReporter implements Reporter {
   private readonly counts: Counts = initialCounts();
 
-  onTestRunEnd(
-    testModules: readonly TestModule[],
-    unhandledErrors: readonly unknown[],
-  ): void {
+  onTestRunEnd(testModules: readonly TestModule[], unhandledErrors: readonly unknown[]): void {
     for (const module of testModules) {
       for (const testCase of module.children.allTests()) {
         this.count(testCase);

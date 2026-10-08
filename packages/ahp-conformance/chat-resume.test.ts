@@ -1,7 +1,4 @@
-import {
-  SessionStateSchema,
-  SubscribeResultSchema,
-} from "@experiments/protocol-schemas";
+import { SessionStateSchema, SubscribeResultSchema } from "@experiments/protocol-schemas";
 import { describe, expect } from "vitest";
 import { endpoint, SESSION, test } from "./client";
 import { AhpConnection, initialize } from "./raw";
@@ -88,28 +85,25 @@ describe("chat turn resume validation", () => {
     }
   });
 
-  test.skipIf(!SESSION)(
-    "rejects chat/turnResume when the chat has no errored turn",
-    async () => {
-      const fixtureSession = SESSION;
+  test.skipIf(!SESSION)("rejects chat/turnResume when the chat has no errored turn", async () => {
+    const fixtureSession = SESSION;
 
-      if (!fixtureSession) {
-        throw new Error("Fixture session not configured");
-      }
+    if (!fixtureSession) {
+      throw new Error("Fixture session not configured");
+    }
 
-      const connection = await AhpConnection.open(endpoint());
+    const connection = await AhpConnection.open(endpoint());
 
-      try {
-        await initialize(connection, [ROOT]);
-        const chat = await defaultChatUri(connection, fixtureSession);
+    try {
+      await initialize(connection, [ROOT]);
+      const chat = await defaultChatUri(connection, fixtureSession);
 
-        // Rejection echoes are delivered to chat-channel subscribers.
-        await connection.request("subscribe", { channel: chat });
+      // Rejection echoes are delivered to chat-channel subscribers.
+      await connection.request("subscribe", { channel: chat });
 
-        await expectTurnResumeRejected(connection, chat, "resume-no-errored-turn");
-      } finally {
-        await connection.close();
-      }
-    },
-  );
+      await expectTurnResumeRejected(connection, chat, "resume-no-errored-turn");
+    } finally {
+      await connection.close();
+    }
+  });
 });

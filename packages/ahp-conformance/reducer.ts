@@ -34,14 +34,12 @@ function reduceSessionState(state: SessionState, action: StateAction): SessionSt
 
   switch (action.type) {
     case "session/titleChanged": {
-
       next.title = action.title;
 
       break;
     }
 
     case "session/workingDirectorySet": {
-
       const directories = next.workingDirectories ?? [];
 
       if (!directories.includes(action.directory)) {
@@ -52,7 +50,6 @@ function reduceSessionState(state: SessionState, action: StateAction): SessionSt
     }
 
     case "session/workingDirectoryRemoved": {
-
       if (next.workingDirectories) {
         next.workingDirectories = next.workingDirectories.filter(
           (directory) => directory !== action.directory,
@@ -72,14 +69,12 @@ function reduceChatState(state: ChatState, action: StateAction): ChatState {
 
   switch (action.type) {
     case "chat/draftChanged": {
-
       next.draft = action.draft;
 
       break;
     }
 
     case "chat/activityChanged": {
-
       next.activity = action.activity;
 
       break;
@@ -105,12 +100,10 @@ function reduceAutomationState(state: AutomationState, action: StateAction): Aut
 
   switch (action.type) {
     case "automation/set": {
-
       return upsertAutomationEntry(next, action.automation);
     }
 
     case "automation/removed": {
-
       return {
         ...next,
         entries: next.entries.filter((entry) => entry.resource !== action.resource),
@@ -130,14 +123,12 @@ function reduceAutomationRunState(
 
   switch (action.type) {
     case "automationRun/lifecycleChanged": {
-
       next.lifecycle = action.lifecycle;
 
       break;
     }
 
     case "automationRun/sessionSet": {
-
       if (!next.sessions.includes(action.session)) {
         next.sessions = [...next.sessions, action.session];
       }
@@ -146,7 +137,6 @@ function reduceAutomationRunState(
     }
 
     case "automationRun/sessionRemoved": {
-
       next.sessions = next.sessions.filter((session) => session !== action.session);
 
       if (next.primarySession === action.session) {
@@ -157,7 +147,6 @@ function reduceAutomationRunState(
     }
 
     case "automationRun/primarySessionChanged": {
-
       if (action.primarySession) {
         next.primarySession = action.primarySession;
       } else {

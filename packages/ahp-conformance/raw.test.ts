@@ -140,7 +140,6 @@ describe("raw AHP connection over WebSocket", () => {
 });
 
 describe("raw AHP connection multiplexing", () => {
-
   test("rejects checkpoints outside the received transcript", async () => {
     await withPeer(
       (socket) => {
@@ -393,7 +392,6 @@ describe("raw AHP connection failures", () => {
 });
 
 describe("raw AHP connection closure and overflow", () => {
-
   test.each(["normal", "abrupt"])(
     "settles pending and future operations after %s closure",
     async (mode) => {

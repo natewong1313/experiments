@@ -10,11 +10,7 @@ import { describe, expect } from "vitest";
 import { endpoint, MUTATIONS, SESSION, sessionUri, test } from "./client";
 import { withCleanup } from "./cleanup";
 import { AhpConnection, initialize } from "./raw";
-import {
-  reduceChatState,
-  reduceSessionState,
-  stripVolatile,
-} from "./reducer";
+import { reduceChatState, reduceSessionState, stripVolatile } from "./reducer";
 
 /**
  * State-model convergence: for a deterministic action, snapshot S0, dispatch
@@ -54,10 +50,7 @@ function snapshotFor(snapshots: readonly Snapshot[], resource: string): Snapshot
   return match;
 }
 
-async function fetchSnapshot(
-  connection: AhpConnection,
-  resource: string,
-): Promise<Snapshot> {
+async function fetchSnapshot(connection: AhpConnection, resource: string): Promise<Snapshot> {
   const reply = await connection.request("subscribe", { channel: resource });
 
   if (!("result" in reply)) {
@@ -105,8 +98,7 @@ function accepted(
 async function waitForAccepted(probe: AcceptedActionProbe): Promise<ActionEnvelope> {
   const envelope = await probe.connection.waitForAction(probe.channel, probe.type, {
     after: probe.after,
-    predicate: (action) =>
-      accepted(action, probe.channel, probe.type, probe.clientSeq),
+    predicate: (action) => accepted(action, probe.channel, probe.type, probe.clientSeq),
   });
 
   expect(envelope.rejectionReason).toBeUndefined();
