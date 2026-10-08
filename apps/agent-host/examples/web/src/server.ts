@@ -1,9 +1,7 @@
 import handler from "@tanstack/react-start/server-entry";
 
 const ABSENT = void 0;
-
 const HOST_PATH = /^\/hosts\/([a-zA-Z0-9_-]{1,64})\/ahp$/;
-
 const STATUS_UPGRADE_REQUIRED = 426;
 
 const worker: ExportedHandler<Env> = {

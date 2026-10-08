@@ -11,21 +11,13 @@ import { reduceChat } from "../src/state/reducers";
 import { connectPeer, Peer } from "./peer";
 
 const SESSION = "ahp-session:/normalized";
-
 const STARTED = "2026-10-01T00:00:00.000Z";
-
 const LARGE_BYTES = 100_000;
-
 const TOOL_COUNT = 300;
-
 const JOURNAL_COUNT = 1005;
-
 const OVERSIZED_BYTES = 2_000_000;
-
 const UNICODE_BOUNDARY = 16_383;
-
 const ESCAPED_CHARACTERS = 200_000;
-
 const ENCODING_BYTES = 800_000;
 
 type StoreCheck = (store: HostState, state: DurableObjectState, chat: string) => void;

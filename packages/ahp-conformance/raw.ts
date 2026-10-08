@@ -12,25 +12,15 @@ import { JsonRpcErrorCodes, PROTOCOL_VERSION } from "@microsoft/agent-host-proto
 import { isWireRecord, isWireValue, type WireValue } from "./guards";
 
 export const ROOT = "ahp-root://";
-
 export const LATEST_VERSION = PROTOCOL_VERSION;
-
 const FIRST_REQUEST_ID = 1;
-
 const CONNECT_TIMEOUT_MS = 10_000;
-
 const REQUEST_TIMEOUT_MS = 30_000;
-
 const ACTION_TIMEOUT_MS = 10_000;
-
 const CLOSE_TIMEOUT_MS = 2000;
-
 const RECONNECT_CHECK_MS = 5000;
-
 const MAX_RECEIVED_MESSAGES = 10_000;
-
 const INITIAL_RECEIVE_INDEX = 0;
-
 const LAST_EVENT_OFFSET = -1;
 
 type WireParams = Record<string, WireValue>;

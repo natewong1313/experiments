@@ -20,11 +20,8 @@ import * as z from "zod";
 import { vi } from "vitest";
 
 const MessageSchema = z.union([JsonRpcNotificationSchema, JsonRpcReplySchema]);
-
 const JsonValueSchema = z.json();
-
 const PeerObjectResultSchema = z.object({}).catchall(JsonValueSchema);
-
 const PeerResultSchema = z.union([PeerObjectResultSchema, z.null()]);
 
 type PeerParams =

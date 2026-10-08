@@ -29,13 +29,9 @@ import type { TurnHistory } from "./history";
 import { reduceChat } from "../reducers";
 
 const ACTIVITY_MASK = 31;
-
 const INPUT_NEEDED = 24;
-
 const IN_PROGRESS = 8;
-
 const IDLE = 1;
-
 const IS_READ = 32;
 
 type ToolAction =

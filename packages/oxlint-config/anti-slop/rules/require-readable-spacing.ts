@@ -52,6 +52,20 @@ const paddingRule = createPaddingLineRule([
         ':matches(TSDeclareFunction, FunctionDeclaration, ExportNamedDeclaration[declaration.type="TSDeclareFunction"], ExportNamedDeclaration[declaration.type="FunctionDeclaration"])',
     },
   },
+  // Adjacent single-line constants may sit flush together, exported or not.
+  {
+    blankLine: "any",
+    prev: {
+      selector:
+        ":matches(VariableDeclaration[kind='const'], ExportNamedDeclaration[declaration.kind='const'])",
+      lineMode: "singleline",
+    },
+    next: {
+      selector:
+        ":matches(VariableDeclaration[kind='const'], ExportNamedDeclaration[declaration.kind='const'])",
+      lineMode: "singleline",
+    },
+  },
 ]);
 
 /** Restore structural blank lines with whitespace-only fixes; keep local short bindings and overloads grouped. */

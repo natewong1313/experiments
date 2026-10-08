@@ -12,7 +12,6 @@ import {
 import { StoredContent } from "./StoredContent";
 
 const ABSENT = void 0;
-
 const contentIdentities: WeakMap<ToolResultContent, string> = new WeakMap();
 
 function contentIdentity(item: ToolResultContent): string {
@@ -29,7 +28,6 @@ function contentIdentity(item: ToolResultContent): string {
 }
 
 const NotificationTextSchema = z.string();
-
 const NotificationMarkdownSchema = z.object({ markdown: z.string() });
 
 type ResponseContentParams = { part: ResponsePart };

@@ -11,11 +11,8 @@ import type {
 } from "@experiments/protocol-schemas/ahp";
 
 const PIECE_CHARACTERS = 16_384;
-
 export const JSON_PIECE_CHARACTERS = 8192;
-
 const HIGH_SURROGATE_START = 0xd8_00;
-
 const HIGH_SURROGATE_END = 0xdb_ff;
 
 type StoredValue =

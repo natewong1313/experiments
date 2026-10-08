@@ -11,7 +11,6 @@ import { connectAcp } from "@experiments/pi-acp";
 import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 
 const STATUS_UPGRADE_REQUIRED = 426;
-
 const STATUS_SWITCHING_PROTOCOLS = 101;
 
 // A pi harness running on a DO that accepts ACP calls over websockets.

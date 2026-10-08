@@ -9,21 +9,13 @@ import { ActionJournal } from "../src/state/replay/journal";
 import { reduceChat } from "../src/state/reducers";
 
 const STARTED = "2026-10-01T00:00:00.000Z";
-
 const RESULT_BYTES = 512;
-
 const SMALL_TEXT = 10_000;
-
 const MEDIUM_TEXT = 100_000;
-
 const LARGE_TEXT = 1_000_000;
-
 const SMALL_TOOLS = 10;
-
 const MEDIUM_TOOLS = 100;
-
 const LARGE_TOOLS = 1000;
-
 const MAX_FOCUSED_ROWS = 100;
 
 const CASES = [

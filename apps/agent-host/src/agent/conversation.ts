@@ -12,7 +12,6 @@ import { ProtocolError, RpcCodes } from "../ahp/protocol";
 import { withDeadline } from "../deadline";
 
 const TURN_TIMEOUT_MS = 600_000;
-
 const CANCEL_TIMEOUT_MS = 10_000;
 
 type AgentConversationParams = {

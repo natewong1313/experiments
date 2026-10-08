@@ -1,7 +1,6 @@
 import * as z from "zod";
 
 const jsonRpcIdSchema = z.union([z.string(), z.number()]);
-
 const jsonRpcVersionSchema = z.literal("2.0");
 
 export const JsonRpcErrorSchema = z.strictObject({

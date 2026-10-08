@@ -6,9 +6,7 @@ import { AhpClient } from "@microsoft/agent-host-protocol/client";
 import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
 
 const ABSENT = void 0;
-
 const ROOT_CHANNEL = "ahp-root://";
-
 const RECONNECT_DELAY_MS = 3000;
 
 export type CreateSession = () => Promise<void>;

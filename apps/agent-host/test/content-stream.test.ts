@@ -13,9 +13,7 @@ import { reduceChat } from "../src/state/reducers";
 import { connectPeer, type Peer } from "./peer";
 
 const LARGE_BYTES = 100_000;
-
 const LAST_ACTION = -1;
-
 const SESSION = "ahp-session:/host-test";
 
 async function snapshot(peer: Peer, chat: string): Promise<ChatState> {

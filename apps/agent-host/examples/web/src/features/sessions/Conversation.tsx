@@ -8,11 +8,8 @@ import { ConversationTurn } from "./ConversationTurn";
 import { EmptyState } from "./EmptyState";
 
 const ABSENT = void 0;
-
 const COMPOSER_MAX_HEIGHT_PX = 160;
-
 const SCROLL_STICK_THRESHOLD_PX = 120;
-
 const NO_TURNS = 0;
 
 type ConversationParams = { view: ReturnType<typeof useAhpSession> };

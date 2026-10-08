@@ -3,7 +3,6 @@ import { createPiTools } from "@cloudflare/computer/tools/pi-ai";
 import type { ToolRegistration } from "@earendil-works/pi-durable";
 
 export const JAVASCRIPT_BACKEND = "javascript";
-
 const REPLAY_SAFE = new Set(["read", "ls", "find", "grep", "write", "delete"]);
 
 export function workspaceStorage(storage: DurableObjectStorage): DurableObjectStorageLike {

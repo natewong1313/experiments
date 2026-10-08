@@ -7,11 +7,8 @@ import { encodedSize, pieceEnd, readPiece, JSON_PIECE_CHARACTERS } from "../pers
 import type { Database } from "../persistence/database";
 
 const RESOURCE_BYTES = 1_048_576;
-
 const RESPONSE_OVERHEAD_BYTES = 4096;
-
 const SESSION_CONTENT_BYTES = 67_108_864;
-
 const PIECE_CHARACTERS = 16_384;
 
 export type ContentEncoding = typeof contentsTable.$inferSelect.encoding;

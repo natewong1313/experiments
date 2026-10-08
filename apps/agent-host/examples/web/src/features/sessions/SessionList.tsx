@@ -26,7 +26,6 @@ import { SESSION_STATUS, sessionStatus, statusMatches } from "./session-status";
 import type { StatusFilter } from "./session-status";
 
 const ABSENT = void 0;
-
 const EMPTY_COUNT = 0;
 
 type SortOrder = "newest" | "oldest";

@@ -6,9 +6,7 @@ import { ROOT } from "../src/ahp/protocol";
 import { createHostState, type HostState, createSession } from "./config";
 
 const SESSION = "ahp-session:/existing";
-
 const PREVIOUS_MIGRATION_INDEX = -2;
-
 const ORIGIN = { clientId: "existing-client", clientSeq: 1 };
 
 type PersistedState = {

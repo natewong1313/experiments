@@ -1,7 +1,5 @@
 const STATUS_NOT_FOUND = 404;
-
 const STATUS_UPGRADE_REQUIRED = 426;
-
 const HOST_PATH = /^\/hosts\/([a-zA-Z0-9_-]{1,64})\/ahp$/;
 
 const worker: ExportedHandler<Env> = {

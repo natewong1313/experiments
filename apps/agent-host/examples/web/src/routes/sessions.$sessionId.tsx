@@ -17,7 +17,6 @@ import { PageHeader } from "../components/page-header";
 import ThemeToggle from "../components/ThemeToggle";
 
 const ABSENT = void 0;
-
 const FIRST_WORKING_DIRECTORY = 0;
 
 type CenteredParams = { children: ReactNode };

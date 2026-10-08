@@ -13,9 +13,7 @@ import { isWireRecord } from "./guards";
 import { withPeer } from "./test-peer";
 
 const SESSION_URI = "ahp-session:/typed-fixture";
-
 const FIRST_CHAT = "ahp-chat:/typed-fixture/first";
-
 const DEFAULT_CHAT = "ahp-chat:/typed-fixture/default";
 
 function serveCatalogue(socket: WebSocket, defaultChat?: string): void {

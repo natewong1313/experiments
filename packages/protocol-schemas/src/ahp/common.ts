@@ -5,13 +5,9 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export const uriSchema = z.string();
-
 export const metaSchema = z.record(z.string(), z.unknown());
-
 const MIN_SEQUENCE = 0;
-
 const MIN_CLIENT_ID_LENGTH = 1;
-
 export const clientIdSchema = z.string().min(MIN_CLIENT_ID_LENGTH);
 
 export const seqSchema = z

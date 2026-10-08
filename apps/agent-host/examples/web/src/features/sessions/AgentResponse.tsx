@@ -6,7 +6,6 @@ import { ResponseContent } from "./ResponseContent";
 import type { ConversationTurnParams } from "./types";
 
 const NO_PARTS = 0;
-
 const VISIBLE_PARTS = 100;
 
 export function AgentResponse({ turn, streaming }: ConversationTurnParams): JSX.Element {

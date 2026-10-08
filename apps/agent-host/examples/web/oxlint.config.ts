@@ -15,6 +15,13 @@ export default defineConfig({
   },
   overrides: [
     {
+      // This file's own rule options contain numeric literals.
+      files: ["oxlint.config.ts"],
+      rules: {
+        "eslint/no-magic-numbers": "off",
+      },
+    },
+    {
       // Register is a module augmentation interface.
       files: ["src/router.tsx"],
       rules: {
@@ -66,7 +73,7 @@ export default defineConfig({
       },
     },
     {
-      // useSyncExternalStore requires a subscription callback.
+      // The useSyncExternalStore hook requires a subscription callback.
       files: ["src/lib/hooks/use-mobile.ts"],
       rules: {
         "promise/prefer-await-to-callbacks": "off",

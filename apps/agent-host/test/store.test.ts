@@ -11,23 +11,14 @@ import { createHostState, type HostState, createSession } from "./config";
 import { reduceChat, reduceSession } from "../src/state/reducers";
 
 const SESSION = "ahp-session:/test";
-
 const START_TIME = "2026-10-01T00:00:00.000Z";
-
 const RESPONSE_BYTES = 1_200_000;
-
 const DELTA_BYTES = 300_000;
-
 const CHUNK_BYTES = 65_536;
-
 const PAGE_SIZE = 10;
-
 const ERROR_STATUS = 2;
-
 const IN_PROGRESS = 8;
-
 const READ = 32;
-
 const MAX_DELTA_CHUNKS = 1;
 
 function ready(store: HostState): string {

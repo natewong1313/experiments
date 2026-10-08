@@ -16,13 +16,9 @@ import type { Publication } from "../state";
 import { MAX_SNAPSHOT_BYTES, RESPONSE_RESERVE_BYTES, checkBytes } from "../memory";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
-
 const NO_CLOSE_STATUS = 1005;
-
 const ABNORMAL_CLOSE = 1006;
-
 const NORMAL_CLOSE = 1000;
-
 const AttachmentLimitSchema = z.array(z.string()).max(MAX_SUBSCRIPTIONS);
 
 type ServerFrame =

@@ -3,7 +3,6 @@ import type { StateAction as SdkAction } from "@microsoft/agent-host-protocol";
 import { StateActionSchema, type StateAction } from "@experiments/protocol-schemas/ahp";
 
 const ABSENT = void 0;
-
 const ACK_TIMEOUT_MS = 15_000;
 
 type DispatchActionParams = {

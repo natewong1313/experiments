@@ -6,13 +6,9 @@ import { createHostState, type HostState } from "./config";
 import { Peer } from "./peer";
 
 const ROOT = "ahp-root://";
-
 const SESSION = "ahp-session:/custom";
-
 const DIRECTORY = "file:///custom%20workspace/%25project%231";
-
 const CWD = "/custom workspace/%project#1";
-
 const SECOND_SEQUENCE = 2;
 
 async function openHost(): Promise<{

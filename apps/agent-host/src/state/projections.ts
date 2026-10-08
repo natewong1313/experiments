@@ -10,9 +10,7 @@ import {
 import type { LiveSession } from "./records";
 
 const ChatChangesSchema = ChatSummarySchema.omit({ resource: true });
-
 const SESSION_FLAGS = 96;
-
 const ACTIVITY_MASK = 31;
 
 function chatSummary(chat: ChatState): ChatSummary {

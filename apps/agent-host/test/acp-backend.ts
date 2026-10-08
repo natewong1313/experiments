@@ -10,7 +10,6 @@ import {
 import { websocketStream } from "@experiments/agent-host/helpers";
 
 const STATUS_SWITCHING_PROTOCOLS = 101;
-
 const STATUS_UNAUTHORIZED = 401;
 
 type ControlledTurn = {

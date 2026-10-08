@@ -14,11 +14,8 @@ import { createHostState, createSession } from "./config";
 import { Peer } from "./peer";
 
 const ROOT = "ahp-root://";
-
 const SESSION = "ahp-session:/protocol-test";
-
 const SECOND_SEQUENCE = 2;
-
 const LAST_ACTION_INDEX = -1;
 
 async function openPeer(stub: DurableObjectStub): Promise<Peer> {

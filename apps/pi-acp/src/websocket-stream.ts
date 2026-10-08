@@ -10,7 +10,6 @@ const FAILED_CONNECTION_CLOSE = 1007;
 
 // 1000 is a normal close with no error.
 const NORMAL_CLOSE = 1000;
-
 const JsonRpcIdSchema = z.union([z.string(), z.number(), z.null()]);
 
 const JsonRpcMessageSchema = z.union([

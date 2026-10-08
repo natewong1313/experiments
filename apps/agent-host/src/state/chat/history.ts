@@ -8,9 +8,7 @@ import type { Database } from "../persistence/database";
 import type { TurnStore } from "./turn-store";
 
 const INITIAL_ORDINAL = -1;
-
 const HISTORY_PAGE_TURNS = 100;
-
 const CursorSchema = z.object({ channel: z.string(), before: z.int().nonnegative() });
 
 type HistoryPage = Pick<ChatState, "turns" | "turnsNextCursor">;

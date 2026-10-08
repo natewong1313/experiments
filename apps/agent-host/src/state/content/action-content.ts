@@ -13,9 +13,7 @@ import { encodedSize } from "../persistence/encoding";
 import type { ResourceStore, ContentEncoding } from "./resource-store";
 
 const INLINE_BYTES = 8192;
-
 const MISSING_INDEX = -1;
-
 const DATA_PREFIX = "data:";
 
 type Metadata = z.output<typeof metaSchema>;

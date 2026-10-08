@@ -4,7 +4,6 @@ import type { SessionGeneration } from "../sessions/record";
 import { MemoryLimitError } from "../memory";
 
 const MAX_SETUP_BYTES = 1_048_576;
-
 const MAX_SUBAGENTS = 256;
 
 export type AgentUpdates = (

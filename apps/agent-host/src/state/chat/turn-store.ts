@@ -7,7 +7,6 @@ import type { Database } from "../persistence/database";
 import type { PartsStore } from "./parts-store";
 
 const MAX_PARTS = 10_000;
-
 const MAX_CHAT_METADATA_BYTES = 65_536;
 
 type TurnRow = typeof turnRecordsTable.$inferSelect;

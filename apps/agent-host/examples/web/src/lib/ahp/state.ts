@@ -22,13 +22,9 @@ import {
 } from "@experiments/protocol-schemas/ahp";
 
 const NO_PARTS = 0;
-
 const ONE_PART = 1;
-
 const ACTIVITY_MASK = 31;
-
 const INPUT_NEEDED = 24;
-
 const IN_PROGRESS = 8;
 
 export type IndexedTurn = Omit<Turn, "responseParts"> & { responseParts: List<ResponsePart> };

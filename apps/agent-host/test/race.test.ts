@@ -14,11 +14,8 @@ import type { LiveSession } from "../src/state";
 import { connectPeer, type Peer } from "./peer";
 
 const SESSION = "ahp-session:/reused";
-
 const SWITCHING_PROTOCOLS = 101;
-
 const REOPEN_CALL = 2;
-
 const TOTAL_CONNECTIONS = 3;
 
 async function recordFor(stub: DurableObjectStub): Promise<LiveSession> {

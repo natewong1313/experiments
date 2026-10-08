@@ -5,11 +5,8 @@ import { SnapshotSchema, ActionEnvelopeSchema, StateActionSchema } from "./envel
 import { SessionActiveClientSchema, SessionSummarySchema } from "./channels/session/state";
 
 const ROOT_CHANNEL = "ahp-root://";
-
 const SESSION_CHANNEL_PREFIX = "ahp-session:/";
-
 const MIN_SESSION_ID_LENGTH = 1;
-
 const MIN_ADVISORY_VALUE = 0;
 
 export const ChannelParamsSchema = z.strictObject({

@@ -13,15 +13,10 @@ import { connectPeer, Peer } from "./peer";
 import { reduceChat } from "../src/state/reducers";
 
 const SESSION = "ahp-session:/memory";
-
 const ROOT = "ahp-root://";
-
 const STARTED_AT = "2026-10-01T00:00:00.000Z";
-
 const TURN_BYTES = 700_000;
-
 const HISTORY_TURNS = 7;
-
 const DUPLICATE_SUBSCRIPTIONS = 64;
 
 function completeTurn(store: HostState, chat: string, id: string): void {

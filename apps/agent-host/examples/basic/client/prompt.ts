@@ -6,9 +6,7 @@ import { AhpClient } from "@microsoft/agent-host-protocol/client";
 import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
 
 const ARGUMENT_OFFSET = 2;
-
 const TIMEOUT_MS = 120_000;
-
 const CreationErrorSchema = z.object({ message: z.string() });
 
 const SessionPreviewSchema = z.object({
@@ -24,7 +22,6 @@ const transport = await WebSocketTransport.connect(
 );
 
 const client = new AhpClient(transport);
-
 const session = `ahp-session:/${crypto.randomUUID()}`;
 
 const timeout = setTimeout(() => {

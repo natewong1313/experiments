@@ -18,11 +18,8 @@ import { expect, test as baseTest } from "vitest";
 import { withCleanup } from "./cleanup";
 
 export const ROOT = "ahp-root://";
-
 export const VERSION = PROTOCOL_VERSION;
-
 export const SESSION = process.env.AHP_SESSION_URI;
-
 export const MUTATIONS = process.env.AHP_TEST_MUTATIONS === "1";
 
 export function sessionUri(): string {

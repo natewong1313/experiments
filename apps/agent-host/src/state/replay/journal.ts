@@ -6,9 +6,7 @@ import { MAX_FRAME_BYTES } from "../../ahp/protocol";
 import type { Database } from "../persistence/database";
 
 const HOST_ID = 1;
-
 const SEQUENCE_INCREMENT = 1;
-
 const REPLAY_LIMIT = 1000;
 
 type SaveDispatchResultParams = {

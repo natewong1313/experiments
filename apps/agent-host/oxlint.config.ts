@@ -52,8 +52,8 @@ export default defineConfig({
       },
     },
     {
-      // Test fixtures inspect Durable Object storage directly; production code
-      // must use drizzle (see `anti-slop/no-direct-sql-exec`).
+      // Drizzle is required for production data access; test fixtures inspect
+      // Durable Object storage directly (see `anti-slop/no-direct-sql-exec`).
       files: ["test/**/*.ts"],
       rules: {
         "anti-slop/no-direct-sql-exec": "off",

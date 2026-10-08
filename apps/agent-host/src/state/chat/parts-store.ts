@@ -6,7 +6,6 @@ import { encodedSize, pieceEnd, readPiece, JSON_PIECE_CHARACTERS } from "../pers
 import type { Database } from "../persistence/database";
 
 const STRING_QUOTES = 2;
-
 const MAX_PART_METADATA_BYTES = 65_536;
 
 function blocking(part: ResponsePart): number {

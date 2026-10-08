@@ -22,9 +22,7 @@ import { connectAcp } from "./worker";
 import { withAcpAgent } from "./acp-host";
 
 const SESSION = "ahp-session:/host-test";
-
 const SWITCHING_PROTOCOLS = 101;
-
 const CREATION_LIMIT = 2;
 
 type DispatchTurnParams = {

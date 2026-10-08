@@ -5,7 +5,6 @@ import { MemoryLimitError } from "../memory";
 import { FAILED_CONNECTION_CLOSE, MAX_FRAME_BYTES, NORMAL_CLOSE } from "../ahp/protocol";
 
 const MAX_QUEUED_BYTES = 2_097_152;
-
 const frameEncoder = new TextEncoder();
 
 /** Rejects frames exceeding the byte limit or the incoming queue budget, then decodes the frame. */

@@ -8,9 +8,7 @@ import { describe, expect } from "vitest";
 import { expectRpcError, initialized, MUTATIONS, test } from "./client";
 
 const file = process.env.AHP_FILE_URI;
-
 const directory = process.env.AHP_DIRECTORY_URI;
-
 const writable = process.env.AHP_WRITABLE_FILE_URI;
 
 describe("resources", () => {

@@ -26,7 +26,6 @@ type HostQueriesParams = {
 };
 
 const SEQUENCE_INCREMENT = 1;
-
 const ACTIVE_TURN_STATUS = 8;
 
 type AgentUpdateContext = {

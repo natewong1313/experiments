@@ -16,9 +16,7 @@ import { websocketStream } from "@experiments/agent-host/helpers";
 import { connectPeer, type Peer } from "./peer";
 
 const SESSION = "ahp-session:/host-test";
-
 const SWITCHING_PROTOCOLS = 101;
-
 const LAST_CONNECTION = -1;
 
 type WithAcpAgentParams = {
