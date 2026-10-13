@@ -66,6 +66,16 @@ const paddingRule = createPaddingLineRule([
       lineMode: "singleline",
     },
   },
+  // A single-line const binding followed directly by its guard clause stays flush.
+  {
+    blankLine: "any",
+    prev: {
+      selector:
+        ":matches(VariableDeclaration[kind='const'], ExportNamedDeclaration[declaration.kind='const'])",
+      lineMode: "singleline",
+    },
+    next: "if",
+  },
 ]);
 
 /** Restore structural blank lines with whitespace-only fixes; keep local short bindings and overloads grouped. */

@@ -29,8 +29,8 @@ export function contentReference(content: ReferencedContent): ContentRef {
     case "resource_link": {
       return {
         uri: content.uri,
-        contentType: content.mimeType ?? void 0,
-        sizeHint: content.size ?? void 0,
+        contentType: content.mimeType ?? undefined,
+        sizeHint: content.size ?? undefined,
       };
     }
 
@@ -89,8 +89,8 @@ export function toolContent(item: ToolCallContent): ToolResultContent[] {
         {
           type: "fileEdit",
           before:
-            item.oldText === null || item.oldText === void 0
-              ? void 0
+            item.oldText === null || item.oldText === undefined
+              ? undefined
               : { uri: file.href, content: textReference(item.oldText) },
           after: { uri: file.href, content: textReference(item.newText) },
         },

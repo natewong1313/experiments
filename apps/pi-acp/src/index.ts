@@ -109,7 +109,7 @@ class AcpAgent {
     const available = await this.harness.sessions.list();
 
     if (!available.some((session) => session.id === params.sessionId)) {
-      throw RequestError.invalidParams(void 0, "Unknown session");
+      throw RequestError.invalidParams(undefined, "Unknown session");
     }
 
     const session = this.harness.session(params.sessionId);
@@ -124,7 +124,7 @@ class AcpAgent {
     const session = this.requireSession(params.sessionId);
 
     if (!params.prompt.every((part) => part.type === "text")) {
-      throw RequestError.invalidParams(void 0, "Only text prompts are supported");
+      throw RequestError.invalidParams(undefined, "Only text prompts are supported");
     }
 
     if (this.runningPrompts.has(session.id)) {
@@ -174,7 +174,7 @@ class AcpAgent {
       (params.additionalDirectories?.length ?? 0) !== 0
     ) {
       throw RequestError.invalidParams(
-        void 0,
+        undefined,
         `Use cwd ${this.cwd} with no MCP servers or additional directories`,
       );
     }
@@ -185,7 +185,7 @@ class AcpAgent {
     const attached = this.attachedSessions.get(id);
 
     if (!attached) {
-      throw RequestError.invalidParams(void 0, "Unknown session");
+      throw RequestError.invalidParams(undefined, "Unknown session");
     }
 
     return attached.session;

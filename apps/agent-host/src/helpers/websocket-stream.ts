@@ -1,8 +1,10 @@
 import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
 import * as z from "zod";
 import { AcpMessageSchema, AcpOutboundMessageSchema } from "@experiments/protocol-schemas/acp";
-import { MemoryLimitError } from "../memory";
-import { FAILED_CONNECTION_CLOSE, MAX_FRAME_BYTES, NORMAL_CLOSE } from "../ahp/protocol";
+
+const FAILED_CONNECTION_CLOSE = 1007;
+const NORMAL_CLOSE = 1000;
+const MAX_FRAME_BYTES = 1_048_576;
 
 const MAX_QUEUED_BYTES = 2_097_152;
 const frameEncoder = new TextEncoder();
@@ -20,7 +22,7 @@ function decodeFrame(text: string, desiredSize: number | null): AnyMessage {
   }
 
   if (bytes > (desiredSize ?? 0)) {
-    throw new MemoryLimitError("ACP incoming queue exceeds the memory budget");
+    throw new Error("ACP incoming queue exceeds the memory budget");
   }
 
   return AcpMessageSchema.parse(JSON.parse(text));

@@ -7,7 +7,6 @@
     "enabled": true
   },
   "vars": {
-    "ACP_URL": "",
     "WORKSPACE_DIR": "/workspace"
   },
   "durable_objects": {
@@ -17,8 +16,8 @@
         "class_name": "AgentHost"
       },
       {
-        "name": "PI_AGENT",
-        "class_name": "PiAgent"
+        "name": "AGENT_SESSION",
+        "class_name": "AgentSession"
       }
     ]
   },
@@ -27,7 +26,7 @@
       "type": "durable-object",
       "storage": "sqlite"
     },
-    "PiAgent": {
+    "AgentSession": {
       "type": "durable-object",
       "storage": "sqlite"
     }
@@ -42,6 +41,15 @@
   "worker_loaders": [
     {
       "binding": "LOADER"
+    }
+  ],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.sql"
+      ],
+      "fallthrough": true
     }
   ]
 }

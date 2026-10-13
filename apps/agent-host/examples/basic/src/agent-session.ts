@@ -4,14 +4,14 @@ import { createGitClient } from "@cloudflare/computer/git";
 import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 import { Harness, createRegistry } from "@earendil-works/pi-durable";
 import { Lifecycle } from "agents/lifecycle";
-import { PiHarness, type PiHarnessOptions } from "agents/harnesses/pi";
-import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
+import { PiHarness } from "agents/harnesses/pi";
+import { createModels } from "@earendil-works/pi-ai/models";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 import { connectAcp } from "@experiments/pi-acp";
 
 import { AgentSession as BaseAgentSession } from "@experiments/agent-host";
 import { websocketStream } from "@experiments/agent-host/helpers";
-import type { AgentConfig, AcpConnectionOptions } from "@experiments/agent-host";
+import type { AgentHost } from "./agent-host";
 import type { Stream as AcpStream } from "@agentclientprotocol/sdk";
 
 export class AgentSession extends BaseAgentSession<Env> {
@@ -66,11 +66,18 @@ export class AgentSession extends BaseAgentSession<Env> {
   });
   lifecycle = Lifecycle.install(this).use(this.harness);
 
+  protected getHostNamespace(): DurableObjectNamespace<AgentHost> {
+    return this.env.AGENT_HOST;
+  }
+
+  protected getWorkingDirectory(): string {
+    return this.env.WORKSPACE_DIR;
+  }
+
   protected override async connectAgent(_sessionId: string): Promise<AcpStream> {
     await this.lifecycle.start();
 
     const { 0: client, 1: server } = new WebSocketPair();
-    server.accept();
 
     connectAcp({
       socket: server,

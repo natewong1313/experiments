@@ -4,96 +4,18 @@ import { defineConfig } from "oxlint";
 
 export default defineConfig({
   extends: [base, drizzle],
-  ignorePatterns: ["worker-configuration.d.ts"],
+  ignorePatterns: ["worker-configuration.d.ts", "src/**/db/migrations/**"],
   overrides: [
     {
-      files: ["src/**/*.ts"],
-      excludeFiles: ["src/state/**/*.ts"],
-      rules: {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            patterns: [
-              {
-                group: ["**/state/**"],
-                message: "Import the state entry point; stores and composition are internal.",
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      files: ["src/state/**/*.ts"],
-      rules: {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            patterns: [
-              {
-                group: ["**/sessions", "**/sessions/**", "**/agent", "**/agent/**"],
-                message:
-                  "State owns its record types and must not depend on session execution or ACP connections.",
-              },
-            ],
-          },
-        ],
-      },
+      // Zod declarations compose schemas through nested calls.
+      files: ["src/protocol.ts", "src/host/connections.ts", "src/host/durable-object.ts"],
+      rules: { "unicorn/max-nested-calls": "off" },
     },
     {
       files: ["test/**/*.ts"],
-      rules: {
-        "eslint/max-nested-callbacks": [
-          "error",
-          {
-            max: 3,
-          },
-        ],
-      },
+      rules: { "eslint/max-nested-callbacks": ["error", { max: 3 }] },
     },
     {
-      // Drizzle is required for production data access; test fixtures inspect
-      // Durable Object storage directly (see `anti-slop/no-direct-sql-exec`).
-      files: ["test/**/*.ts"],
-      rules: {
-        "anti-slop/no-direct-sql-exec": "off",
-      },
-    },
-    {
-      // Timer APIs need an executor to reject the deadline promise.
-      files: ["src/deadline.ts"],
-      rules: {
-        "promise/avoid-new": "off",
-      },
-    },
-    {
-      // Schema composition nests calls; subscription arrays have variable length.
-      files: ["src/ahp/protocol.ts"],
-      rules: {
-        "unicorn/max-nested-calls": "off",
-        "zod/prefer-tuple-over-array-length": "off",
-      },
-    },
-    {
-      // This array has an upper bound rather than fixed tuple positions.
-      files: ["src/ahp/clients.ts"],
-      rules: {
-        "zod/prefer-tuple-over-array-length": "off",
-      },
-    },
-    {
-      files: ["src/ahp/validation.ts"],
-      rules: {
-        "typescript/switch-exhaustiveness-check": [
-          "error",
-          {
-            considerDefaultExhaustiveForUnions: true,
-          },
-        ],
-      },
-    },
-    {
-      // Cloudflare environment types require declaration merging.
       files: ["test/env.d.ts"],
       rules: {
         "typescript/consistent-type-definitions": "off",
@@ -102,30 +24,9 @@ export default defineConfig({
     },
   ],
   rules: {
-    "drizzle/enforce-delete-with-where": [
-      "error",
-      {
-        drizzleObjectName: ["db"],
-      },
-    ],
-    "drizzle/enforce-update-with-where": [
-      "error",
-      {
-        drizzleObjectName: ["db"],
-      },
-    ],
-    "eslint/no-magic-numbers": [
-      "error",
-      {
-        ignore: [0, 1],
-        ignoreArrayIndexes: true,
-      },
-    ],
-    "eslint/no-underscore-dangle": [
-      "error",
-      {
-        allow: ["_meta"],
-      },
-    ],
+    "drizzle/enforce-delete-with-where": ["error", { drizzleObjectName: ["db"] }],
+    "drizzle/enforce-update-with-where": ["error", { drizzleObjectName: ["db"] }],
+    "eslint/no-magic-numbers": ["error", { ignore: [0, 1], ignoreArrayIndexes: true }],
+    "eslint/no-underscore-dangle": ["error", { allow: ["_meta"] }],
   },
 });

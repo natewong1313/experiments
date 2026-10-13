@@ -1,14 +1,15 @@
-# Self-hosting example
+# Basic example
 
-This Worker exports an `AgentHost` and a `PiAgent` Durable Object. The host opens
-an ACP WebSocket to the named Pi agent for each session. `PiAgent` rolls its own
-Durable Object, mounts `PiHarness` from the Agents SDK, and serves ACP with the
-`@experiments/pi-acp` conversion layer; conversations and workspace files are
-stored in SQLite. `WORKSPACE_DIR` sets the working directory.
+This Worker exports `AgentHost` and `AgentSession` Durable Objects. Each session
+subclass owns a Pi harness and durable workspace. The host routes AHP commands to
+that session and delivers its updates to clients.
 
-The Worker routes `/hosts/<host-id>/ahp` to a named host. Clients using the same
-host ID share sessions. IDs contain 1–64 letters, digits, underscores, or hyphens.
-`GET /health` checks the Worker. These routes have no authentication.
+`AGENT_HOST` and `AGENT_SESSION` are this example's binding names. The library
+uses namespace accessors and does not require these names.
+
+The Worker routes `/hosts/<host-uuid>/ahp` to a named host. Clients using the same
+host UUID share its catalogue and sessions. `GET /health` checks the Worker.
+These routes have no authentication.
 
 ## Run locally
 
@@ -20,9 +21,9 @@ pnpm --filter @experiments/agent-host-example cf-typegen
 pnpm --filter @experiments/agent-host-example dev
 ```
 
-Wrangler authentication supplies access to the remote Workers AI binding.
-The default model is `@cf/moonshotai/kimi-k2.7-code`. No Docker or provider secrets
-are required. `LOADER` runs the workspace's JavaScript tools in Dynamic Workers.
+Wrangler authentication supplies access to the remote Workers AI binding. The
+default model is `@cf/moonshotai/kimi-k2.7-code`. `WORKSPACE_DIR` sets the session's
+workspace directory. `LOADER` runs JavaScript workspace tools in Dynamic Workers.
 
 ## Send a prompt
 
@@ -30,36 +31,16 @@ With the Worker running:
 
 ```sh
 pnpm --filter @experiments/agent-host-example prompt \
-  ws://localhost:8787/hosts/example/ahp 'Say hello in one sentence.'
+  ws://localhost:8787/hosts/00000000-0000-4000-8000-000000000001/ahp \
+  'Say hello in one sentence.'
 ```
 
-The client initializes AHP, creates a session, subscribes to its default chat,
-and sends `chat/turnStarted`. It prints streamed text to stdout, reports session
-and chat URIs to stderr, and disposes the session before closing.
-Use [client/prompt.ts](./client/prompt.ts) as a starting point for your own client.
+The client initializes AHP, creates a ready session, subscribes to its default
+chat, and sends a text turn. It prints streamed text, then disposes the session.
+Use [client/prompt.ts](client/prompt.ts) as a starting point for a client.
 
-## Use another ACP service
-
-An empty `ACP_URL`, the default, uses the `PI_AGENT` namespace binding.
-To connect to an existing ACP WebSocket service:
-
-```sh
-pnpm --filter @experiments/agent-host-example exec wrangler dev \
-  --var ACP_URL:http://127.0.0.1:8080/acp
-```
-
-The service must accept the configured working directory and support the ACP
-session methods used by the host.
-
-## Deploy your own Worker
-
-Keep the dependencies and export both classes from the entrypoint. Match
-class names in `durable_objects.bindings` and `exports`, retain SQLite storage,
-`nodejs_compat`, `AI`, and `LOADER`, and set your Worker name before deploying:
-
-```sh
-pnpm --filter @experiments/agent-host-example deploy
-```
+Tools run within Pi. This minimal AHP implementation only presents text output;
+it has no client-side tool approvals or structured questions.
 
 ## Checks
 
@@ -70,16 +51,4 @@ pnpm --filter @experiments/agent-host-example check-types
 pnpm --filter @experiments/agent-host-example build
 ```
 
-`build` dry-runs Worker deployment without publishing.
-
-## Conformance checks
-
-With the Worker running:
-
-```sh
-AHP_URL=ws://localhost:8787/hosts/conformance/ahp pnpm test:ahp
-```
-
-The suite skips session and chat checks unless `AHP_SESSION_URI` names an existing
-ready session. See the [conformance README](../../../../packages/ahp-conformance/README.md)
-for fixture details.
+`build` dry-runs deployment without publishing the Worker.

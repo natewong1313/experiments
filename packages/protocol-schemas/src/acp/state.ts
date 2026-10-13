@@ -192,7 +192,7 @@ export function acpUpdateToSessionActions(
   if (
     notification.sessionId === rootSessionId &&
     update.sessionUpdate === "session_info_update" &&
-    update.title !== void 0
+    update.title !== undefined
   ) {
     actions.push({ type: "session/titleChanged", title: update.title ?? "" });
   }

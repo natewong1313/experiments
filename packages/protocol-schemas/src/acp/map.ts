@@ -178,7 +178,7 @@ export function acpUpdateToChatActions(
 
     case "tool_call_update": {
       const tool = mapping
-        ? void 0
+        ? undefined
         : turn.responseParts.find(
             (part) => part.kind === "toolCall" && part.toolCall.toolCallId === update.toolCallId,
           );
@@ -247,7 +247,7 @@ function toolProgress(turnId: string, update: ToolUpdate): ChatAction[] {
             type: "chat/toolCallDelta",
             turnId,
             toolCallId: update.toolCallId,
-            invocationMessage: update.title ?? void 0,
+            invocationMessage: update.title ?? undefined,
             _meta: { acp: update },
           },
         ]

@@ -1,40 +1,20 @@
-import { AgentHost as BaseAgentHost } from "../src/index";
-import { websocketStream } from "@experiments/agent-host/helpers";
-import type { AgentConfig, AcpConnectionOptions, Stream } from "../src/index";
-import { TEST_CONFIG } from "./config";
-import type { CustomHost } from "./custom-host";
-import type { AcpBackend } from "./acp-backend";
-
-const STATUS_SWITCHING_PROTOCOLS = 101;
+import { routeAgentHost } from "../src";
+import type { AgentHost } from "./host";
+import type { AgentSession } from "./session";
 
 export type TestEnv = {
-  AGENT_HOST: DurableObjectNamespace<AgentHost>;
-  CUSTOM_HOST: DurableObjectNamespace<CustomHost>;
-  ACP_BACKEND: DurableObjectNamespace<AcpBackend>;
+  COORDINATORS: DurableObjectNamespace<AgentHost>;
+  CONVERSATIONS: DurableObjectNamespace<AgentSession>;
 };
 
-export async function connectAcp({ signal }: AcpConnectionOptions): Promise<Stream> {
-  const response = await fetch("http://agent.test/acp", {
-    headers: { Upgrade: "websocket" },
-    signal,
-  });
+const worker = {
+  async fetch(request: Request, env: TestEnv): Promise<Response> {
+    return await routeAgentHost({ request, namespace: env.COORDINATORS });
+  },
+} satisfies ExportedHandler<TestEnv>;
 
-  if (response.status !== STATUS_SWITCHING_PROTOCOLS || !response.webSocket) {
-    throw new Error(`Agent connection failed with HTTP ${response.status}`);
-  }
+export default worker;
 
-  return websocketStream(response.webSocket);
-}
+export { AgentHost } from "./host";
 
-export class AgentHost extends BaseAgentHost<TestEnv> {
-  protected override getAgentConfig(): AgentConfig {
-    return TEST_CONFIG;
-  }
-  protected override async connectAcp(options: AcpConnectionOptions): Promise<Stream> {
-    return await connectAcp(options);
-  }
-}
-
-export { CustomHost } from "./custom-host";
-
-export { AcpBackend } from "./acp-backend";
+export { AgentSession } from "./session";

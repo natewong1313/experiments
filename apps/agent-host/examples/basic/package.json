@@ -9,7 +9,7 @@
     "cf-typegen": "wrangler types --include-runtime=false --strict-vars=false",
     "check-types": "wrangler types --include-runtime=false --strict-vars=false && tsc --noEmit && tsc --noEmit -p client/tsconfig.json",
     "lint": "oxlint --deny-warnings --type-aware src client",
-    "prompt": "node --experimental-strip-types client/prompt.ts"
+    "prompt": "tsx client/prompt.ts"
   },
   "dependencies": {
     "@cloudflare/computer": "catalog:",
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@experiments/oxlint-config": "workspace:*",
-    "@experiments/typescript-config": "workspace:*"
+    "@experiments/typescript-config": "workspace:*",
+    "tsx": "4.23.15"
   }
 }

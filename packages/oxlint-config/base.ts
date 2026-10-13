@@ -135,7 +135,6 @@ export default defineConfig({
     "eslint/no-redeclare": "error",
     "eslint/no-shadow": "error",
     "eslint/no-throw-literal": "error",
-    "eslint/no-undefined": "error",
     "eslint/no-underscore-dangle": "error",
     "eslint/no-unexpected-multiline": "error",
     "eslint/no-unmodified-loop-condition": "error",

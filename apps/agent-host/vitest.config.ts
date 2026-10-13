@@ -23,11 +23,10 @@ export default defineConfig({
       miniflare: {
         compatibilityDate: "2026-09-28",
         compatibilityFlags: ["nodejs_compat"],
-        workerLoaders: { LOADER: {} },
+
         durableObjects: {
-          AGENT_HOST: { className: "AgentHost", useSQLite: true },
-          CUSTOM_HOST: { className: "CustomHost", useSQLite: true },
-          ACP_BACKEND: { className: "AcpBackend", useSQLite: true },
+          COORDINATORS: { className: "AgentHost", useSQLite: true },
+          CONVERSATIONS: { className: "AgentSession", useSQLite: true },
         },
       },
     }),

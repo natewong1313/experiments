@@ -6,7 +6,8 @@
     "noEmit": true,
     "types": [
       "@cloudflare/workers-types"
-    ]
+    ],
+    "isolatedModules": false
   },
   "include": [
     "src/**/*.ts"

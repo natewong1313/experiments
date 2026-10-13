@@ -18,7 +18,7 @@ const SessionPreviewSchema = z.object({
 const [endpoint, prompt = "Say hello in one sentence."] = process.argv.slice(ARGUMENT_OFFSET);
 
 const transport = await WebSocketTransport.connect(
-  endpoint ?? "ws://localhost:8787/hosts/example/ahp",
+  endpoint ?? "ws://localhost:8787/hosts/00000000-0000-4000-8000-000000000001/ahp",
 );
 
 const client = new AhpClient(transport);
@@ -86,7 +86,7 @@ async function runPrompt(chat: string, text: string): Promise<void> {
       continue;
     }
 
-    if (event.params.rejectionReason !== void 0) {
+    if (event.params.rejectionReason !== undefined) {
       throw new Error(event.params.rejectionReason);
     }
 
@@ -124,7 +124,7 @@ try {
     clientId: crypto.randomUUID(),
     protocolVersions: [PROTOCOL_VERSION],
   });
-  await client.request("createSession", { channel: session, provider: "pi" });
+  await client.request("createSession", { channel: session });
   const { result, subscription } = await client.subscribe(session);
   const preview = SessionPreviewSchema.parse(result.snapshot?.state);
   await waitUntilReady(subscription, preview);

@@ -18,6 +18,8 @@ import {
 } from "@experiments/protocol-schemas/ahp";
 import * as z from "zod";
 import { vi } from "vitest";
+import worker from "./worker";
+import { env } from "cloudflare:workers";
 
 const MessageSchema = z.union([JsonRpcNotificationSchema, JsonRpcReplySchema]);
 const JsonValueSchema = z.json();
@@ -60,7 +62,7 @@ export class Peer {
     socket.accept();
   }
 
-  async request(method: string, params: PeerParams): Promise<object | null> {
+  async request(method: string, params: PeerParams): Promise<z.output<typeof PeerResultSchema>> {
     const id = this.nextId++;
     this.socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -90,13 +92,13 @@ export class Peer {
   }
 }
 
-export async function connectPeer(
-  stub: DurableObjectStub,
-  clientId = "test-client",
-): Promise<Peer> {
-  const response = await stub.fetch("https://host/ahp", {
-    headers: { Upgrade: "websocket" },
-  });
+export async function connectPeer(hostId: string, clientId = crypto.randomUUID()): Promise<Peer> {
+  const response = await worker.fetch(
+    new Request(`https://host/hosts/${hostId}/ahp`, {
+      headers: { Upgrade: "websocket" },
+    }),
+    env,
+  );
 
   if (!response.webSocket) {
     throw new Error("Host did not accept the WebSocket upgrade");
