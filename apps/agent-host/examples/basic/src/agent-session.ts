@@ -1,20 +1,20 @@
-import { DurableObject } from "cloudflare:workers";
 import { Workspace } from "@cloudflare/computer";
 import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
 import { createGitClient } from "@cloudflare/computer/git";
+import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 import { Harness, createRegistry } from "@earendil-works/pi-durable";
-import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
-import { PiHarness, type PiHarnessOptions } from "agents/harnesses/pi";
 import { Lifecycle } from "agents/lifecycle";
+import { PiHarness, type PiHarnessOptions } from "agents/harnesses/pi";
+import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 import { connectAcp } from "@experiments/pi-acp";
-import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 
-const STATUS_UPGRADE_REQUIRED = 426;
-const STATUS_SWITCHING_PROTOCOLS = 101;
+import { AgentSession as BaseAgentSession } from "@experiments/agent-host";
+import { websocketStream } from "@experiments/agent-host/helpers";
+import type { AgentConfig, AcpConnectionOptions } from "@experiments/agent-host";
+import type { Stream as AcpStream } from "@agentclientprotocol/sdk";
 
-// A pi harness running on a DO that accepts ACP calls over websockets.
-export class PiAgent extends DurableObject<Env> {
+export class AgentSession extends BaseAgentSession<Env> {
   workspace = new Workspace({
     storage: workspaceStorage(this.ctx.storage),
     git: createGitClient(),
@@ -35,7 +35,11 @@ export class PiAgent extends DurableObject<Env> {
       await this.workspace.fs.mkdir(this.env.WORKSPACE_DIR, {
         recursive: true,
       });
-      const models = this.setupModels();
+
+      const models = createModels();
+      const ai = createAI({ binding: this.env.AI });
+      models.setProvider(ai.provider);
+
       this.registry.batch(() => {
         this.registry.systemPrompt.section(
           "preamble",
@@ -51,51 +55,22 @@ export class PiAgent extends DurableObject<Env> {
 
       return Harness.open(storage, { models, registry: this.registry }, context);
     },
-    defaults: this.getSessionDefaults(),
-  });
-  lifecycle = Lifecycle.install(this).use(this.harness);
-  private connectedSocket: WebSocket | null = null;
-
-  protected getSessionDefaults(): PiHarnessOptions["defaults"] {
-    return {
+    defaults: {
       model: {
         provider: CLOUDFLARE_PROVIDER_ID,
         modelId: "@cf/moonshotai/kimi-k2.7-code",
       },
       thinkingLevel: "low",
       retry: { enabled: true, maxRetries: 2, baseDelayMs: 500 },
-    };
-  }
+    },
+  });
+  lifecycle = Lifecycle.install(this).use(this.harness);
 
-  protected setupModels(): MutableModels {
-    const models = createModels();
-    const ai = createAI({ binding: this.env.AI });
-
-    models.setProvider(ai.provider);
-
-    return models;
-  }
-
-  override async fetch(request: Request): Promise<Response> {
-    if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
-      return new Response("Expected a WebSocket upgrade", { status: STATUS_UPGRADE_REQUIRED });
-    }
-
+  protected override async connectAgent(_sessionId: string): Promise<AcpStream> {
     await this.lifecycle.start();
 
-    // We expect at most one host to "own" this
-    if (this.connectedSocket !== null && this.connectedSocket.readyState === WebSocket.OPEN) {
-      return new Response("Agent already has a connection", { status: 409 });
-    }
-
     const { 0: client, 1: server } = new WebSocketPair();
-    this.connectedSocket = server;
     server.accept();
-    server.addEventListener("close", () => {
-      if (this.connectedSocket === server) {
-        this.connectedSocket = null;
-      }
-    });
 
     connectAcp({
       socket: server,
@@ -103,6 +78,6 @@ export class PiAgent extends DurableObject<Env> {
       cwd: this.env.WORKSPACE_DIR,
     });
 
-    return new Response(null, { status: STATUS_SWITCHING_PROTOCOLS, webSocket: client });
+    return websocketStream(client);
   }
 }
