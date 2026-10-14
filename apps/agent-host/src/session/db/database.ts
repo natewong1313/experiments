@@ -4,10 +4,12 @@ import * as schema from "./schema";
 import migrations from "./migrations/migrations";
 import { SessionRepository } from "./repositories/session";
 
+export type SessionDatabaseOrm = DrizzleSqliteDODatabase<typeof schema>;
+
 export class SessionDatabase {
-  readonly orm: DrizzleSqliteDODatabase<typeof schema>;
+  private orm: DrizzleSqliteDODatabase<typeof schema>;
+  private storage: DurableObjectStorage;
   readonly session: SessionRepository;
-  private readonly storage: DurableObjectStorage;
 
   constructor(storage: DurableObjectStorage) {
     this.storage = storage;

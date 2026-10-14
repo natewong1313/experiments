@@ -1,12 +1,12 @@
 import { eq, sql } from "drizzle-orm";
-import type { HostDatabase } from "../database";
+import type { HostDatabaseOrm } from "../database";
 import { hostTable } from "../schema";
 import type { HostEntry } from "../schema";
 
 export class HostRepository {
-  private readonly db: HostDatabase["orm"];
+  private db: HostDatabaseOrm;
 
-  constructor(db: HostDatabase["orm"]) {
+  constructor(db: HostDatabaseOrm) {
     this.db = db;
   }
 

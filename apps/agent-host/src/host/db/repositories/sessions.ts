@@ -1,13 +1,13 @@
 import { eq } from "drizzle-orm";
-import type { HostDatabase } from "../database";
+import type { HostDatabaseOrm } from "../database";
 import { sessionsTable } from "../schema";
 import type { SessionEntry } from "../schema";
 import type { SessionSummaryData } from "../../../types";
 
 export class SessionsRepository {
-  private readonly db: HostDatabase["orm"];
+  private db: HostDatabaseOrm;
 
-  constructor(db: HostDatabase["orm"]) {
+  constructor(db: HostDatabaseOrm) {
     this.db = db;
   }
 

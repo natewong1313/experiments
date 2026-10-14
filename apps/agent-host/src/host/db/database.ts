@@ -5,11 +5,13 @@ import migrations from "./migrations/migrations";
 import { HostRepository } from "./repositories/host";
 import { SessionsRepository } from "./repositories/sessions";
 
+export type HostDatabaseOrm = DrizzleSqliteDODatabase<typeof schema>;
+
 export class HostDatabase {
-  readonly orm: DrizzleSqliteDODatabase<typeof schema>;
+  private orm: HostDatabaseOrm;
+  private storage: DurableObjectStorage;
   readonly host: HostRepository;
   readonly sessions: SessionsRepository;
-  private readonly storage: DurableObjectStorage;
 
   constructor(storage: DurableObjectStorage) {
     this.storage = storage;
