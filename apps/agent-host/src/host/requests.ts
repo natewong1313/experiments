@@ -1,4 +1,4 @@
-import type * as z from "zod";
+import * as z from "zod";
 import { AhpErrorCodes, JsonRpcErrorCodes, PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import type {
   InitializeResult,
@@ -6,181 +6,115 @@ import type {
   SubscribeResult,
 } from "@experiments/protocol-schemas/ahp";
 import {
+  ChatTurnCancelledActionSchema,
+  ChatTurnStartedActionSchema,
   CreateSessionParamsSchema,
   InitializeParamsSchema,
   ListSessionsParamsSchema,
+  RootChannelParamsSchema,
   SubscribeParamsSchema,
-  ChatTurnStartedActionSchema,
-  ChatTurnCancelledActionSchema,
 } from "@experiments/protocol-schemas/ahp";
 import {
   ChannelSchema,
   DispatchSchema,
   ProtocolError,
-  ROOT_CHANNEL,
-  send,
   errorMessage,
+  send,
+  sendError,
 } from "../protocol";
 import type { MessageSchema } from "../protocol";
 import type { HostSessionsService } from "./service/sessions";
 import type { ConnectionsService } from "./service/connections";
-import type { HostRepository } from "./db/repositories/host";
-
-type RequestOptions = {
-  sessions: HostSessionsService;
-  connections: ConnectionsService;
-  hostRepository: HostRepository;
-  socket: WebSocket;
-  message: z.output<typeof MessageSchema>;
-};
 
 const NORMAL_CLOSE = 1000;
 
+const ClientActionSchema = z.discriminatedUnion("type", [
+  ChatTurnStartedActionSchema,
+  ChatTurnCancelledActionSchema,
+]);
+
+type Message = z.output<typeof MessageSchema>;
+
+type Request = Message & { id: string | number };
+
 type RequestResult = InitializeResult | ListSessionsResult | SubscribeResult | null;
 
-async function initialize(options: RequestOptions): Promise<void> {
-  const { sessions, connections, hostRepository, socket, message } = options;
-  const params = InitializeParamsSchema.parse(message.params);
+type Reply = (result: RequestResult) => void;
 
-  if (connections.attachment(socket).clientId !== undefined) {
-    throw new ProtocolError("Connection is already initialized");
-  }
+export type Host = { sessions: HostSessionsService; connections: ConnectionsService };
 
-  if (!params.protocolVersions.includes(PROTOCOL_VERSION)) {
-    send(socket, {
-      jsonrpc: "2.0",
-      id: message.id ?? null,
-      error: {
-        code: AhpErrorCodes.UnsupportedProtocolVersion,
-        message: "Unsupported protocol version",
-        data: { supportedVersions: [PROTOCOL_VERSION] },
-      },
-    });
-    socket.close(NORMAL_CLOSE, "Unsupported protocol version");
+export async function handleMessage(
+  host: Host,
+  socket: WebSocket,
+  message: Message,
+): Promise<void> {
+  const { id } = message;
 
-    return;
-  }
-
-  const channels = [...new Set(params.initialSubscriptions)];
-
-  for (const channel of channels) {
-    connections.begin(socket, channel);
-  }
-
-  try {
-    const currentHost = await hostRepository.get();
-    const serverSeq = currentHost?.serverSeq ?? 0;
-    const snapshots = await Promise.all(channels.map((channel) => sessions.snapshot(channel)));
-    connections.initialize(socket, params.clientId);
-
-    const result: InitializeResult = {
-      protocolVersion: PROTOCOL_VERSION,
-      serverSeq,
-      snapshots: snapshots.map((item) => item.snapshot),
-    };
-
-    send(socket, { jsonrpc: "2.0", id: message.id ?? 0, result });
-
-    for (const item of snapshots) {
-      connections.finish(socket, item.snapshot.resource, item.revision);
-    }
-  } finally {
-    connections.cancel(socket);
-  }
+  await (id === undefined
+    ? handleNotification(host, socket, message)
+    : handleRequest(host, socket, { ...message, id }));
 }
 
-async function subscribe(options: RequestOptions): Promise<void> {
-  const { sessions, connections, socket, message } = options;
-  const params = SubscribeParamsSchema.parse(message.params);
-  connections.begin(socket, params.channel);
+async function handleRequest(host: Host, socket: WebSocket, request: Request): Promise<void> {
+  const { sessions, connections } = host;
+  const { method, params } = request;
 
-  try {
-    const result = await sessions.snapshot(params.channel);
-    send(socket, { jsonrpc: "2.0", id: message.id ?? 0, result: { snapshot: result.snapshot } });
-    connections.finish(socket, params.channel, result.revision);
-  } finally {
-    connections.cancel(socket);
+  function reply(result: RequestResult): void {
+    send(socket, { jsonrpc: "2.0", id: request.id, result });
   }
-}
 
-async function dispatch(options: RequestOptions): Promise<void> {
-  const { sessions, connections, hostRepository, socket, message } = options;
-  const params = DispatchSchema.parse(message.params);
-  const { clientId } = connections.attachment(socket);
-  const origin = { clientId: clientId ?? "", clientSeq: params.clientSeq };
-  let rejection: string | null;
+  if (method !== "initialize" && method !== "ping") {
+    requireClientId(connections, socket);
+  }
 
-  try {
-    const entry = await sessions.resolveSession(params.channel);
-
-    if (!params.channel.startsWith("ahp-chat:/")) {
-      throw new ProtocolError("Session actions are not supported");
+  switch (method) {
+    case "initialize": {
+      await initialize(host, socket, request, reply);
+      break;
     }
 
-    if (params.action.type !== "chat/turnStarted" && params.action.type !== "chat/turnCancelled") {
-      throw new ProtocolError("Action is not supported");
-    }
-
-    const action =
-      params.action.type === "chat/turnStarted"
-        ? ChatTurnStartedActionSchema.parse(params.action)
-        : ChatTurnCancelledActionSchema.parse(params.action);
-
-    const stub = await sessions.sessionStub(entry.id);
-    await stub.dispatch({ action, origin });
-
-    rejection = null;
-  } catch (error) {
-    rejection = errorMessage(error);
-  }
-
-  if (rejection !== null) {
-    send(socket, {
-      jsonrpc: "2.0",
-      method: "action",
-      params: {
-        channel: params.channel,
-        action: params.action,
-        origin,
-        serverSeq: await hostRepository.nextSequence(),
-        rejectionReason: rejection,
-      },
-    });
-  }
-}
-
-async function request(options: RequestOptions): Promise<RequestResult> {
-  const { sessions, message } = options;
-
-  switch (message.method) {
     case "ping": {
-      const params = ChannelSchema.parse(message.params);
+      RootChannelParamsSchema.parse(params);
+      reply(null);
+      break;
+    }
 
-      if (params.channel !== ROOT_CHANNEL) {
-        throw new ProtocolError("Expected the root channel");
-      }
+    case "subscribe": {
+      const { channel } = SubscribeParamsSchema.parse(params);
 
-      return null;
+      await connections.subscribe({
+        socket,
+        channels: [channel],
+        load: (uri) => sessions.snapshot(uri),
+        respond: ([snapshot]) => {
+          reply({ snapshot });
+        },
+      });
+
+      break;
     }
 
     case "listSessions": {
-      ListSessionsParamsSchema.parse(message.params);
-
-      return await sessions.list();
+      ListSessionsParamsSchema.parse(params);
+      reply(await sessions.list());
+      break;
     }
 
     case "createSession": {
-      const params = CreateSessionParamsSchema.parse(message.params);
-      await sessions.create(params);
-
-      return null;
+      await sessions.create(CreateSessionParamsSchema.parse(params));
+      reply(null);
+      break;
     }
 
     case "disposeSession": {
-      const params = ChannelSchema.parse(message.params);
-      await sessions.disposeChannel(params.channel);
+      await sessions.disposeChannel(ChannelSchema.parse(params).channel);
+      reply(null);
+      break;
+    }
 
-      return null;
+    case "dispatchAction":
+    case "unsubscribe": {
+      throw new ProtocolError("Expected a notification", JsonRpcErrorCodes.InvalidRequest);
     }
 
     default: {
@@ -189,42 +123,100 @@ async function request(options: RequestOptions): Promise<RequestResult> {
   }
 }
 
-export async function handleRequest(options: RequestOptions): Promise<void> {
-  const { connections, socket, message } = options;
+// Unknown notifications are ignored, as JSON-RPC gives them no way to report an error.
+async function handleNotification(host: Host, socket: WebSocket, message: Message): Promise<void> {
+  const { connections } = host;
 
-  if (
-    message.method !== "initialize" &&
-    message.method !== "ping" &&
-    connections.attachment(socket).clientId === undefined
-  ) {
+  switch (message.method) {
+    case "dispatchAction": {
+      await dispatch(host, socket, requireClientId(connections, socket), message);
+      break;
+    }
+
+    case "unsubscribe": {
+      requireClientId(connections, socket);
+      connections.unsubscribe(socket, ChannelSchema.parse(message.params).channel);
+      break;
+    }
+
+    default: {
+      break;
+    }
+  }
+}
+
+async function initialize(
+  host: Host,
+  socket: WebSocket,
+  request: Request,
+  reply: Reply,
+): Promise<void> {
+  const { sessions, connections } = host;
+  const params = InitializeParamsSchema.parse(request.params);
+
+  if (connections.clientId(socket) !== undefined) {
+    throw new ProtocolError("Connection is already initialized");
+  }
+
+  if (!params.protocolVersions.includes(PROTOCOL_VERSION)) {
+    const error = new ProtocolError(
+      "Unsupported protocol version",
+      AhpErrorCodes.UnsupportedProtocolVersion,
+      { supportedVersions: [PROTOCOL_VERSION] },
+    );
+
+    sendError(socket, request.id, error);
+    socket.close(NORMAL_CLOSE, error.message);
+
+    return;
+  }
+
+  const serverSeq = await sessions.serverSeq();
+
+  await connections.subscribe({
+    socket,
+    channels: [...new Set(params.initialSubscriptions)],
+    load: (uri) => sessions.snapshot(uri),
+    respond: (snapshots) => {
+      connections.initialize(socket, params.clientId);
+      reply({ protocolVersion: PROTOCOL_VERSION, serverSeq, snapshots });
+    },
+  });
+}
+
+// Rejections are echoed to the dispatching client only; success arrives as a broadcast action.
+async function dispatch(
+  host: Host,
+  socket: WebSocket,
+  clientId: string,
+  message: Message,
+): Promise<void> {
+  const { channel, clientSeq, action } = DispatchSchema.parse(message.params);
+  const origin = { clientId, clientSeq };
+
+  try {
+    await host.sessions.dispatch(channel, { action: ClientActionSchema.parse(action), origin });
+  } catch (error) {
+    send(socket, {
+      jsonrpc: "2.0",
+      method: "action",
+      params: {
+        channel,
+        action,
+        origin,
+        serverSeq: await host.sessions.nextSequence(),
+        rejectionReason: errorMessage(error),
+      },
+    });
+  }
+}
+
+function requireClientId(connections: ConnectionsService, socket: WebSocket): string {
+  const clientId = connections.clientId(socket);
+
+  if (clientId === undefined) {
     throw new ProtocolError("Initialize the connection first", JsonRpcErrorCodes.InvalidRequest);
   }
 
-  if (message.method === "dispatchAction" || message.method === "unsubscribe") {
-    if (message.id !== undefined) {
-      throw new ProtocolError("Expected a notification", JsonRpcErrorCodes.InvalidRequest);
-    }
-
-    if (message.method === "dispatchAction") {
-      await dispatch(options);
-    } else {
-      const params = ChannelSchema.parse(message.params);
-      connections.unsubscribe(socket, params.channel);
-    }
-
-    return;
-  }
-
-  if (message.id === undefined) {
-    return;
-  }
-
-  if (message.method === "initialize") {
-    await initialize(options);
-  } else if (message.method === "subscribe") {
-    await subscribe(options);
-  } else {
-    const result = await request(options);
-    send(socket, { jsonrpc: "2.0", id: message.id, result });
-  }
+  return clientId;
 }

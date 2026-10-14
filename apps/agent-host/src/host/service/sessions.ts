@@ -1,106 +1,90 @@
-import * as z from "zod";
-import { StateActionSchema, SessionSummarySchema } from "@experiments/protocol-schemas/ahp";
 import { AhpErrorCodes, SessionStatus } from "@microsoft/agent-host-protocol";
 import type { AgentInfo, RootState } from "@microsoft/agent-host-protocol";
 import type {
   CreateSessionParams,
   ListSessionsResult,
-  Snapshot,
+  SessionSummary,
 } from "@experiments/protocol-schemas/ahp";
 import { ProtocolError, ROOT_CHANNEL, errorMessage } from "../../protocol";
-import { sessionDOName, sessionUri, chatUri } from "../../shared/lookups";
-import type { SessionRPC, SessionNamespace } from "../../shared/rpc/session";
-import type { HostRepository } from "../db/repositories/host";
-import type { SessionsRepository } from "../db/repositories/sessions";
-import type { SessionEntry } from "../db/schema";
-import type { ConnectionsService } from "./connections";
+import { chatUri, parseChannel, sessionDOName, sessionUri } from "../../shared/lookups";
+import type { ChatChannel, SessionChannel } from "../../shared/lookups";
+import { HostSessionUpdateRequestSchema } from "../../shared/rpc/host";
 import type { HostSessionUpdateRequest } from "../../shared/rpc/host";
+import type {
+  SessionDispatchRequest,
+  SessionRPC,
+  SessionNamespace,
+} from "../../shared/rpc/session";
+import type { HostDatabase } from "../db/database";
+import type { SessionEntry } from "../db/schema";
+import type { ChannelSnapshot, ConnectionsService } from "./connections";
 
-const UUIDSchema = z.uuid().transform((id) => id.toLowerCase());
-
-type SessionOptions = {
-  host: HostRepository;
-  sessions: SessionsRepository;
+type HostSessionsOptions = {
+  hostId: string;
+  db: HostDatabase;
   connections: ConnectionsService;
   agentInfo(): AgentInfo;
   sessionNamespace(): SessionNamespace;
 };
 
-type SnapshotResult = { snapshot: Snapshot; revision: number };
-
 export class HostSessionsService {
-  private options: SessionOptions;
+  private options: HostSessionsOptions;
 
-  constructor(options: SessionOptions) {
+  constructor(options: HostSessionsOptions) {
     this.options = options;
   }
 
-  async rootState(): Promise<RootState> {
-    const sessions = await this.options.sessions.list();
-
-    return {
-      agents: [this.options.agentInfo()],
-      activeSessions: sessions.length,
-    };
+  async serverSeq(): Promise<number> {
+    return await this.options.db.host.serverSeq();
   }
 
-  async sessionStub(id: string): Promise<SessionRPC> {
-    const host = await this.options.host.get();
-    if (!host) {
-      throw new ProtocolError("Host is not initialized");
-    }
-
-    return this.options.sessionNamespace().getByName(sessionDOName(host.id, id));
-  }
-
-  async resolveSession(channel: string): Promise<SessionEntry> {
-    const entry = channel.startsWith("ahp-session:/")
-      ? await this.options.sessions.get(sessionChannelId(channel))
-      : await this.options.sessions.findChat(chatChannelId(channel));
-
-    if (!entry) {
-      throw new ProtocolError("Session does not exist", AhpErrorCodes.SessionNotFound);
-    }
-
-    return entry;
+  async nextSequence(): Promise<number> {
+    return await this.options.db.host.nextSequence();
   }
 
   async list(): Promise<ListSessionsResult> {
-    const entries = await this.options.sessions.list();
+    const entries = await this.options.db.sessions.list();
 
     return { items: entries.map((entry) => entry.summary) };
   }
 
-  async snapshot(channel: string): Promise<SnapshotResult> {
-    const currentHost = await this.options.host.get();
-    const fromSeq = currentHost?.serverSeq ?? 0;
+  async snapshot(uri: string): Promise<ChannelSnapshot> {
+    const channel = parseChannel(uri);
+    const fromSeq = await this.options.db.host.serverSeq();
 
-    if (channel === ROOT_CHANNEL) {
+    if (channel.kind === "root") {
       return {
-        snapshot: { resource: channel, state: await this.rootState(), fromSeq },
+        snapshot: { resource: uri, state: await this.rootState(), fromSeq },
         revision: fromSeq,
       };
     }
 
     const entry = await this.resolveSession(channel);
-    const stub = await this.sessionStub(entry.id);
-    const response = await stub.snapshot({ channel });
+    const { state, revision } = await this.sessionStub(entry.id).snapshot({ channel: uri });
 
-    return {
-      snapshot: { resource: channel, state: response.state, fromSeq },
-      revision: response.revision,
-    };
+    return { snapshot: { resource: uri, state, fromSeq }, revision };
+  }
+
+  async dispatch(uri: string, request: SessionDispatchRequest): Promise<void> {
+    const channel = parseChannel(uri);
+
+    if (channel.kind !== "chat") {
+      throw new ProtocolError("Actions must target a chat channel");
+    }
+
+    const entry = await this.resolveSession(channel);
+    await this.sessionStub(entry.id).dispatch(request);
   }
 
   async create(params: CreateSessionParams): Promise<void> {
-    const id = sessionChannelId(params.channel);
+    const { id } = sessionChannel(params.channel);
     const agent = this.options.agentInfo();
 
     if (params.provider !== undefined && params.provider !== agent.provider) {
       throw new ProtocolError("Agent provider does not exist", AhpErrorCodes.ProviderNotFound);
     }
 
-    if (await this.options.sessions.get(id)) {
+    if (await this.options.db.sessions.get(id)) {
       throw new ProtocolError("Session already exists", AhpErrorCodes.SessionAlreadyExists);
     }
 
@@ -111,29 +95,11 @@ export class HostSessionsService {
     }
 
     const directory = params.workingDirectories?.[0];
-    let workingDirectory: string | undefined;
-
-    if (directory !== undefined) {
-      const url = new URL(directory);
-
-      if (url.protocol !== "file:" || url.hostname || url.search || url.hash) {
-        throw new ProtocolError("Expected a local file working directory");
-      }
-
-      workingDirectory = decodeURIComponent(url.pathname);
-    }
-
-    const currentHost = await this.options.host.get();
-    const hostId = currentHost?.id;
-
-    if (hostId === undefined) {
-      throw new ProtocolError("Host is not initialized");
-    }
-
+    const workingDirectory = directory === undefined ? undefined : localPath(directory);
     const now = new Date().toISOString();
     const chatId = crypto.randomUUID();
 
-    const entry = {
+    const entry: SessionEntry = {
       id,
       defaultChatId: chatId,
       summary: {
@@ -146,14 +112,20 @@ export class HostSessionsService {
       },
     };
 
-    await this.options.sessions.create(entry);
-    this.sessionAdded(entry);
+    // The session is listed while it is still creating, so early subscribers see its lifecycle.
+    await this.options.db.sessions.create(entry);
+
+    this.options.connections.notify(ROOT_CHANNEL, {
+      jsonrpc: "2.0",
+      method: "root/sessionAdded",
+      params: { channel: ROOT_CHANNEL, summary: entry.summary },
+    });
+
     await this.catalogueChanged();
 
     try {
-      const stub = await this.sessionStub(id);
-      await stub.create({
-        hostId,
+      await this.sessionStub(id).create({
+        hostId: this.options.hostId,
         sessionId: id,
         chatId,
         provider: agent.provider,
@@ -161,75 +133,40 @@ export class HostSessionsService {
         workingDirectory,
       });
     } catch (error) {
-      await this.dispose(entry);
+      // Report the creation failure even if cleanup also fails; disposeSession can retry it.
+      await Promise.allSettled([this.dispose(entry)]);
       throw new ProtocolError(errorMessage(error));
     }
   }
 
-  async disposeChannel(channel: string): Promise<void> {
-    const id = sessionChannelId(channel);
-    const entry = await this.options.sessions.get(id);
-
-    if (!entry) {
-      throw new ProtocolError("Session does not exist", AhpErrorCodes.SessionNotFound);
-    }
-
-    await this.dispose(entry);
-  }
-
-  async dispose(entry: SessionEntry): Promise<void> {
-    const stub = await this.sessionStub(entry.id);
-    await stub.dispose();
-    await this.options.sessions.remove(entry.id);
-    this.sessionRemoved(entry);
-    await this.catalogueChanged();
+  async disposeChannel(uri: string): Promise<void> {
+    await this.dispose(await this.resolveSession(sessionChannel(uri)));
   }
 
   async sessionUpdate(req: HostSessionUpdateRequest): Promise<void> {
-    const parsed = z
-      .object({
-        sessionId: z.string(),
-        revision: z.number(),
-        summary: SessionSummarySchema,
-        actions: z.array(
-          z.object({
-            channel: z.string(),
-            action: StateActionSchema,
-            origin: z.object({ clientId: z.string(), clientSeq: z.number() }).optional(),
-          }),
-        ),
-      })
-      .parse(req);
-
-    const publication = parsed;
-    const entry = await this.options.sessions.get(publication.sessionId);
+    const update = HostSessionUpdateRequestSchema.parse(req);
+    const entry = await this.options.db.sessions.get(update.sessionId);
 
     if (!entry) {
       return;
     }
 
-    await this.options.sessions.update(entry.id, req.summary);
+    await this.options.db.sessions.update(entry.id, update.summary);
 
-    await Promise.all(
-      publication.actions.map(async (item) => {
-        const envelope = {
-          ...item,
-          serverSeq: await this.options.host.nextSequence(),
-          origin: item.origin,
-        };
+    for (const { channel, action, origin } of update.actions) {
+      // Server sequences must be allocated in broadcast order.
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      const serverSeq = await this.options.db.host.nextSequence();
 
-        this.options.connections.broadcast({ envelope, revision: publication.revision });
-      }),
-    );
+      this.options.connections.broadcast({
+        envelope: { channel, action, origin, serverSeq },
+        revision: update.revision,
+      });
+    }
 
-    if (JSON.stringify(entry.summary) !== JSON.stringify(publication.summary)) {
-      const {
-        resource: _resource,
-        createdAt: _createdAt,
-        provider: _provider,
-        ...changes
-      } = publication.summary;
+    const changes = summaryChanges(entry.summary, update.summary);
 
+    if (Object.keys(changes).length > 0) {
       this.options.connections.notify(ROOT_CHANNEL, {
         jsonrpc: "2.0",
         method: "root/sessionSummaryChanged",
@@ -238,59 +175,88 @@ export class HostSessionsService {
     }
   }
 
-  async catalogueChanged(): Promise<void> {
-    const sessions = await this.options.sessions.list();
-    const serverSeq = await this.options.host.nextSequence();
-    this.options.connections.broadcast({
-      revision: serverSeq,
-      envelope: {
-        channel: ROOT_CHANNEL,
-        serverSeq,
-        action: {
-          type: "root/activeSessionsChanged",
-          activeSessions: sessions.length,
-        },
-      },
-    });
+  private async rootState(): Promise<RootState> {
+    return {
+      agents: [this.options.agentInfo()],
+      activeSessions: await this.options.db.sessions.count(),
+    };
   }
 
-  private sessionAdded(entry: SessionEntry): void {
-    this.options.connections.notify(ROOT_CHANNEL, {
-      jsonrpc: "2.0",
-      method: "root/sessionAdded",
-      params: { channel: ROOT_CHANNEL, summary: entry.summary },
-    });
+  private async resolveSession(channel: SessionChannel | ChatChannel): Promise<SessionEntry> {
+    const entry =
+      channel.kind === "session"
+        ? await this.options.db.sessions.get(channel.id)
+        : await this.options.db.sessions.findChat(channel.id);
+
+    if (!entry) {
+      throw new ProtocolError("Session does not exist", AhpErrorCodes.SessionNotFound);
+    }
+
+    return entry;
   }
 
-  private sessionRemoved(entry: SessionEntry): void {
+  private sessionStub(id: string): SessionRPC {
+    return this.options.sessionNamespace().getByName(sessionDOName(this.options.hostId, id));
+  }
+
+  private async dispose(entry: SessionEntry): Promise<void> {
+    await this.sessionStub(entry.id).dispose();
+    await this.options.db.sessions.remove(entry.id);
     this.options.connections.removeChannel(sessionUri(entry.id));
     this.options.connections.removeChannel(chatUri(entry.defaultChatId));
+
     this.options.connections.notify(ROOT_CHANNEL, {
       jsonrpc: "2.0",
       method: "root/sessionRemoved",
       params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id) },
     });
+
+    await this.catalogueChanged();
+  }
+
+  private async catalogueChanged(): Promise<void> {
+    const activeSessions = await this.options.db.sessions.count();
+    const serverSeq = await this.options.db.host.nextSequence();
+
+    this.options.connections.broadcast({
+      revision: serverSeq,
+      envelope: {
+        channel: ROOT_CHANNEL,
+        serverSeq,
+        action: { type: "root/activeSessionsChanged", activeSessions },
+      },
+    });
   }
 }
 
-function sessionChannelId(channel: string): string {
-  return buildChannelId(channel, "ahp-session");
-}
+function sessionChannel(uri: string): SessionChannel {
+  const channel = parseChannel(uri);
 
-function chatChannelId(channel: string): string {
-  return buildChannelId(channel, "ahp-chat");
-}
-
-function buildChannelId(channel: string, scheme: "ahp-session" | "ahp-chat"): string {
-  const prefix = `${scheme}:/`;
-  if (!channel.startsWith(prefix)) {
-    throw new ProtocolError(`Expected a ${scheme} channel`);
+  if (channel.kind !== "session") {
+    throw new ProtocolError("Expected an ahp-session channel");
   }
 
-  const id = UUIDSchema.parse(channel.slice(prefix.length));
-  if (channel !== `${prefix}${id}`) {
-    throw new ProtocolError("Channel UUID must use lowercase canonical form");
+  return channel;
+}
+
+function localPath(directory: string): string {
+  const url = new URL(directory);
+
+  if (url.protocol !== "file:" || url.hostname || url.search || url.hash) {
+    throw new ProtocolError("Expected a local file working directory");
   }
 
-  return id;
+  return decodeURIComponent(url.pathname);
+}
+
+// Identity fields never change, so only mutable fields that differ are reported.
+function summaryChanges(previous: SessionSummary, next: SessionSummary): Partial<SessionSummary> {
+  const { resource: _resource, provider: _provider, createdAt: _createdAt, ...mutable } = next;
+  const before = new Map(Object.entries(previous));
+
+  return Object.fromEntries(
+    Object.entries(mutable).filter(
+      ([key, value]) => JSON.stringify(before.get(key)) !== JSON.stringify(value),
+    ),
+  );
 }

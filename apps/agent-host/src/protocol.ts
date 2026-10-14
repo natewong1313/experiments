@@ -4,6 +4,7 @@ import type {
   JsonRpcNotification,
   JsonRpcSuccess,
   JsonRpcFailure,
+  JsonValue,
 } from "@experiments/protocol-schemas";
 
 export type JsonRpcMessage = JsonRpcNotification | JsonRpcSuccess | JsonRpcFailure;
@@ -29,11 +30,13 @@ export const DispatchSchema = z.object({
 
 export class ProtocolError extends Error {
   readonly code: number;
+  readonly data: JsonValue | undefined;
 
-  constructor(message: string, code: number = JsonRpcErrorCodes.InvalidParams) {
+  constructor(message: string, code: number = JsonRpcErrorCodes.InvalidParams, data?: JsonValue) {
     super(message);
     this.name = "ProtocolError";
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -41,6 +44,14 @@ export function send(socket: WebSocket, message: JsonRpcMessage): void {
   if (socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
   }
+}
+
+export function sendError(socket: WebSocket, id: JsonRpcFailure["id"], error: ProtocolError): void {
+  send(socket, {
+    jsonrpc: "2.0",
+    id,
+    error: { code: error.code, message: error.message, data: error.data },
+  });
 }
 
 // Exceptions can contain any thrown value, including values outside the wire schemas.

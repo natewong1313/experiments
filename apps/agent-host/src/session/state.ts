@@ -20,27 +20,16 @@ import type { HostSessionUpdateRequest } from "../shared/rpc/host";
 import type { SessionRecord } from "./db/schema";
 import { chatUri, sessionUri } from "../shared/lookups";
 
-// TODO: move this
 export function buildSession(options: SessionCreateRequest, cwd: string): SessionRecord {
   const path = cwd
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
 
-  const summary: AHPSessionSummary = {
-    resource: sessionUri(options.sessionId),
-    provider: options.provider,
-    title: "New session",
-    status: AHPSessionStatus.Idle,
-    createdAt: options.createdAt,
-    modifiedAt: options.createdAt,
-    workingDirectories: [new URL(path, "file:///").href],
-  };
-
   const chat: AHPChatSummary = {
     resource: chatUri(options.chatId),
-    title: summary.title,
-    status: summary.status,
+    title: "New session",
+    status: AHPSessionStatus.Idle,
     modifiedAt: options.createdAt,
   };
 
@@ -50,10 +39,10 @@ export function buildSession(options: SessionCreateRequest, cwd: string): Sessio
   };
 
   const sessionState: AHPSessionState = {
-    provider: summary.provider,
-    title: summary.title,
-    status: summary.status,
-    workingDirectories: summary.workingDirectories,
+    provider: options.provider,
+    title: chat.title,
+    status: chat.status,
+    workingDirectories: [new URL(path, "file:///").href],
     lifecycle: AHPSessionLifecycle.Creating,
     chats: [chat],
     defaultChat: chat.resource,
@@ -64,13 +53,28 @@ export function buildSession(options: SessionCreateRequest, cwd: string): Sessio
     id: options.sessionId,
     hostId: options.hostId,
     acpSessionId: null,
-    summary,
+    cwd,
+    createdAt: options.createdAt,
     revision: 0,
     chatState,
     sessionState,
   };
 }
 
+// The catalogue summary follows the default chat's status and modification time.
+export function sessionSummary(record: SessionRecord): AHPSessionSummary {
+  return {
+    resource: sessionUri(record.id),
+    provider: record.sessionState.provider,
+    title: record.sessionState.title,
+    status: record.chatState.status,
+    createdAt: record.createdAt,
+    modifiedAt: record.chatState.modifiedAt,
+    workingDirectories: record.sessionState.workingDirectories,
+  };
+}
+
+// The apply functions advance the record in place and return the update to publish for it.
 export function applyChat(
   record: SessionRecord,
   action: AHPChatAction,
@@ -93,12 +97,11 @@ export function applyChat(
   };
 
   record.sessionState = ahpSessionReducer(record.sessionState, sessionAction);
-  record.summary = { ...record.summary, status: chat.status, modifiedAt: chat.modifiedAt };
 
   return {
     sessionId: record.id,
     revision: record.revision,
-    summary: record.summary,
+    summary: sessionSummary(record),
     actions: [
       { channel: chat.resource, action, origin },
       { channel: sessionUri(record.id), action: sessionAction },
@@ -116,7 +119,7 @@ export function applySession(
   return {
     sessionId: record.id,
     revision: record.revision,
-    summary: record.summary,
+    summary: sessionSummary(record),
     actions: [{ channel: sessionUri(record.id), action }],
   };
 }

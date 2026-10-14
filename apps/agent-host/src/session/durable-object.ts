@@ -4,6 +4,7 @@ import { errorMessage } from "../protocol";
 import {
   SessionCreateError,
   SessionDispatchError,
+  SessionDisposeError,
   SessionSnapshotError,
 } from "../shared/rpc/session";
 import type {
@@ -24,16 +25,13 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> imp
     workingDirectory: (): string => this.getWorkingDirectory(),
     hostNamespace: (): DurableObjectNamespace<HostRPC> => this.getHostNamespace(),
     connectAgent: (id): Promise<Stream> => this.connectAgent(id),
-    schedule: (promise): void => {
-      this.ctx.waitUntil(promise);
-    },
   });
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(async () => {
       await this.db.migrate();
-      await this.session.recover();
+      await this.session.load();
     });
   }
 
@@ -69,6 +67,10 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> imp
   }
 
   async dispose(): Promise<void> {
-    await this.session.dispose();
+    try {
+      await this.session.dispose();
+    } catch (error) {
+      throw new SessionDisposeError(errorMessage(error));
+    }
   }
 }

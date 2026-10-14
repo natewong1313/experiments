@@ -14,7 +14,7 @@ import type {
   SessionCreateRequest,
   SessionSnapshotResponse,
 } from "../src";
-import { buildSession } from "../src/session/state";
+import { buildSession, sessionSummary } from "../src/session/state";
 import { HostDatabase } from "../src/host/db/database";
 import { SessionDatabase } from "../src/session/db/database";
 import { connectPeer } from "./peer";
@@ -127,33 +127,31 @@ it("retains opaque AHP metadata in snapshots after reconstruction and subscripti
   try {
     await peer.request("createSession", { channel, provider: "test" });
 
-    const chat = await runInDurableObject(stub, async (_instance, ctx) => {
-      const repository = new SessionDatabase(ctx.storage).session;
-      const record = await repository.get();
+    const chat = await runInDurableObject(stub, (_instance, ctx) =>
+      new SessionDatabase(ctx.storage).session.update((record) => {
+        record.sessionState._meta = metadata;
+        record.chatState._meta = metadata;
+        record.chatState.activity = "Retained activity";
+        record.chatState.turns.push({
+          id: crypto.randomUUID(),
+          state: TurnState.Error,
+          message: { text: "hello", origin: { kind: MessageKind.User }, _meta: metadata },
+          usage: { inputTokens: 1, _meta: metadata },
+          responseParts: [
+            {
+              kind: ResponsePartKind.Error,
+              error: { errorType: "agent", message: "Retained error", _meta: metadata },
+            },
+          ],
+        });
 
-      if (!record) {
-        throw new Error("Missing session");
-      }
+        return record.chatState.resource;
+      }),
+    );
 
-      record.sessionState._meta = metadata;
-      record.chatState._meta = metadata;
-      record.chatState.activity = "Retained activity";
-      record.chatState.turns.push({
-        id: crypto.randomUUID(),
-        state: TurnState.Error,
-        message: { text: "hello", origin: { kind: MessageKind.User }, _meta: metadata },
-        usage: { inputTokens: 1, _meta: metadata },
-        responseParts: [
-          {
-            kind: ResponsePartKind.Error,
-            error: { errorType: "agent", message: "Retained error", _meta: metadata },
-          },
-        ],
-      });
-      await repository.save(record);
-
-      return record.chatState.resource;
-    });
+    if (chat === undefined) {
+      throw new Error("Missing session");
+    }
 
     await evictDurableObject(stub);
     expect(await peer.request("subscribe", { channel })).toMatchObject({
@@ -188,7 +186,7 @@ it("validates host updates and ignores sessions absent from its catalogue", asyn
   const update = {
     sessionId: req.sessionId,
     revision: 1,
-    summary: buildSession(req, "/").summary,
+    summary: sessionSummary(buildSession(req, "/")),
     actions: [],
   };
 
@@ -199,14 +197,36 @@ it("validates host updates and ignores sessions absent from its catalogue", asyn
   });
 });
 
+it("rejects host updates with two actions on one channel", async () => {
+  const req = request();
+  const stub = env.COORDINATORS.getByName(req.hostId);
+  const turnId = crypto.randomUUID();
+  const summary = sessionSummary(buildSession(req, "/"));
+
+  const action = {
+    channel: chatUri(req.chatId),
+    action: { type: "chat/turnCancelled" as const, turnId, duration: 0 },
+  };
+
+  const rejected = await rpcError(() =>
+    stub.sessionUpdate({
+      sessionId: req.sessionId,
+      revision: 1,
+      summary,
+      actions: [action, action],
+    }),
+  );
+
+  expect(rejected).toMatchObject({ name: "HostSessionUpdateError" });
+  expect(rejected.message).toContain("Expected at most one action per channel");
+});
+
 it("retains the full AHP summary through host RPC and storage", async () => {
   const req = request();
   const stub = env.COORDINATORS.getByName(req.hostId);
-  const original = buildSession(req, "/").summary;
+  const original = sessionSummary(buildSession(req, "/"));
   await runInDurableObject(stub, async (_instance, ctx) => {
-    const database = new HostDatabase(ctx.storage);
-    await database.host.initialize(req.hostId);
-    await database.sessions.create({
+    await new HostDatabase(ctx.storage).sessions.create({
       id: req.sessionId,
       defaultChatId: req.chatId,
       summary: original,

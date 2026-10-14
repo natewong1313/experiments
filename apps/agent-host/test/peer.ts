@@ -4,6 +4,7 @@ import {
   JsonRpcNotificationSchema,
   JsonRpcReplySchema,
   type ActionEnvelope,
+  type JsonRpcNotification,
   type JsonRpcReply,
   type ChannelParams,
   type CreateSessionParams,
@@ -40,6 +41,7 @@ type PeerParams =
 
 export class Peer {
   readonly actions: ActionEnvelope[] = [];
+  readonly notifications: JsonRpcNotification[] = [];
   private readonly replies: JsonRpcReply[] = [];
   private readonly socket: WebSocket;
   private nextId = 0;
@@ -54,6 +56,8 @@ export class Peer {
       if ("method" in message) {
         if (message.method === "action") {
           this.actions.push(ActionEnvelopeSchema.parse(message.params));
+        } else {
+          this.notifications.push(message);
         }
       } else {
         this.replies.push(message);

@@ -5,7 +5,7 @@ const HOST_PATH = /^\/hosts\/([^/]+)\/ahp$/;
 const NOT_FOUND = 404;
 const UUIDSchema = z.uuid().transform((id) => id.toLowerCase());
 
-export function hostIdFromRequest(request: Request): string | undefined {
+function hostIdFromRequest(request: Request): string | undefined {
   const path = new URL(request.url).pathname;
   const match = HOST_PATH.exec(path);
   const parsed = UUIDSchema.safeParse(match?.[1]);

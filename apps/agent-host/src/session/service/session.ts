@@ -1,3 +1,4 @@
+import { waitUntil } from "cloudflare:workers";
 import type { Stream } from "@agentclientprotocol/sdk";
 import {
   ActionType as AHPActionType,
@@ -10,12 +11,11 @@ import type {
   ChatAction as AHPChatAction,
   ChatTurnStartedAction as AHPChatTurnStartedAction,
 } from "@microsoft/agent-host-protocol";
-import {
-  ChatTurnStartedActionSchema,
-  ChatTurnCancelledActionSchema,
+import type {
+  ChatTurnStartedAction as TurnStartedRequest,
+  ChatTurnCancelledAction as TurnCancelledRequest,
 } from "@experiments/protocol-schemas/ahp";
 import { errorMessage } from "../../protocol";
-import { SessionDisposeError } from "../../shared/rpc/session";
 import type {
   SessionCreateRequest,
   SessionDispatchRequest,
@@ -27,58 +27,64 @@ import { sessionUri } from "../../shared/lookups";
 import type { SessionDatabase } from "../db/database";
 import type { SessionRecord } from "../db/schema";
 import { applyChat, applySession, buildSession } from "../state";
-import { SessionAgent } from "./agent";
-import type { AgentTextUpdate } from "./agent";
+import { AgentConnection } from "./agent";
 
 type SessionOptions = {
   db: SessionDatabase;
   workingDirectory(): string;
   hostNamespace(): DurableObjectNamespace<HostRPC>;
   connectAgent(sessionId: string): Promise<Stream>;
-  schedule(promise: Promise<void>): void;
 };
 
-export class SessionService {
-  private disposed = false;
-  private promptRunning = false;
-  private readonly agent: SessionAgent;
-  private publications = Promise.resolve();
+// Mutates the record and returns the update to publish, or undefined to leave it unchanged.
+type Change = (record: SessionRecord) => HostSessionUpdateRequest | undefined;
 
+type Publication = { hostId: string; update: HostSessionUpdateRequest };
+
+function assertReady(record: SessionRecord): void {
+  if (record.sessionState.lifecycle !== AHPSessionLifecycle.Ready) {
+    throw new Error("Session is not ready");
+  }
+}
+
+export class SessionService {
+  // Covers a turn's whole prompt run, which can outlast the active turn after cancellation.
+  private promptRunning = false;
+  private publications = Promise.resolve();
+  private readonly agent = new AgentConnection();
   private readonly options: SessionOptions;
 
   constructor(options: SessionOptions) {
     this.options = options;
-    this.agent = new SessionAgent({
-      repository: options.db.session,
-      getSession: (): Promise<SessionRecord> => this.getSession(),
-      isDisposed: (): boolean => this.disposed,
-      workingDirectory: (): string => options.workingDirectory(),
-      connectAgent: (id): Promise<Stream> => options.connectAgent(id),
-      update: (notification): Promise<void> => this.update(notification),
-    });
   }
 
-  async recover(): Promise<void> {
-    const record = await this.options.db.session.get();
+  async load(): Promise<void> {
+    const interrupted = this.apply((record) => {
+      const turn = record.chatState.activeTurn;
 
-    if (record?.chatState.activeTurn) {
-      const publication = applyChat(record, {
-        type: AHPActionType.ChatError,
-        turnId: record.chatState.activeTurn.id,
-        duration: 0,
-        part: {
-          kind: AHPResponsePartKind.Error,
-          error: { errorType: "agent", message: "Turn interrupted by session restart" },
-        },
-      });
+      return (
+        turn &&
+        applyChat(record, {
+          type: AHPActionType.ChatError,
+          turnId: turn.id,
+          duration: 0,
+          part: {
+            kind: AHPResponsePartKind.Error,
+            error: { errorType: "agent", message: "Turn interrupted by session restart" },
+          },
+        })
+      );
+    });
 
-      await this.options.db.session.save(record);
-      this.options.schedule(this.publish(publication));
+    if (interrupted) {
+      waitUntil(interrupted);
     }
   }
 
   async create(options: SessionCreateRequest): Promise<void> {
-    if (options.workingDirectory !== undefined && !options.workingDirectory.startsWith("/")) {
+    const cwd = options.workingDirectory ?? this.options.workingDirectory();
+
+    if (!cwd.startsWith("/")) {
       throw new Error("Working directory must be an absolute path");
     }
 
@@ -87,36 +93,26 @@ export class SessionService {
         throw new Error("Session already exists");
       }
 
-      this.disposed = false;
-      const cwd = options.workingDirectory ?? this.options.workingDirectory();
-      const record = buildSession(options, cwd);
-      await this.options.db.session.create(record);
+      await this.options.db.session.create(buildSession(options, cwd));
     });
 
     try {
-      await this.agent.connect();
-      const current = await this.getSession();
-      const publication = applySession(current, { type: AHPActionType.SessionReady });
-      await this.options.db.session.save(current);
-      await this.publish(publication);
+      await this.openAgent();
+      await this.applyExisting((record) =>
+        applySession(record, { type: AHPActionType.SessionReady }),
+      );
     } catch (error) {
+      this.agent.close();
+
       try {
-        const current = await this.options.db.session.get();
-
-        if (current) {
-          const failure = { errorType: "agent", message: errorMessage(error) };
-
-          const publication = applySession(current, {
+        await this.apply((record) =>
+          applySession(record, {
             type: AHPActionType.SessionCreationFailed,
-            error: failure,
-          });
-
-          await this.options.db.session.save(current);
-          await this.publish(publication);
-        }
+            error: { errorType: "agent", message: errorMessage(error) },
+          }),
+        );
       } finally {
-        this.agent.close();
-        await this.options.db.session.remove(options.sessionId);
+        await this.options.db.session.remove();
       }
 
       throw error;
@@ -124,11 +120,15 @@ export class SessionService {
   }
 
   async snapshot(req: SessionSnapshotRequest): Promise<SessionSnapshotResponse> {
-    const record = await this.getSession();
-    const sessionChannel = sessionUri(record.id);
-    const chatChannel = record.sessionState.defaultChat;
+    const record = await this.options.db.session.get();
 
-    if (req.channel !== sessionChannel && req.channel !== chatChannel) {
+    if (!record) {
+      throw new Error("Session does not exist");
+    }
+
+    const sessionChannel = sessionUri(record.id);
+
+    if (req.channel !== sessionChannel && req.channel !== record.sessionState.defaultChat) {
       throw new Error("Channel does not belong to this session");
     }
 
@@ -138,196 +138,193 @@ export class SessionService {
     };
   }
 
-  async dispatch(options: SessionDispatchRequest): Promise<void> {
-    const record = await this.getSession();
+  async dispatch({ action, origin }: SessionDispatchRequest): Promise<void> {
+    if (action.type === "chat/turnStarted") {
+      this.startTurn(action, origin);
+    } else {
+      await this.cancelTurn(action, origin);
+    }
+  }
 
-    if (record.sessionState.lifecycle !== AHPSessionLifecycle.Ready) {
-      throw new Error("Session is not ready");
+  async dispose(): Promise<void> {
+    try {
+      await this.options.db.session.remove();
+      await this.agent.cancel();
+    } finally {
+      this.agent.close();
+    }
+  }
+
+  private startTurn(request: TurnStartedRequest, origin: AHPActionOrigin): void {
+    const { message } = request;
+
+    if (
+      message.origin.kind !== "user" ||
+      (message.attachments?.length ?? 0) > 0 ||
+      message.model ||
+      message.agent
+    ) {
+      throw new Error("Only user text messages are supported");
     }
 
-    if (options.action.type === "chat/turnStarted") {
-      const parsed = ChatTurnStartedActionSchema.parse(options.action);
+    const action: AHPChatTurnStartedAction = {
+      type: AHPActionType.ChatTurnStarted,
+      turnId: request.turnId,
+      startedAt: request.startedAt,
+      message: { text: message.text, origin: { kind: AHPMessageKind.User } },
+    };
 
-      const action: AHPChatTurnStartedAction = {
-        type: AHPActionType.ChatTurnStarted,
-        turnId: parsed.turnId,
-        startedAt: parsed.startedAt,
-        message: { text: parsed.message.text, origin: { kind: AHPMessageKind.User } },
-      };
+    const started = this.applyExisting((record) => {
+      assertReady(record);
 
       if (record.chatState.activeTurn || this.promptRunning) {
         throw new Error("A turn is already running");
-      }
-
-      if (
-        parsed.message.origin.kind !== "user" ||
-        (parsed.message.attachments?.length ?? 0) > 0 ||
-        parsed.message.model ||
-        parsed.message.agent
-      ) {
-        throw new Error("Only user text messages are supported");
       }
 
       if (record.chatState.turns.some((turn) => turn.id === action.turnId)) {
         throw new Error("Turn ID already exists");
       }
 
-      const publication = applyChat(record, action, options.origin);
-      this.promptRunning = true;
-
-      try {
-        await this.options.db.session.save(record);
-      } catch (error) {
-        this.promptRunning = false;
-        throw error;
-      }
-
-      this.options.schedule(this.runPrompt(action, publication));
-
-      return;
-    }
-
-    const parsed = ChatTurnCancelledActionSchema.parse(options.action);
-
-    if (record.chatState.activeTurn?.id !== parsed.turnId) {
-      throw new Error("No matching active turn to cancel");
-    }
-
-    await this.emit({ ...parsed, type: AHPActionType.ChatTurnCancelled }, options.origin);
-    await this.agent.cancel(record.acpSessionId ?? "");
-  }
-
-  async dispose(): Promise<void> {
-    this.disposed = true;
-
-    const record = await this.options.db.session.get().catch((error) => {
-      throw new SessionDisposeError(errorMessage(error));
+      return applyChat(record, action, origin);
     });
 
-    try {
-      if (record && record.acpSessionId !== null) {
-        await this.agent.cancelForDisposal(record.acpSessionId);
-      }
-    } finally {
-      this.agent.close();
-
-      if (record) {
-        await this.options.db.session.remove(record.id);
-      }
-    }
+    this.promptRunning = true;
+    waitUntil(this.runPrompt(action, started));
   }
 
-  private async getSession(): Promise<SessionRecord> {
+  private async cancelTurn(request: TurnCancelledRequest, origin: AHPActionOrigin): Promise<void> {
+    const cancelled = this.applyExisting((record) => {
+      assertReady(record);
+
+      if (record.chatState.activeTurn?.id !== request.turnId) {
+        throw new Error("No matching active turn to cancel");
+      }
+
+      return applyChat(record, { ...request, type: AHPActionType.ChatTurnCancelled }, origin);
+    });
+
+    await Promise.all([cancelled, this.agent.cancel()]);
+  }
+
+  private async openAgent(): Promise<void> {
     const record = await this.options.db.session.get();
 
-    if (!record || this.disposed) {
+    if (!record) {
       throw new Error("Session does not exist");
     }
 
-    return record;
+    const acpSessionId = await this.agent.open({
+      stream: (): Promise<Stream> => this.options.connectAgent(record.id),
+      cwd: record.cwd,
+      sessionId: record.acpSessionId,
+    });
+
+    if (acpSessionId !== record.acpSessionId) {
+      await this.options.db.session.setAcpSessionId(record.id, acpSessionId);
+    }
   }
 
-  private async runPrompt(
-    action: AHPChatTurnStartedAction,
-    publication: HostSessionUpdateRequest,
-  ): Promise<void> {
-    const started = Date.now();
+  private async runPrompt(action: AHPChatTurnStartedAction, started: Promise<void>): Promise<void> {
+    const { turnId } = action;
+    const startedAt = Date.now();
 
     try {
-      await this.publish(publication);
+      await started;
+      await this.openAgent();
 
-      const response = await this.agent.prompt({
-        turnId: action.turnId,
-        text: action.message.text,
-        startResponse: () =>
-          this.emit({
-            type: AHPActionType.ChatResponsePart,
-            turnId: action.turnId,
-            part: { kind: AHPResponsePartKind.Markdown, id: action.turnId, content: "" },
-          }),
+      const responding = this.applyToTurn(turnId, {
+        type: AHPActionType.ChatResponsePart,
+        turnId,
+        part: { kind: AHPResponsePartKind.Markdown, id: turnId, content: "" },
       });
 
-      if (!response) {
+      if (!responding) {
         return;
       }
 
-      const current = await this.options.db.session.get();
+      await responding;
 
-      if (current?.chatState.activeTurn?.id === action.turnId) {
-        await this.emit({
-          type:
-            response.stopReason === "cancelled"
-              ? AHPActionType.ChatTurnCancelled
-              : AHPActionType.ChatTurnComplete,
-          turnId: action.turnId,
-          duration: Date.now() - started,
+      const response = await this.agent.prompt(action.message.text, async (content) => {
+        await this.applyToTurn(turnId, {
+          type: AHPActionType.ChatDelta,
+          turnId,
+          partId: turnId,
+          content,
         });
-      }
+      });
+
+      await this.applyToTurn(turnId, {
+        type:
+          response.stopReason === "cancelled"
+            ? AHPActionType.ChatTurnCancelled
+            : AHPActionType.ChatTurnComplete,
+        turnId,
+        duration: Date.now() - startedAt,
+      });
     } catch (error) {
-      const current = await this.options.db.session.get();
-
-      if (current?.chatState.activeTurn?.id === action.turnId) {
-        await this.emit({
-          type: AHPActionType.ChatError,
-          turnId: action.turnId,
-          duration: Date.now() - started,
-          part: {
-            kind: AHPResponsePartKind.Error,
-            error: { errorType: "agent", message: errorMessage(error) },
-          },
-        });
-      }
+      await this.applyToTurn(turnId, {
+        type: AHPActionType.ChatError,
+        turnId,
+        duration: Date.now() - startedAt,
+        part: {
+          kind: AHPResponsePartKind.Error,
+          error: { errorType: "agent", message: errorMessage(error) },
+        },
+      });
     } finally {
       this.promptRunning = false;
     }
   }
 
-  private async update(notification: AgentTextUpdate): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-
-    const record = await this.options.db.session.get();
-    const turn = record?.chatState.activeTurn;
-
-    if (turn && notification.sessionId === record.acpSessionId) {
-      await this.emit({
-        type: AHPActionType.ChatDelta,
-        turnId: turn.id,
-        partId: turn.id,
-        content: notification.text,
-      });
-    }
+  // Skipped once the turn is no longer active, for example after cancellation.
+  private applyToTurn(turnId: string, action: AHPChatAction): Promise<void> | undefined {
+    return this.apply((record) =>
+      record.chatState.activeTurn?.id === turnId ? applyChat(record, action) : undefined,
+    );
   }
 
-  private async emit(action: AHPChatAction, origin?: AHPActionOrigin): Promise<void> {
-    const record = await this.getSession();
-    const publication = applyChat(record, action, origin);
-    await this.options.db.session.save(record);
-    await this.publish(publication);
+  private applyExisting(
+    change: (record: SessionRecord) => HostSessionUpdateRequest,
+  ): Promise<void> {
+    const published = this.apply(change);
+
+    if (!published) {
+      throw new Error("Session does not exist");
+    }
+
+    return published;
   }
 
-  private publish(publication: HostSessionUpdateRequest): Promise<void> {
-    const previous = this.publications;
-    this.publications = this.publishAfter(previous, publication);
+  /**
+   * Changes the record atomically and queues its publication.
+   * Returns undefined when the session does not exist or `change` skipped it.
+   */
+  private apply(change: Change): Promise<void> | undefined {
+    const publication = this.options.db.session.update((record): Publication | undefined => {
+      const update = change(record);
+
+      return update && { hostId: record.hostId, update };
+    });
+
+    return publication && this.publish(publication);
+  }
+
+  private publish(publication: Publication): Promise<void> {
+    this.publications = this.publishAfter(this.publications, publication);
 
     return this.publications;
   }
 
-  private async publishAfter(
-    previous: Promise<void>,
-    publication: HostSessionUpdateRequest,
-  ): Promise<void> {
+  private async publishAfter(previous: Promise<void>, publication: Publication): Promise<void> {
     try {
       await previous;
     } catch {
       // A fresh subscription snapshot recovers an earlier failed publication.
     }
 
-    const record = await this.options.db.session.get();
-
-    if (record && !this.disposed) {
-      await this.options.hostNamespace().getByName(record.hostId).sessionUpdate(publication);
-    }
+    await this.options
+      .hostNamespace()
+      .getByName(publication.hostId)
+      .sessionUpdate(publication.update);
   }
 }

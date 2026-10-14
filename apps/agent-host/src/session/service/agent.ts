@@ -5,179 +5,168 @@ import type {
   Stream,
   PromptResponse,
 } from "@agentclientprotocol/sdk";
-import type { SessionRepository } from "../db/repositories/session";
-import type { SessionRecord } from "../db/schema";
 
-export type AgentTextUpdate = { sessionId: string; text: string };
-
-type ConnectionOptions = {
-  stream: Stream;
+type OpenOptions = {
+  stream(): Promise<Stream>;
   cwd: string;
+  // Loads this ACP session when set, otherwise starts a new one.
   sessionId: string | null;
 };
 
-type AgentOptions = {
-  repository: SessionRepository;
-  getSession(): Promise<SessionRecord>;
-  isDisposed(): boolean;
-  workingDirectory(): string;
-  connectAgent(sessionId: string): Promise<Stream>;
-  update(notification: AgentTextUpdate): Promise<void>;
+type TextHandler = (text: string) => Promise<void>;
+
+type AgentSession = {
+  connection: ClientConnection;
+  sessionId: string;
+  // Set while a prompt is in flight. Text outside a prompt, such as session/load replay, is dropped.
+  onText?: TextHandler;
 };
 
-type PromptOptions = {
-  turnId: string;
-  text: string;
-  startResponse(): Promise<void>;
-};
+export class AgentConnection {
+  private current?: AgentSession;
+  private opening?: Promise<AgentSession>;
+  private closing = new AbortController();
 
-export class SessionAgent {
-  private connection?: ClientConnection;
-  private connecting?: Promise<ClientConnection>;
-  private loading = false;
+  async open(options: OpenOptions): Promise<string> {
+    const live = this.live();
 
-  private readonly options: AgentOptions;
-
-  constructor(options: AgentOptions) {
-    this.options = options;
-  }
-
-  async connect(): Promise<void> {
-    await this.getConnection();
-  }
-
-  async prompt(options: PromptOptions): Promise<PromptResponse | undefined> {
-    const connection = await this.getConnection();
-    const record = await this.options.getSession();
-
-    if (record.chatState.activeTurn?.id !== options.turnId || record.acpSessionId === null) {
-      return undefined;
+    if (live) {
+      return live.sessionId;
     }
 
-    await options.startResponse();
+    const { signal } = this.closing;
+    const opening = this.opening ?? this.connect(options, signal);
+    this.opening = opening;
 
-    return await connection.agent.request(methods.agent.session.prompt, {
-      sessionId: record.acpSessionId,
-      prompt: [{ type: "text", text: options.text }],
-    });
-  }
+    try {
+      const opened = await opening;
+      signal.throwIfAborted();
 
-  async cancel(sessionId: string): Promise<void> {
-    await this.connection?.agent.notify(methods.agent.session.cancel, { sessionId });
-  }
-
-  async cancelForDisposal(sessionId: string): Promise<void> {
-    if (this.connection && !this.connection.signal.aborted) {
-      await this.cancel(sessionId);
+      return opened.sessionId;
+    } finally {
+      if (this.opening === opening) {
+        this.opening = undefined;
+      }
     }
   }
 
+  // The caller runs one prompt at a time.
+  async prompt(text: string, onText: TextHandler): Promise<PromptResponse> {
+    const live = this.live();
+
+    if (!live) {
+      throw new Error("Agent is not connected");
+    }
+
+    live.onText = onText;
+
+    try {
+      return await live.connection.agent.request(methods.agent.session.prompt, {
+        sessionId: live.sessionId,
+        prompt: [{ type: "text", text }],
+      });
+    } finally {
+      live.onText = undefined;
+    }
+  }
+
+  async cancel(): Promise<void> {
+    const live = this.live();
+
+    if (live) {
+      await live.connection.agent.notify(methods.agent.session.cancel, {
+        sessionId: live.sessionId,
+      });
+    }
+  }
+
+  // Closes the live connection and fails any open in flight.
   close(): void {
-    this.connection?.close();
+    this.closing.abort(new Error("Agent connection was closed"));
+    this.closing = new AbortController();
+    this.opening = undefined;
+    this.current?.connection.close();
+    this.current = undefined;
   }
 
-  private async getConnection(): Promise<ClientConnection> {
-    if (this.connection && !this.connection.signal.aborted) {
-      return this.connection;
-    }
-
-    if (this.connecting) {
-      return await this.connecting;
-    }
-
-    this.connecting = this.openConnection();
-
-    try {
-      return await this.connecting;
-    } finally {
-      this.connecting = undefined;
-    }
+  private live(): AgentSession | undefined {
+    return this.current && !this.current.connection.signal.aborted ? this.current : undefined;
   }
 
-  private async openConnection(): Promise<ClientConnection> {
-    const record = await this.options.getSession();
-    const directory = record.sessionState.workingDirectories?.[0];
+  private async connect(options: OpenOptions, signal: AbortSignal): Promise<AgentSession> {
+    const stream = await options.stream();
+    let opened: AgentSession | undefined;
 
-    const cwd =
-      directory === undefined
-        ? this.options.workingDirectory()
-        : decodeURIComponent(new URL(directory).pathname);
-
-    this.loading = true;
-
-    try {
-      const stream = await this.options.connectAgent(record.id);
-
-      const opened = await this.initializeConnection({
-        stream,
-        cwd,
-        sessionId: record.acpSessionId,
-      });
-
-      if (this.options.isDisposed()) {
-        opened.connection.close();
-        throw new Error("Session was disposed during agent initialization");
-      }
-
-      const current = await this.options.getSession();
-      current.acpSessionId = opened.sessionId;
-      await this.options.repository.save(current);
-      this.connection = opened.connection;
-
-      return opened.connection;
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  private async initializeConnection(
-    options: ConnectionOptions,
-  ): Promise<{ connection: ClientConnection; sessionId: string }> {
     const connection = client({ name: "agent-host" })
-      .onNotification(methods.client.session.update, ({ params }) => this.update(params))
-      .connect(options.stream);
+      .onNotification(methods.client.session.update, async ({ params }) => {
+        await this.receive(opened, params);
+      })
+      .connect(stream);
+
+    function abort(): void {
+      connection.close();
+    }
+
+    signal.addEventListener("abort", abort);
 
     try {
-      const initialized = await connection.agent.request(methods.agent.initialize, {
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: {},
-      });
+      signal.throwIfAborted();
+      const sessionId = await this.initialize(connection, options);
+      signal.throwIfAborted();
+      opened = { connection, sessionId };
+      this.current = opened;
 
-      if (options.sessionId !== null) {
-        if (initialized.agentCapabilities?.loadSession !== true) {
-          throw new Error("Agent does not support loading a persisted session");
-        }
+      return opened;
+    } catch (error) {
+      connection.close();
+      signal.throwIfAborted();
+      throw error;
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
+  }
 
-        await connection.agent.request(methods.agent.session.load, {
-          sessionId: options.sessionId,
-          cwd: options.cwd,
-          mcpServers: [],
-        });
+  private async initialize(connection: ClientConnection, options: OpenOptions): Promise<string> {
+    const initialized = await connection.agent.request(methods.agent.initialize, {
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
 
-        return { connection, sessionId: options.sessionId };
-      }
-
+    if (options.sessionId === null) {
       const created = await connection.agent.request(methods.agent.session.new, {
         cwd: options.cwd,
         mcpServers: [],
       });
 
-      return { connection, sessionId: created.sessionId };
-    } catch (error) {
-      connection.close();
-      throw error;
+      return created.sessionId;
     }
+
+    if (initialized.agentCapabilities?.loadSession !== true) {
+      throw new Error("Agent does not support loading a persisted session");
+    }
+
+    await connection.agent.request(methods.agent.session.load, {
+      sessionId: options.sessionId,
+      cwd: options.cwd,
+      mcpServers: [],
+    });
+
+    return options.sessionId;
   }
 
-  private async update(notification: SessionNotification): Promise<void> {
-    if (this.loading || this.options.isDisposed()) {
-      return;
-    }
-
+  private async receive(
+    session: AgentSession | undefined,
+    notification: SessionNotification,
+  ): Promise<void> {
     const { update } = notification;
 
-    if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-      await this.options.update({ sessionId: notification.sessionId, text: update.content.text });
+    if (
+      session?.onText &&
+      notification.sessionId === session.sessionId &&
+      update.sessionUpdate === "agent_message_chunk" &&
+      update.content.type === "text"
+    ) {
+      await session.onText(update.content.text);
     }
   }
 }

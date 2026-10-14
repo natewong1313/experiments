@@ -8,6 +8,13 @@
       "when": 1791896788370,
       "tag": "0000_common_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791984489988,
+      "tag": "0001_session_cwd",
+      "breakpoints": true
     }
   ]
 }

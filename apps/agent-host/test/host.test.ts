@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
+import * as z from "zod";
 import {
   ChatStateSchema,
   type ChatState,
@@ -18,6 +19,9 @@ import { sessionDOName } from "../src/shared/lookups";
 type CreatedSession = { sessionId: string; channel: string; chat: string };
 
 const NOT_FOUND = 404;
+
+const ChangesSchema = z.record(z.string(), z.json());
+const SummaryChangedSchema = z.object({ changes: ChangesSchema });
 
 async function createSession(peer: Peer): Promise<CreatedSession> {
   const sessionId = crypto.randomUUID();
@@ -62,6 +66,62 @@ it("routes UUID hosts and rejects an invalid host path", async () => {
   expect(response.status).toBe(NOT_FOUND);
 });
 
+it("refuses a host that was not addressed by name", async () => {
+  const stub = env.COORDINATORS.get(env.COORDINATORS.newUniqueId());
+  const upgrade = new Request("https://host/", { headers: { Upgrade: "websocket" } });
+
+  await expect(stub.fetch(upgrade)).rejects.toThrow("AgentHost must be addressed by name");
+});
+
+it("rejects actions on a session channel and reports only changed summary fields", async () => {
+  const peer = await connectPeer(crypto.randomUUID());
+
+  try {
+    const session = await createSession(peer);
+    await peer.request("subscribe", { channel: "ahp-root://" });
+
+    peer.notify("dispatchAction", {
+      channel: session.channel,
+      clientSeq: 1,
+      action: {
+        type: "chat/turnStarted",
+        turnId: crypto.randomUUID(),
+        startedAt: new Date().toISOString(),
+        message: { text: "hello", origin: { kind: "user" } },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(peer.actions).toContainEqual(
+        expect.objectContaining({
+          channel: session.channel,
+          rejectionReason: "Actions must target a chat channel",
+        }),
+      );
+    });
+
+    start(peer, session.chat, "hello");
+    await vi.waitFor(() => {
+      expect(peer.actions.some((item) => item.action.type === "chat/turnComplete")).toBe(true);
+    });
+
+    const changes = peer.notifications
+      .filter((item) => item.method === "root/sessionSummaryChanged")
+      .map((item) => SummaryChangedSchema.parse(item.params).changes);
+
+    expect(changes.length).toBeGreaterThan(0);
+
+    for (const changed of changes) {
+      expect(Object.keys(changed).length).toBeGreaterThan(0);
+      expect(changed).not.toHaveProperty("resource");
+      expect(changed).not.toHaveProperty("createdAt");
+      expect(changed).not.toHaveProperty("workingDirectories");
+    }
+  } finally {
+    peer.close();
+  }
+});
+
 it("streams the same turn to two clients and retains it after reconstruction", async () => {
   const hostId = crypto.randomUUID();
   const first = await connectPeer(hostId);
@@ -99,6 +159,26 @@ it("streams the same turn to two clients and retains it after reconstruction", a
   } finally {
     first.close();
     second.close();
+  }
+});
+
+it("keeps every text update when the agent streams several at once", async () => {
+  const peer = await connectPeer(crypto.randomUUID());
+
+  try {
+    const session = await createSession(peer);
+    const turnId = start(peer, session.chat, "stream");
+    await vi.waitFor(() => {
+      expect(peer.actions.some((item) => item.action.type === "chat/turnComplete")).toBe(true);
+    });
+    const state = await chatState(peer, session.chat);
+    expect(state.turns[0]).toMatchObject({
+      id: turnId,
+      state: "complete",
+      responseParts: [{ kind: "markdown", content: "stream" }],
+    });
+  } finally {
+    peer.close();
   }
 });
 
@@ -183,23 +263,22 @@ it("records an interrupted turn as an error on reconstruction", async () => {
   try {
     const session = await createSession(peer);
     const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
-    await runInDurableObject(stub, async (_instance, ctx) => {
-      const repository = new SessionDatabase(ctx.storage).session;
-      const record = await repository.get();
 
-      if (!record) {
-        throw new Error("Missing session");
-      }
+    const interrupted = await runInDurableObject(stub, (_instance, ctx) =>
+      new SessionDatabase(ctx.storage).session.update((record) => {
+        record.chatState.activeTurn = {
+          id: crypto.randomUUID(),
+          startedAt: new Date().toISOString(),
+          message: { text: "unfinished", origin: { kind: MessageKind.User } },
+          responseParts: [],
+          usage: undefined,
+        };
 
-      record.chatState.activeTurn = {
-        id: crypto.randomUUID(),
-        startedAt: new Date().toISOString(),
-        message: { text: "unfinished", origin: { kind: MessageKind.User } },
-        responseParts: [],
-        usage: undefined,
-      };
-      await repository.save(record);
-    });
+        return record.chatState.activeTurn.id;
+      }),
+    );
+
+    expect(interrupted).toBeDefined();
     await evictDurableObject(stub);
     const state = await chatState(peer, session.chat);
     expect(state.activeTurn).toBeUndefined();

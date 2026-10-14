@@ -38,10 +38,20 @@ export class AgentSession extends BaseSession<TestEnv> {
       .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
         const [text] = params.prompt;
         const output = text?.type === "text" ? text.text : "";
-        await client.notify(methods.client.session.update, {
-          sessionId: params.sessionId,
-          update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: output } },
-        });
+        // "stream" arrives as several updates; anything else is a single update.
+        const chunks = output === "stream" ? ["st", "re", "am"] : [output];
+
+        await Promise.all(
+          chunks.map((chunk) =>
+            client.notify(methods.client.session.update, {
+              sessionId: params.sessionId,
+              update: {
+                sessionUpdate: "agent_message_chunk",
+                content: { type: "text", text: chunk },
+              },
+            }),
+          ),
+        );
 
         if (output === "hold") {
           this.pending = Promise.withResolvers<PromptResponse>();

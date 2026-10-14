@@ -1,16 +1,29 @@
-import type {
-  ActionOrigin,
-  ChatAction,
-  SessionAction,
-  SessionSummary as AHPSessionSummary,
-} from "@microsoft/agent-host-protocol";
+import * as z from "zod";
+import { ActionEnvelopeSchema, SessionSummarySchema } from "@experiments/protocol-schemas/ahp";
 
-export type HostSessionUpdateRequest = {
-  sessionId: string;
-  revision: number;
-  summary: AHPSessionSummary;
-  actions: { channel: string; action: ChatAction | SessionAction; origin?: ActionOrigin }[];
-};
+const SessionActionSchema = ActionEnvelopeSchema.pick({
+  channel: true,
+  action: true,
+  origin: true,
+});
+
+export const HostSessionUpdateRequestSchema = z.object({
+  sessionId: z.string(),
+  revision: z.number(),
+  summary: SessionSummarySchema,
+  /**
+   * Subscribers skip actions at or below their channel's revision, so a second action on the
+   * same channel with the same revision would never be delivered.
+   */
+  actions: z
+    .array(SessionActionSchema)
+    .refine(
+      (actions) => new Set(actions.map((item) => item.channel)).size === actions.length,
+      "Expected at most one action per channel",
+    ),
+});
+
+export type HostSessionUpdateRequest = z.input<typeof HostSessionUpdateRequestSchema>;
 
 export class HostSessionUpdateError extends Error {
   constructor(message: string) {
