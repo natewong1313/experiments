@@ -2,18 +2,18 @@ export { AgentHost } from "./host/durable-object";
 
 export { AgentSession } from "./session/durable-object";
 
-export { routeAgentHost } from "./host/router";
+export { routeAgentHost } from "./helpers/router";
 
-export { HostSessionUpdateError } from "./rpc/host";
+export { HostSessionUpdateError } from "./shared/rpc/host";
 
-export type { HostRPC, HostSessionUpdateRequest } from "./rpc/host";
+export type { HostRPC, HostSessionUpdateRequest } from "./shared/rpc/host";
 
 export {
   SessionCreateError,
   SessionDispatchError,
   SessionSnapshotError,
   SessionDisposeError,
-} from "./rpc/session";
+} from "./shared/rpc/session";
 
 export type {
   SessionRPC,
@@ -22,4 +22,4 @@ export type {
   SessionDispatchRequest,
   SessionSnapshotRequest,
   SessionSnapshotResponse,
-} from "./rpc/session";
+} from "./shared/rpc/session";

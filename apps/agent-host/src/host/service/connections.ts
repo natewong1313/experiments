@@ -1,20 +1,22 @@
 import * as z from "zod";
-import type { JsonRpcMessage } from "../protocol";
-import { send } from "../protocol";
-import type { DeliveredAction } from "../types";
+import type { JsonRpcMessage } from "../../protocol";
+import { send } from "../../protocol";
+import type { ActionEnvelope as AHPActionEnvelope } from "@experiments/protocol-schemas/ahp";
 
 const AttachmentSchema = z.object({
   clientId: z.string().optional(),
   subscriptions: z.record(z.string(), z.number()),
 });
 
-export type ConnectionAttachment = z.output<typeof AttachmentSchema>;
+type ConnectionAttachment = z.output<typeof AttachmentSchema>;
+
+type DeliveredAction = { envelope: AHPActionEnvelope; revision: number };
 
 type PendingSubscription = { channel: string; actions: DeliveredAction[] };
 
-export class Connections {
-  private readonly ctx: DurableObjectState;
-  private readonly pending: Map<WebSocket, Map<string, PendingSubscription>> = new Map();
+export class ConnectionsService {
+  private ctx: DurableObjectState;
+  private pending: Map<WebSocket, Map<string, PendingSubscription>> = new Map();
 
   constructor(ctx: DurableObjectState) {
     this.ctx = ctx;

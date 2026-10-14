@@ -6,13 +6,9 @@ import type {
   JsonRpcFailure,
 } from "@experiments/protocol-schemas";
 
-export type JsonRpcMessage =
-  | JsonRpcNotification
-  | JsonRpcSuccess
-  | (Omit<JsonRpcFailure, "id"> & { id: string | number | null });
+export type JsonRpcMessage = JsonRpcNotification | JsonRpcSuccess | JsonRpcFailure;
 
 export const ROOT_CHANNEL = "ahp-root://";
-export const UUIDSchema = z.uuid().transform((id) => id.toLowerCase());
 
 export const MessageSchema = z.object({
   jsonrpc: z.literal("2.0"),
@@ -39,22 +35,6 @@ export class ProtocolError extends Error {
     this.name = "ProtocolError";
     this.code = code;
   }
-}
-
-export function channelId(channel: string, scheme: "ahp-session" | "ahp-chat"): string {
-  const prefix = `${scheme}:/`;
-
-  if (!channel.startsWith(prefix)) {
-    throw new ProtocolError(`Expected a ${scheme} channel`);
-  }
-
-  const id = UUIDSchema.parse(channel.slice(prefix.length));
-
-  if (channel !== `${prefix}${id}`) {
-    throw new ProtocolError("Channel UUID must use lowercase canonical form");
-  }
-
-  return id;
 }
 
 export function send(socket: WebSocket, message: JsonRpcMessage): void {

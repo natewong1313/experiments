@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ActionEnvelopeSchema,
   InitializeResultSchema,
+  JsonRpcFailureSchema,
   JsonRpcNotificationSchema,
   JsonRpcReplySchema,
   RootStateSchema,
@@ -9,6 +10,7 @@ import {
   SnapshotSchema,
   TerminalStateSchema,
 } from "../src/ahp/index";
+import { AcpMessageSchema, AcpOutboundMessageSchema } from "../src/acp/index";
 
 describe("jsonrpc frames", () => {
   it("parses a success reply", () => {
@@ -29,6 +31,43 @@ describe("jsonrpc frames", () => {
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it("parses a failure reply with an unknown request id", () => {
+    const reply = {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32_700, message: "Parse error" },
+    };
+
+    expect(JsonRpcFailureSchema.parse(reply)).toEqual(reply);
+    expect(JsonRpcReplySchema.parse(reply)).toEqual(reply);
+  });
+
+  it("requires an id field on failure replies", () => {
+    const parsed = JsonRpcReplySchema.safeParse({
+      jsonrpc: "2.0",
+      error: { code: -32_700, message: "Parse error" },
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a null id on success replies", () => {
+    const parsed = JsonRpcReplySchema.safeParse({ jsonrpc: "2.0", id: null, result: {} });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("continues parsing ACP failure replies with null ids", () => {
+    const reply = {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32_700, message: "Parse error" },
+    };
+
+    expect(AcpMessageSchema.parse(reply)).toEqual(reply);
+    expect(AcpOutboundMessageSchema.parse(reply)).toEqual(reply);
   });
 
   it("rejects a frame carrying both result and error", () => {

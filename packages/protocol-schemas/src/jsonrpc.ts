@@ -32,7 +32,7 @@ export const JsonRpcSuccessSchema = z.strictObject({
 
 export const JsonRpcFailureSchema = z.strictObject({
   jsonrpc: jsonRpcVersionSchema,
-  id: jsonRpcIdSchema,
+  id: jsonRpcIdSchema.nullable(),
   error: JsonRpcErrorSchema,
 });
 

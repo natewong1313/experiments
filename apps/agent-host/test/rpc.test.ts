@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   SessionOriginKind,
   MessageKind,
@@ -300,5 +300,39 @@ it("rejects a second concurrent session creation on the same object", async () =
     });
   } finally {
     await stub.dispose();
+  }
+});
+
+it("rejects agent initialization after disposal and can recreate the session on the same instance", async () => {
+  const req = request();
+  const channel = sessionUri(req.sessionId);
+  const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
+  const session: SessionRPC = stub;
+  await stub.holdInitialization();
+  const creation = rpcError(() => session.create(req));
+
+  try {
+    await vi.waitFor(async () => {
+      const snapshot = await session.snapshot({ channel });
+      expect(snapshot.state).toMatchObject({ lifecycle: "creating" });
+    });
+    await session.dispose();
+    await stub.releaseInitialization(true);
+    expect(await creation).toMatchObject({ name: "SessionCreateError" });
+    const missing = await rpcError(() => session.snapshot({ channel }));
+    expect(missing).toMatchObject({
+      name: "SessionSnapshotError",
+      message: "Session does not exist",
+    });
+
+    await session.create(req);
+    expect(await session.snapshot({ channel })).toMatchObject({
+      revision: 1,
+      state: { lifecycle: "ready", defaultChat: chatUri(req.chatId) },
+    });
+  } finally {
+    await stub.releaseInitialization(true);
+    await creation;
+    await session.dispose();
   }
 });

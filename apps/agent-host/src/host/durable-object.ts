@@ -1,37 +1,33 @@
 import { DurableObject } from "cloudflare:workers";
-import * as z from "zod";
-import {
-  AhpErrorCodes,
-  JsonRpcErrorCodes as AHPJsonRpcErrorCodes,
-} from "@microsoft/agent-host-protocol";
+import type * as z from "zod";
+import { JsonRpcErrorCodes as AHPJsonRpcErrorCodes } from "@microsoft/agent-host-protocol";
 import type {
   AgentInfo as AHPAgentInfo,
   RootState as AHPRootState,
 } from "@microsoft/agent-host-protocol";
-import { StateActionSchema, SessionSummarySchema } from "@experiments/protocol-schemas/ahp";
-import {
-  MessageSchema,
-  ProtocolError,
-  ROOT_CHANNEL,
-  channelId,
-  send,
-  errorMessage,
-} from "../protocol";
-import { HostSessionUpdateError } from "../rpc/host";
-import type { HostRPC, HostSessionUpdateRequest } from "../rpc/host";
-import type { SessionRPC, SessionNamespace } from "../rpc/session";
+import { MessageSchema, ProtocolError, send, errorMessage } from "../protocol";
+import { HostSessionUpdateError } from "../shared/rpc/host";
+import type { HostRPC, HostSessionUpdateRequest } from "../shared/rpc/host";
+import type { SessionRPC, SessionNamespace } from "../shared/rpc/session";
 import { HostDatabase } from "./db/database";
 import type { SessionEntry } from "./db/schema";
-import { Connections } from "./connections";
+import { ConnectionsService } from "./service/connections";
+import { HostSessionsService } from "./service/sessions";
 import { handleRequest } from "./requests";
-import { hostIdFromRequest } from "./router";
-import { chatUri, sessionDOName, sessionUri } from "../shared/lookups";
+import { hostIdFromRequest } from "../helpers/router";
 
 const SOCKET_CLOSED_CODE = 1000;
 
 export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implements HostRPC {
-  protected readonly db = new HostDatabase(this.ctx.storage);
-  readonly connections = new Connections(this.ctx);
+  private db = new HostDatabase(this.ctx.storage);
+  private connections = new ConnectionsService(this.ctx);
+  private sessions = new HostSessionsService({
+    host: this.db.host,
+    sessions: this.db.sessions,
+    connections: this.connections,
+    agentInfo: (): AHPAgentInfo => this.getAgentInfo(),
+    sessionNamespace: (): SessionNamespace => this.getSessionNamespace(),
+  });
   private messages: WeakMap<WebSocket, Promise<void>> = new WeakMap();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -89,120 +85,31 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
   }
 
   async rootState(): Promise<AHPRootState> {
-    const sessions = await this.db.sessions.list();
-
-    return {
-      agents: [this.getAgentInfo()],
-      activeSessions: sessions.length,
-    };
+    return await this.sessions.rootState();
   }
 
   async sessionStub(id: string): Promise<SessionRPC> {
-    const host = await this.db.host.get();
-    if (!host) {
-      throw new ProtocolError("Host is not initialized");
-    }
-
-    return this.getSessionNamespace().getByName(sessionDOName(host.id, id));
+    return await this.sessions.sessionStub(id);
   }
 
   async resolveSession(channel: string): Promise<SessionEntry> {
-    const entry = channel.startsWith("ahp-session:/")
-      ? await this.db.sessions.get(channelId(channel, "ahp-session"))
-      : await this.db.sessions.findChat(channelId(channel, "ahp-chat"));
-
-    if (!entry) {
-      throw new ProtocolError("Session does not exist", AhpErrorCodes.SessionNotFound);
-    }
-
-    return entry;
+    return await this.sessions.resolveSession(channel);
   }
 
   async sessionUpdate(req: HostSessionUpdateRequest): Promise<void> {
     try {
-      const parsed = z
-        .object({
-          sessionId: z.string(),
-          revision: z.number(),
-          summary: SessionSummarySchema,
-          actions: z.array(
-            z.object({
-              channel: z.string(),
-              action: StateActionSchema,
-              origin: z.object({ clientId: z.string(), clientSeq: z.number() }).optional(),
-            }),
-          ),
-        })
-        .parse(req);
-
-      const publication = parsed;
-      const entry = await this.db.sessions.get(publication.sessionId);
-
-      if (!entry) {
-        return;
-      }
-
-      await this.db.sessions.update(entry.id, req.summary);
-
-      await Promise.all(
-        publication.actions.map(async (item) => {
-          const envelope = {
-            ...item,
-            serverSeq: await this.db.host.nextSequence(),
-            origin: item.origin,
-          };
-
-          this.connections.broadcast({ envelope, revision: publication.revision });
-        }),
-      );
-
-      if (JSON.stringify(entry.summary) !== JSON.stringify(publication.summary)) {
-        const {
-          resource: _resource,
-          createdAt: _createdAt,
-          provider: _provider,
-          ...changes
-        } = publication.summary;
-
-        this.connections.notify(ROOT_CHANNEL, {
-          jsonrpc: "2.0",
-          method: "root/sessionSummaryChanged",
-          params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id), changes },
-        });
-      }
+      await this.sessions.sessionUpdate(req);
     } catch (error) {
       throw new HostSessionUpdateError(errorMessage(error));
     }
   }
 
   async catalogueChanged(): Promise<void> {
-    const sessions = await this.db.sessions.list();
-    const serverSeq = await this.db.host.nextSequence();
-    this.connections.broadcast({
-      revision: serverSeq,
-      envelope: {
-        channel: ROOT_CHANNEL,
-        serverSeq,
-        action: {
-          type: "root/activeSessionsChanged",
-          activeSessions: sessions.length,
-        },
-      },
-    });
+    await this.sessions.catalogueChanged();
   }
 
   async disposeSession(entry: SessionEntry): Promise<void> {
-    const stub = await this.sessionStub(entry.id);
-    await stub.dispose();
-    await this.db.sessions.remove(entry.id);
-    this.connections.removeChannel(sessionUri(entry.id));
-    this.connections.removeChannel(chatUri(entry.defaultChatId));
-    this.connections.notify(ROOT_CHANNEL, {
-      jsonrpc: "2.0",
-      method: "root/sessionRemoved",
-      params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id) },
-    });
-    await this.catalogueChanged();
+    await this.sessions.dispose(entry);
   }
 
   private async handleWebsocketMessage(
@@ -219,7 +126,13 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
       }
 
       message = MessageSchema.parse(JSON.parse(raw));
-      await handleRequest({ host: this, db: this.db, socket, message });
+      await handleRequest({
+        sessions: this.sessions,
+        connections: this.connections,
+        hostRepository: this.db.host,
+        socket,
+        message,
+      });
     } catch (error) {
       const code = error instanceof ProtocolError ? error.code : AHPJsonRpcErrorCodes.InvalidParams;
 

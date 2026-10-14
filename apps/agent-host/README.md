@@ -16,7 +16,7 @@ flowchart LR
   Session <-->|ACP stream| Backend[Agent backend]
 ```
 
-The contracts in `src/rpc/host.ts` and `src/rpc/session.ts` define typed requests,
+The contracts in `src/shared/rpc/host.ts` and `src/shared/rpc/session.ts` define typed requests,
 responses, and method-specific errors. Both DOs implement these interfaces and
 resolve their peers through namespaces typed by the contracts. Updates and
 snapshots cross RPC as objects. Snapshots return the persisted AHP state without
@@ -89,10 +89,11 @@ typed JSON mode, and `casing: "snake_case"` in both runtime and Kit configuratio
 ```text
 src/
 ├── host/
-│   ├── router.ts
 │   ├── durable-object.ts
 │   ├── requests.ts
-│   ├── connections.ts
+│   ├── service/
+│   │   ├── sessions.ts
+│   │   └── connections.ts
 │   └── db/
 │       ├── schema.ts
 │       ├── database.ts
@@ -104,6 +105,9 @@ src/
 ├── session/
 │   ├── durable-object.ts
 │   ├── state.ts
+│   ├── service/
+│   │   ├── session.ts
+│   │   └── agent.ts
 │   └── db/
 │       ├── schema.ts
 │       ├── database.ts
@@ -111,14 +115,26 @@ src/
 │       ├── migrations/
 │       └── repositories/
 │           └── session.ts
-├── agent/
-│   ├── connection.ts
-│   └── updates.ts
+├── shared/
+│   ├── lookups.ts
+│   └── rpc/
+│       ├── host.ts
+│       └── session.ts
 ├── helpers/
+│   ├── router.ts
+│   └── websocket-stream.ts
 ├── index.ts
 ├── protocol.ts
 └── types.ts
 ```
+
+Each DO constructs its services once. The host sessions service owns catalogue
+workflows, sequence allocation, and publication decisions. It uses the connections
+service for socket subscriptions, buffering, and delivery. The session service owns
+session state, disposal and active-prompt flags, and the ordered host-update queue.
+Its agent service owns the ACP connection, connection-opening promise, and loading
+flag. These instances share the DO's lifetime. Reconstruction creates fresh
+services and recovers interrupted turns from storage.
 
 The host database has `host` and `sessions` tables. The session database has one
 `session` row with typed session state, chat state, and summary JSON. This stores

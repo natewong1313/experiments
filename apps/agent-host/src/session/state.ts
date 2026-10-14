@@ -15,8 +15,8 @@ import type {
   SessionAction as AHPSessionAction,
   SessionSummary as AHPSessionSummary,
 } from "@microsoft/agent-host-protocol";
-import type { SessionCreateRequest } from "../rpc/session";
-import type { HostSessionUpdateRequest } from "../rpc/host";
+import type { SessionCreateRequest } from "../shared/rpc/session";
+import type { HostSessionUpdateRequest } from "../shared/rpc/host";
 import type { SessionRecord } from "./db/schema";
 import { chatUri, sessionUri } from "../shared/lookups";
 

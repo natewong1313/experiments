@@ -1,8 +1,9 @@
-import { UUIDSchema } from "../protocol";
-import type { AgentHost } from "./durable-object";
+import type { AgentHost } from "../host/durable-object";
+import * as z from "zod";
 
 const HOST_PATH = /^\/hosts\/([^/]+)\/ahp$/;
 const NOT_FOUND = 404;
+const UUIDSchema = z.uuid().transform((id) => id.toLowerCase());
 
 export function hostIdFromRequest(request: Request): string | undefined {
   const path = new URL(request.url).pathname;

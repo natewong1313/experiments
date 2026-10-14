@@ -140,6 +140,39 @@ describe("raw AHP connection over WebSocket", () => {
 });
 
 describe("raw AHP connection multiplexing", () => {
+  test("records null-id failures without resolving a pending request", async () => {
+    await withPeer(
+      (socket) => {
+        socket.on("message", (data) => {
+          const request = JsonRpcRequestSchema.parse(JSON.parse(data.toString()));
+
+          socket.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: null,
+              error: { code: -32_700, message: "Parse error" },
+            }),
+          );
+          socket.send(
+            JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { accepted: true } }),
+          );
+        });
+      },
+      async (url) => {
+        const connection = await AhpConnection.open(url);
+
+        try {
+          expect(await connection.request("barrier", {})).toMatchObject({
+            result: { accepted: true },
+          });
+          expect(connection.checkpoint).toBe(2);
+        } finally {
+          await connection.close();
+        }
+      },
+    );
+  });
+
   test("rejects checkpoints outside the received transcript", async () => {
     await withPeer(
       (socket) => {

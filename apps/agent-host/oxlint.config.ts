@@ -7,7 +7,7 @@ export default defineConfig({
   ignorePatterns: ["worker-configuration.d.ts", "src/**/db/migrations/**"],
   overrides: [
     {
-      files: ["src/rpc/*.ts"],
+      files: ["src/shared/rpc/*.ts"],
       rules: {
         "typescript/consistent-type-definitions": "off",
         "eslint/max-classes-per-file": "off",
@@ -15,7 +15,7 @@ export default defineConfig({
     },
     {
       // Zod declarations compose schemas through nested calls.
-      files: ["src/protocol.ts", "src/host/connections.ts", "src/host/durable-object.ts"],
+      files: ["src/protocol.ts", "src/host/service/connections.ts", "src/host/service/sessions.ts"],
       rules: { "unicorn/max-nested-calls": "off" },
     },
     {

@@ -13,18 +13,6 @@ export type SessionCreateRequest = {
   workingDirectory?: string;
 };
 
-export type SessionDispatchRequest = {
-  action: ChatTurnStartedAction | ChatTurnCancelledAction;
-  origin: ActionOrigin;
-};
-
-export type SessionSnapshotRequest = { channel: string };
-
-export type SessionSnapshotResponse = {
-  revision: number;
-  state: SessionState | ChatState;
-};
-
 export class SessionCreateError extends Error {
   constructor(message: string) {
     super(message);
@@ -32,12 +20,24 @@ export class SessionCreateError extends Error {
   }
 }
 
+export type SessionDispatchRequest = {
+  action: ChatTurnStartedAction | ChatTurnCancelledAction;
+  origin: ActionOrigin;
+};
+
 export class SessionDispatchError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "SessionDispatchError";
   }
 }
+
+export type SessionSnapshotRequest = { channel: string };
+
+export type SessionSnapshotResponse = {
+  revision: number;
+  state: SessionState | ChatState;
+};
 
 export class SessionSnapshotError extends Error {
   constructor(message: string) {

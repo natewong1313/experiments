@@ -107,7 +107,7 @@ function isText(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function isReplyId(value: string | number): value is number {
+function isReplyId(value: JsonRpcReply["id"]): value is number {
   return typeof value === "number";
 }
 
