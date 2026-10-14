@@ -1,4 +1,4 @@
-import * as z from "zod";
+import type * as z from "zod";
 import {
   AhpErrorCodes,
   JsonRpcErrorCodes,
@@ -16,7 +16,8 @@ import {
   InitializeParamsSchema,
   ListSessionsParamsSchema,
   SubscribeParamsSchema,
-  SnapshotSchema,
+  ChatTurnStartedActionSchema,
+  ChatTurnCancelledActionSchema,
 } from "@experiments/protocol-schemas/ahp";
 import {
   ChannelSchema,
@@ -24,7 +25,6 @@ import {
   ProtocolError,
   ROOT_CHANNEL,
   channelId,
-  sessionUri,
   send,
   errorMessage,
 } from "../protocol";
@@ -50,22 +50,24 @@ async function snapshot<Env>(
   channel: string,
 ): Promise<SnapshotResult> {
   const { host, db } = options;
-  const fromSeq = db.host.get()?.serverSeq ?? 0;
+  const currentHost = await db.host.get();
+  const fromSeq = currentHost?.serverSeq ?? 0;
 
   if (channel === ROOT_CHANNEL) {
-    return { snapshot: { resource: channel, state: host.rootState(), fromSeq }, revision: fromSeq };
+    return {
+      snapshot: { resource: channel, state: await host.rootState(), fromSeq },
+      revision: fromSeq,
+    };
   }
 
-  const entry = host.resolveSession(channel);
-  const serialized = await host.sessionStub(entry.id).snapshot(channel);
+  const entry = await host.resolveSession(channel);
+  const stub = await host.sessionStub(entry.id);
+  const response = await stub.snapshot({ channel });
 
-  const result = z
-    .object({ revision: z.number(), state: SnapshotSchema.shape.state })
-    .parse(JSON.parse(serialized));
-
-  const { state } = result;
-
-  return { snapshot: { resource: channel, state, fromSeq }, revision: result.revision };
+  return {
+    snapshot: { resource: channel, state: response.state, fromSeq },
+    revision: response.revision,
+  };
 }
 
 async function initialize<Env>(options: RequestOptions<Env>): Promise<void> {
@@ -98,7 +100,8 @@ async function initialize<Env>(options: RequestOptions<Env>): Promise<void> {
   }
 
   try {
-    const serverSeq = db.host.get()?.serverSeq ?? 0;
+    const currentHost = await db.host.get();
+    const serverSeq = currentHost?.serverSeq ?? 0;
     const snapshots = await Promise.all(channels.map((channel) => snapshot({ host, db }, channel)));
     host.connections.initialize(socket, params.clientId);
 
@@ -142,7 +145,7 @@ async function createSession<Env>(options: RequestOptions<Env>): Promise<null> {
     throw new ProtocolError("Agent provider does not exist", AhpErrorCodes.ProviderNotFound);
   }
 
-  if (db.sessions.get(id)) {
+  if (await db.sessions.get(id)) {
     throw new ProtocolError("Session already exists", AhpErrorCodes.SessionAlreadyExists);
   }
 
@@ -165,7 +168,8 @@ async function createSession<Env>(options: RequestOptions<Env>): Promise<null> {
     workingDirectory = decodeURIComponent(url.pathname);
   }
 
-  const hostId = db.host.get()?.id;
+  const currentHost = await db.host.get();
+  const hostId = currentHost?.id;
 
   if (hostId === undefined) {
     throw new ProtocolError("Host is not initialized");
@@ -178,6 +182,7 @@ async function createSession<Env>(options: RequestOptions<Env>): Promise<null> {
     id,
     defaultChatId: chatId,
     summary: {
+      resource: params.channel,
       provider: agent.provider,
       title: "New session",
       status: SessionStatus.Idle,
@@ -186,16 +191,17 @@ async function createSession<Env>(options: RequestOptions<Env>): Promise<null> {
     },
   };
 
-  db.sessions.create(entry);
+  await db.sessions.create(entry);
   host.connections.notify(ROOT_CHANNEL, {
     jsonrpc: "2.0",
     method: "root/sessionAdded",
-    params: { channel: ROOT_CHANNEL, summary: { ...entry.summary, resource: sessionUri(id) } },
+    params: { channel: ROOT_CHANNEL, summary: entry.summary },
   });
-  host.catalogueChanged();
+  await host.catalogueChanged();
 
   try {
-    const failure = await host.sessionStub(id).create({
+    const stub = await host.sessionStub(id);
+    await stub.create({
       hostId,
       sessionId: id,
       chatId,
@@ -204,14 +210,10 @@ async function createSession<Env>(options: RequestOptions<Env>): Promise<null> {
       workingDirectory,
     });
 
-    if (failure !== null) {
-      throw new ProtocolError(failure);
-    }
-
     return null;
   } catch (error) {
     await host.disposeSession(entry);
-    throw error;
+    throw new ProtocolError(errorMessage(error));
   }
 }
 
@@ -223,11 +225,25 @@ async function dispatch<Env>(options: RequestOptions<Env>): Promise<void> {
   let rejection: string | null;
 
   try {
-    const entry = host.resolveSession(params.channel);
+    const entry = await host.resolveSession(params.channel);
 
-    rejection = params.channel.startsWith("ahp-chat:/")
-      ? await host.sessionStub(entry.id).dispatch({ action: params.action, origin })
-      : "Session actions are not supported";
+    if (!params.channel.startsWith("ahp-chat:/")) {
+      throw new ProtocolError("Session actions are not supported");
+    }
+
+    if (params.action.type !== "chat/turnStarted" && params.action.type !== "chat/turnCancelled") {
+      throw new ProtocolError("Action is not supported");
+    }
+
+    const action =
+      params.action.type === "chat/turnStarted"
+        ? ChatTurnStartedActionSchema.parse(params.action)
+        : ChatTurnCancelledActionSchema.parse(params.action);
+
+    const stub = await host.sessionStub(entry.id);
+    await stub.dispatch({ action, origin });
+
+    rejection = null;
   } catch (error) {
     rejection = errorMessage(error);
   }
@@ -240,7 +256,7 @@ async function dispatch<Env>(options: RequestOptions<Env>): Promise<void> {
         channel: params.channel,
         action: params.action,
         origin,
-        serverSeq: db.host.nextSequence(),
+        serverSeq: await db.host.nextSequence(),
         rejectionReason: rejection,
       },
     });
@@ -263,11 +279,10 @@ async function request<Env>(options: RequestOptions<Env>): Promise<RequestResult
 
     case "listSessions": {
       ListSessionsParamsSchema.parse(message.params);
+      const entries = await db.sessions.list();
 
       return {
-        items: db.sessions
-          .list()
-          .map((entry) => ({ ...entry.summary, resource: sessionUri(entry.id) })),
+        items: entries.map((entry) => entry.summary),
       };
     }
 
@@ -278,7 +293,7 @@ async function request<Env>(options: RequestOptions<Env>): Promise<RequestResult
     case "disposeSession": {
       const params = ChannelSchema.parse(message.params);
       const id = channelId(params.channel, "ahp-session");
-      const entry = db.sessions.get(id);
+      const entry = await db.sessions.get(id);
 
       if (!entry) {
         throw new ProtocolError("Session does not exist", AhpErrorCodes.SessionNotFound);

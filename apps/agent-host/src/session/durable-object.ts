@@ -22,14 +22,25 @@ import {
 } from "@experiments/protocol-schemas/ahp";
 import { openAgent } from "../agent/connection";
 import { textUpdate } from "../agent/updates";
-import { errorMessage, sessionUri } from "../protocol";
-import type { CreateSessionOptions, SessionPublication, SessionSnapshot } from "../types";
-import type { AgentHost } from "../host/durable-object";
+import { errorMessage } from "../protocol";
+import {
+  SessionCreateError,
+  SessionDispatchError,
+  SessionSnapshotError,
+  SessionDisposeError,
+} from "../rpc/session";
+import type {
+  SessionRPC,
+  SessionCreateRequest,
+  SessionDispatchRequest,
+  SessionSnapshotRequest,
+  SessionSnapshotResponse,
+} from "../rpc/session";
+import type { HostRPC, HostSessionUpdateRequest } from "../rpc/host";
 import { SessionDatabase } from "./db/database";
 import type { SessionRecord } from "./db/schema";
-import { applyChat, applySession, initialRecord } from "./state";
-
-type DispatchOptions = { action: { type: string }; origin: AHPActionOrigin };
+import { applyChat, applySession, buildSession } from "./state";
+import { sessionUri } from "../shared/lookups";
 
 type AgentSessionDOState = {
   loading: boolean;
@@ -37,7 +48,7 @@ type AgentSessionDOState = {
   promptRunning: boolean;
 };
 
-export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
+export abstract class AgentSession<Env = unknown> extends DurableObject<Env> implements SessionRPC {
   protected readonly db = new SessionDatabase(this.ctx.storage);
   private connection?: ACPClientConnection;
   private connecting?: Promise<ACPClientConnection>;
@@ -52,7 +63,7 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(async () => {
       await this.db.migrate();
-      const record = this.db.session.get();
+      const record = await this.db.session.get();
 
       if (record?.chatState.activeTurn) {
         const publication = applyChat(record, {
@@ -65,40 +76,52 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
           },
         });
 
-        this.db.session.save(record);
+        await this.db.session.save(record);
         this.ctx.waitUntil(this.publish(publication));
       }
     });
   }
 
-  protected abstract getHostNamespace(): DurableObjectNamespace<AgentHost<Env>>;
+  protected abstract getHostNamespace(): DurableObjectNamespace<HostRPC>;
   protected abstract connectAgent(sessionId: string): Promise<ACPStream>;
 
   protected getWorkingDirectory(): string {
     return "/";
   }
 
-  async create(options: CreateSessionOptions): Promise<string | null> {
-    if (this.db.session.get()) {
-      throw new Error("Session already exists");
+  async create(req: SessionCreateRequest): Promise<void> {
+    try {
+      await this.createSession(req);
+    } catch (error) {
+      throw new SessionCreateError(errorMessage(error));
+    }
+  }
+
+  private async createSession(options: SessionCreateRequest): Promise<void> {
+    if (options.workingDirectory !== undefined && !options.workingDirectory.startsWith("/")) {
+      throw new Error("Working directory must be an absolute path");
     }
 
-    this.state.disposed = false;
-    const cwd = options.workingDirectory ?? this.getWorkingDirectory();
-    const record = initialRecord(options, cwd);
-    this.db.session.create(record);
+    await this.db.transaction(async () => {
+      if (await this.db.session.get()) {
+        throw new Error("Session already exists");
+      }
+
+      this.state.disposed = false;
+      const cwd = options.workingDirectory ?? this.getWorkingDirectory();
+      const record = buildSession(options, cwd);
+      await this.db.session.create(record);
+    });
 
     try {
       await this.getConnection();
-      const current = this.requireRecord();
+      const current = await this.getSession();
       const publication = applySession(current, { type: AHPActionType.SessionReady });
-      this.db.session.save(current);
+      await this.db.session.save(current);
       await this.publish(publication);
-
-      return null;
     } catch (error) {
       try {
-        const current = this.db.session.get();
+        const current = await this.db.session.get();
 
         if (current) {
           const failure = { errorType: "agent", message: errorMessage(error) };
@@ -108,34 +131,50 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
             error: failure,
           });
 
-          this.db.session.save(current);
+          await this.db.session.save(current);
           await this.publish(publication);
         }
       } finally {
         this.connection?.close();
-        this.db.session.remove(options.sessionId);
+        await this.db.session.remove(options.sessionId);
       }
 
-      return errorMessage(error);
+      throw error;
     }
   }
 
-  snapshot(channel: string): string {
-    const record = this.requireRecord();
+  async snapshot(req: SessionSnapshotRequest): Promise<SessionSnapshotResponse> {
+    try {
+      const record = await this.getSession();
+      const sessionChannel = sessionUri(record.id);
+      const chatChannel = record.sessionState.defaultChat;
 
-    const snapshot: SessionSnapshot = {
-      revision: record.revision,
-      state: channel === sessionUri(record.id) ? record.sessionState : record.chatState,
-    };
+      if (req.channel !== sessionChannel && req.channel !== chatChannel) {
+        throw new Error("Channel does not belong to this session");
+      }
 
-    return JSON.stringify(snapshot);
+      return {
+        revision: record.revision,
+        state: req.channel === sessionChannel ? record.sessionState : record.chatState,
+      };
+    } catch (error) {
+      throw new SessionSnapshotError(errorMessage(error));
+    }
   }
 
-  async dispatch(options: DispatchOptions): Promise<string | null> {
-    const record = this.requireRecord();
+  async dispatch(req: SessionDispatchRequest): Promise<void> {
+    try {
+      await this.dispatchAction(req);
+    } catch (error) {
+      throw new SessionDispatchError(errorMessage(error));
+    }
+  }
+
+  private async dispatchAction(options: SessionDispatchRequest): Promise<void> {
+    const record = await this.getSession();
 
     if (record.sessionState.lifecycle !== AHPSessionLifecycle.Ready) {
-      return "Session is not ready";
+      throw new Error("Session is not ready");
     }
 
     if (options.action.type === "chat/turnStarted") {
@@ -149,7 +188,7 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
       };
 
       if (record.chatState.activeTurn || this.state.promptRunning) {
-        return "A turn is already running";
+        throw new Error("A turn is already running");
       }
 
       if (
@@ -158,42 +197,46 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
         parsed.message.model ||
         parsed.message.agent
       ) {
-        return "Only user text messages are supported";
+        throw new Error("Only user text messages are supported");
       }
 
       if (record.chatState.turns.some((turn) => turn.id === action.turnId)) {
-        return "Turn ID already exists";
+        throw new Error("Turn ID already exists");
       }
 
       const publication = applyChat(record, action, options.origin);
-      this.db.session.save(record);
       this.state.promptRunning = true;
-      this.ctx.waitUntil(this.runPrompt(action, publication));
 
-      return null;
-    }
-
-    if (options.action.type === "chat/turnCancelled") {
-      const parsed = ChatTurnCancelledActionSchema.parse(options.action);
-
-      if (record.chatState.activeTurn?.id !== parsed.turnId) {
-        return "No matching active turn to cancel";
+      try {
+        await this.db.session.save(record);
+      } catch (error) {
+        this.state.promptRunning = false;
+        throw error;
       }
 
-      await this.emit({ ...parsed, type: AHPActionType.ChatTurnCancelled }, options.origin);
-      await this.connection?.agent.notify(methods.agent.session.cancel, {
-        sessionId: record.acpSessionId ?? "",
-      });
+      this.ctx.waitUntil(this.runPrompt(action, publication));
 
-      return null;
+      return;
     }
 
-    return "Action is not supported";
+    const parsed = ChatTurnCancelledActionSchema.parse(options.action);
+
+    if (record.chatState.activeTurn?.id !== parsed.turnId) {
+      throw new Error("No matching active turn to cancel");
+    }
+
+    await this.emit({ ...parsed, type: AHPActionType.ChatTurnCancelled }, options.origin);
+    await this.connection?.agent.notify(methods.agent.session.cancel, {
+      sessionId: record.acpSessionId ?? "",
+    });
   }
 
   async dispose(): Promise<void> {
     this.state.disposed = true;
-    const record = this.db.session.get();
+
+    const record = await this.db.session.get().catch((error) => {
+      throw new SessionDisposeError(errorMessage(error));
+    });
 
     try {
       if (
@@ -210,13 +253,13 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
       this.connection?.close();
 
       if (record) {
-        this.db.session.remove(record.id);
+        await this.db.session.remove(record.id);
       }
     }
   }
 
-  private requireRecord(): SessionRecord {
-    const record = this.db.session.get();
+  private async getSession(): Promise<SessionRecord> {
+    const record = await this.db.session.get();
 
     if (!record || this.state.disposed) {
       throw new Error("Session does not exist");
@@ -244,7 +287,7 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
   }
 
   private async openConnection(): Promise<ACPClientConnection> {
-    const record = this.requireRecord();
+    const record = await this.getSession();
     const directory = record.sessionState.workingDirectories?.[0];
 
     const cwd =
@@ -269,9 +312,9 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
         throw new Error("Session was disposed during agent initialization");
       }
 
-      const current = this.requireRecord();
+      const current = await this.getSession();
       current.acpSessionId = opened.sessionId;
-      this.db.session.save(current);
+      await this.db.session.save(current);
       this.connection = opened.connection;
 
       return opened.connection;
@@ -282,14 +325,14 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
 
   private async runPrompt(
     action: AHPChatTurnStartedAction,
-    publication: SessionPublication,
+    publication: HostSessionUpdateRequest,
   ): Promise<void> {
     const started = Date.now();
 
     try {
       await this.publish(publication);
       const connection = await this.getConnection();
-      const record = this.requireRecord();
+      const record = await this.getSession();
 
       if (record.chatState.activeTurn?.id !== action.turnId || record.acpSessionId === null) {
         return;
@@ -306,7 +349,9 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
         prompt: [{ type: "text", text: action.message.text }],
       });
 
-      if (this.db.session.get()?.chatState.activeTurn?.id === action.turnId) {
+      const current = await this.db.session.get();
+
+      if (current?.chatState.activeTurn?.id === action.turnId) {
         await this.emit({
           type:
             response.stopReason === "cancelled"
@@ -317,7 +362,9 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
         });
       }
     } catch (error) {
-      if (this.db.session.get()?.chatState.activeTurn?.id === action.turnId) {
+      const current = await this.db.session.get();
+
+      if (current?.chatState.activeTurn?.id === action.turnId) {
         await this.emit({
           type: AHPActionType.ChatError,
           turnId: action.turnId,
@@ -338,7 +385,7 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
       return;
     }
 
-    const record = this.db.session.get();
+    const record = await this.db.session.get();
     const turn = record?.chatState.activeTurn;
     const text = textUpdate(notification);
 
@@ -353,13 +400,13 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
   }
 
   private async emit(action: AHPChatAction, origin?: AHPActionOrigin): Promise<void> {
-    const record = this.requireRecord();
+    const record = await this.getSession();
     const publication = applyChat(record, action, origin);
-    this.db.session.save(record);
+    await this.db.session.save(record);
     await this.publish(publication);
   }
 
-  private publish(publication: SessionPublication): Promise<void> {
+  private publish(publication: HostSessionUpdateRequest): Promise<void> {
     const previous = this.publications;
     this.publications = this.publishAfter(previous, publication);
 
@@ -368,7 +415,7 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
 
   private async publishAfter(
     previous: Promise<void>,
-    publication: SessionPublication,
+    publication: HostSessionUpdateRequest,
   ): Promise<void> {
     try {
       await previous;
@@ -376,10 +423,10 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> {
       // A fresh subscription snapshot recovers an earlier failed publication.
     }
 
-    const record = this.db.session.get();
+    const record = await this.db.session.get();
 
     if (record && !this.state.disposed) {
-      await this.getHostNamespace().getByName(record.hostId).publish(JSON.stringify(publication));
+      await this.getHostNamespace().getByName(record.hostId).sessionUpdate(publication);
     }
   }
 }

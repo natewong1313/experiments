@@ -8,29 +8,28 @@ import type {
   AgentInfo as AHPAgentInfo,
   RootState as AHPRootState,
 } from "@microsoft/agent-host-protocol";
-import { StateActionSchema } from "@experiments/protocol-schemas/ahp";
+import { StateActionSchema, SessionSummarySchema } from "@experiments/protocol-schemas/ahp";
 import {
   MessageSchema,
-  SummarySchema,
   ProtocolError,
   ROOT_CHANNEL,
   channelId,
-  sessionKey,
-  sessionUri,
-  chatUri,
   send,
   errorMessage,
 } from "../protocol";
-import type { AgentSession } from "../session/durable-object";
+import { HostSessionUpdateError } from "../rpc/host";
+import type { HostRPC, HostSessionUpdateRequest } from "../rpc/host";
+import type { SessionRPC, SessionNamespace } from "../rpc/session";
 import { HostDatabase } from "./db/database";
 import type { SessionEntry } from "./db/schema";
 import { Connections } from "./connections";
 import { handleRequest } from "./requests";
 import { hostIdFromRequest } from "./router";
+import { chatUri, sessionDOName, sessionUri } from "../shared/lookups";
 
 const SOCKET_CLOSED_CODE = 1000;
 
-export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
+export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implements HostRPC {
   protected readonly db = new HostDatabase(this.ctx.storage);
   readonly connections = new Connections(this.ctx);
   private messages: WeakMap<WebSocket, Promise<void>> = new WeakMap();
@@ -43,9 +42,9 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
   }
 
   protected abstract getAgentInfo(): AHPAgentInfo;
-  protected abstract getSessionNamespace(): DurableObjectNamespace<AgentSession<Env>>;
+  protected abstract getSessionNamespace(): SessionNamespace;
 
-  fetch(request: Request): Response {
+  async fetch(request: Request): Promise<Response> {
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected a WebSocket upgrade", { status: 426 });
     }
@@ -55,13 +54,13 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
       return new Response("Not found", { status: 404 });
     }
 
-    const currentHost = this.db.host.get();
+    const currentHost = await this.db.host.get();
     if (currentHost && currentHost.id !== id) {
       // Invariant
       return new Response("Host ID does not match this object", { status: 404 });
     }
 
-    this.db.host.initialize(id);
+    await this.db.host.initialize(id);
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ subscriptions: {} });
@@ -71,7 +70,7 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const previous = this.messages.get(socket) ?? Promise.resolve();
-    const next = this.handleMessage(previous, socket, message);
+    const next = this.handleWebsocketMessage(previous, socket, message);
     this.messages.set(socket, next);
     await next;
   }
@@ -89,24 +88,28 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
     return this.getAgentInfo();
   }
 
-  rootState(): AHPRootState {
-    return { agents: [this.getAgentInfo()], activeSessions: this.db.sessions.list().length };
+  async rootState(): Promise<AHPRootState> {
+    const sessions = await this.db.sessions.list();
+
+    return {
+      agents: [this.getAgentInfo()],
+      activeSessions: sessions.length,
+    };
   }
 
-  sessionStub(id: string): DurableObjectStub<AgentSession<Env>> {
-    const host = this.db.host.get();
-
+  async sessionStub(id: string): Promise<SessionRPC> {
+    const host = await this.db.host.get();
     if (!host) {
       throw new ProtocolError("Host is not initialized");
     }
 
-    return this.getSessionNamespace().getByName(sessionKey(host.id, id));
+    return this.getSessionNamespace().getByName(sessionDOName(host.id, id));
   }
 
-  resolveSession(channel: string): SessionEntry {
+  async resolveSession(channel: string): Promise<SessionEntry> {
     const entry = channel.startsWith("ahp-session:/")
-      ? this.db.sessions.get(channelId(channel, "ahp-session"))
-      : this.db.sessions.findChat(channelId(channel, "ahp-chat"));
+      ? await this.db.sessions.get(channelId(channel, "ahp-session"))
+      : await this.db.sessions.findChat(channelId(channel, "ahp-chat"));
 
     if (!entry) {
       throw new ProtocolError("Session does not exist", AhpErrorCodes.SessionNotFound);
@@ -115,53 +118,66 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
     return entry;
   }
 
-  publish(serialized: string): void {
-    const parsed = z
-      .object({
-        sessionId: z.string(),
-        revision: z.number(),
-        summary: SummarySchema,
-        actions: z.array(
-          z.object({
-            channel: z.string(),
-            action: StateActionSchema,
-            origin: z.object({ clientId: z.string(), clientSeq: z.number() }).optional(),
-          }),
-        ),
-      })
-      .parse(JSON.parse(serialized));
+  async sessionUpdate(req: HostSessionUpdateRequest): Promise<void> {
+    try {
+      const parsed = z
+        .object({
+          sessionId: z.string(),
+          revision: z.number(),
+          summary: SessionSummarySchema,
+          actions: z.array(
+            z.object({
+              channel: z.string(),
+              action: StateActionSchema,
+              origin: z.object({ clientId: z.string(), clientSeq: z.number() }).optional(),
+            }),
+          ),
+        })
+        .parse(req);
 
-    const publication = parsed;
-    const entry = this.db.sessions.get(publication.sessionId);
+      const publication = parsed;
+      const entry = await this.db.sessions.get(publication.sessionId);
 
-    if (!entry) {
-      return;
-    }
+      if (!entry) {
+        return;
+      }
 
-    this.db.sessions.update(entry.id, publication.summary);
+      await this.db.sessions.update(entry.id, req.summary);
 
-    for (const item of publication.actions) {
-      const envelope = {
-        ...item,
-        serverSeq: this.db.host.nextSequence(),
-        origin: item.origin,
-      };
+      await Promise.all(
+        publication.actions.map(async (item) => {
+          const envelope = {
+            ...item,
+            serverSeq: await this.db.host.nextSequence(),
+            origin: item.origin,
+          };
 
-      this.connections.broadcast({ envelope, revision: publication.revision });
-    }
+          this.connections.broadcast({ envelope, revision: publication.revision });
+        }),
+      );
 
-    if (JSON.stringify(entry.summary) !== JSON.stringify(publication.summary)) {
-      const { createdAt: _createdAt, provider: _provider, ...changes } = publication.summary;
-      this.connections.notify(ROOT_CHANNEL, {
-        jsonrpc: "2.0",
-        method: "root/sessionSummaryChanged",
-        params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id), changes },
-      });
+      if (JSON.stringify(entry.summary) !== JSON.stringify(publication.summary)) {
+        const {
+          resource: _resource,
+          createdAt: _createdAt,
+          provider: _provider,
+          ...changes
+        } = publication.summary;
+
+        this.connections.notify(ROOT_CHANNEL, {
+          jsonrpc: "2.0",
+          method: "root/sessionSummaryChanged",
+          params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id), changes },
+        });
+      }
+    } catch (error) {
+      throw new HostSessionUpdateError(errorMessage(error));
     }
   }
 
-  catalogueChanged(): void {
-    const serverSeq = this.db.host.nextSequence();
+  async catalogueChanged(): Promise<void> {
+    const sessions = await this.db.sessions.list();
+    const serverSeq = await this.db.host.nextSequence();
     this.connections.broadcast({
       revision: serverSeq,
       envelope: {
@@ -169,15 +185,16 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
         serverSeq,
         action: {
           type: "root/activeSessionsChanged",
-          activeSessions: this.db.sessions.list().length,
+          activeSessions: sessions.length,
         },
       },
     });
   }
 
   async disposeSession(entry: SessionEntry): Promise<void> {
-    await this.sessionStub(entry.id).dispose();
-    this.db.sessions.remove(entry.id);
+    const stub = await this.sessionStub(entry.id);
+    await stub.dispose();
+    await this.db.sessions.remove(entry.id);
     this.connections.removeChannel(sessionUri(entry.id));
     this.connections.removeChannel(chatUri(entry.defaultChatId));
     this.connections.notify(ROOT_CHANNEL, {
@@ -185,10 +202,10 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> {
       method: "root/sessionRemoved",
       params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id) },
     });
-    this.catalogueChanged();
+    await this.catalogueChanged();
   }
 
-  private async handleMessage(
+  private async handleWebsocketMessage(
     previous: Promise<void>,
     socket: WebSocket,
     raw: string | ArrayBuffer,

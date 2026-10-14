@@ -24,7 +24,7 @@ export class HostDatabase {
     return migrate(this.orm, migrations);
   }
 
-  transactionSync<T>(operation: () => T): T {
-    return this.storage.transactionSync(operation);
+  transaction<T>(operation: () => Promise<T>): Promise<T> {
+    return this.storage.transaction(operation);
   }
 }

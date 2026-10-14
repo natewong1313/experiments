@@ -12,9 +12,29 @@ does not cancel a turn.
 flowchart LR
   Client <-->|AHP WebSocket| Host[AgentHost DO]
   Host -->|RPC| Session[AgentSession DO]
-  Session -->|Publish actions| Host
+  Session -->|sessionUpdate RPC| Host
   Session <-->|ACP stream| Backend[Agent backend]
 ```
+
+The contracts in `src/rpc/host.ts` and `src/rpc/session.ts` define typed requests,
+responses, and method-specific errors. Both DOs implement these interfaces and
+resolve their peers through namespaces typed by the contracts. Updates and
+snapshots cross RPC as objects. Snapshots return the persisted AHP state without
+revalidating it. Known state fields remain typed; opaque AHP extension fields keep
+their original `unknown` types. Existing AHP validators check incoming client data.
+Use `SessionRPC` for caller stubs and `SessionNamespace` for session DO bindings.
+
+```ts
+const session: SessionRPC = sessionNamespace.getByName(sessionName);
+const snapshot = await session.snapshot({ channel });
+```
+
+Creation and dispatch resolve with `void` on success and throw their documented
+operation errors on failure. Dispatch acceptance does not wait for the agent to
+finish a turn. Later failures arrive as chat error actions. Check an RPC error's
+`name` and `message`; Cloudflare does not preserve custom error prototypes.
+TypeScript does not enforce JSDoc `@throws` declarations. Runtime transport or
+object initialization failures can also reject any RPC call.
 
 ## Extend the objects
 
@@ -33,8 +53,8 @@ provides concrete classes, bindings, and SQL import rules.
 
 Use `routeAgentHost({ request, namespace })` in your Worker to route
 `/hosts/<host-uuid>/ahp`. Hosts and sessions use application UUIDs; session DO names
-combine the host UUID and session UUID. Protocol URIs are constructed at the wire
-boundary. Chat UUIDs are assigned when sessions are created.
+combine the host UUID and session UUID. Summaries store protocol URIs derived from
+those UUIDs. Chat UUIDs are assigned when sessions are created.
 
 ## Supported behavior
 

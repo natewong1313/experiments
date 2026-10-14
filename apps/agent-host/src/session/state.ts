@@ -8,32 +8,32 @@ import {
 import type {
   ActionOrigin as AHPActionOrigin,
   ChatAction as AHPChatAction,
+  ChatState as AHPChatState,
+  SessionState as AHPSessionState,
   ChatSummary as AHPChatSummary,
   SessionChatUpdatedAction as AHPSessionChatUpdatedAction,
   SessionAction as AHPSessionAction,
+  SessionSummary as AHPSessionSummary,
 } from "@microsoft/agent-host-protocol";
-import { chatUri, sessionUri } from "../protocol";
-import type { CreateSessionOptions, SessionPublication } from "../types";
+import type { SessionCreateRequest } from "../rpc/session";
+import type { HostSessionUpdateRequest } from "../rpc/host";
 import type { SessionRecord } from "./db/schema";
+import { chatUri, sessionUri } from "../shared/lookups";
 
-export function initialRecord(options: CreateSessionOptions, cwd: string): SessionRecord {
-  if (!cwd.startsWith("/")) {
-    throw new Error("Working directory must be an absolute path");
-  }
-
+// TODO: move this
+export function buildSession(options: SessionCreateRequest, cwd: string): SessionRecord {
   const path = cwd
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
 
-  const now = options.createdAt;
-
-  const summary = {
+  const summary: AHPSessionSummary = {
+    resource: sessionUri(options.sessionId),
     provider: options.provider,
     title: "New session",
     status: AHPSessionStatus.Idle,
-    createdAt: now,
-    modifiedAt: now,
+    createdAt: options.createdAt,
+    modifiedAt: options.createdAt,
     workingDirectories: [new URL(path, "file:///").href],
   };
 
@@ -41,7 +41,23 @@ export function initialRecord(options: CreateSessionOptions, cwd: string): Sessi
     resource: chatUri(options.chatId),
     title: summary.title,
     status: summary.status,
-    modifiedAt: now,
+    modifiedAt: options.createdAt,
+  };
+
+  const chatState: AHPChatState = {
+    ...chat,
+    turns: [],
+  };
+
+  const sessionState: AHPSessionState = {
+    provider: summary.provider,
+    title: summary.title,
+    status: summary.status,
+    workingDirectories: summary.workingDirectories,
+    lifecycle: AHPSessionLifecycle.Creating,
+    chats: [chat],
+    defaultChat: chat.resource,
+    activeClients: [],
   };
 
   return {
@@ -50,17 +66,8 @@ export function initialRecord(options: CreateSessionOptions, cwd: string): Sessi
     acpSessionId: null,
     summary,
     revision: 0,
-    chatState: { ...chat, turns: [] },
-    sessionState: {
-      provider: summary.provider,
-      title: summary.title,
-      status: summary.status,
-      workingDirectories: summary.workingDirectories,
-      lifecycle: AHPSessionLifecycle.Creating,
-      chats: [chat],
-      defaultChat: chat.resource,
-      activeClients: [],
-    },
+    chatState,
+    sessionState,
   };
 }
 
@@ -68,7 +75,7 @@ export function applyChat(
   record: SessionRecord,
   action: AHPChatAction,
   origin?: AHPActionOrigin,
-): SessionPublication {
+): HostSessionUpdateRequest {
   record.chatState = ahpChatReducer(record.chatState, action);
   record.revision += 1;
   const chat = record.chatState;
@@ -99,7 +106,10 @@ export function applyChat(
   };
 }
 
-export function applySession(record: SessionRecord, action: AHPSessionAction): SessionPublication {
+export function applySession(
+  record: SessionRecord,
+  action: AHPSessionAction,
+): HostSessionUpdateRequest {
   record.sessionState = ahpSessionReducer(record.sessionState, action);
   record.revision += 1;
 

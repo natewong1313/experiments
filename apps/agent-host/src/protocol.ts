@@ -1,25 +1,10 @@
 import * as z from "zod";
-import { JsonRpcErrorCodes, SessionStatus } from "@microsoft/agent-host-protocol";
+import { JsonRpcErrorCodes } from "@microsoft/agent-host-protocol";
 import type {
   JsonRpcNotification,
   JsonRpcSuccess,
   JsonRpcFailure,
 } from "@experiments/protocol-schemas";
-import { SessionSummarySchema } from "@experiments/protocol-schemas/ahp";
-
-export const SummarySchema = SessionSummarySchema.pick({
-  provider: true,
-  title: true,
-  createdAt: true,
-  modifiedAt: true,
-  workingDirectories: true,
-}).extend({
-  status: z.union([
-    z.literal(SessionStatus.Idle),
-    z.literal(SessionStatus.InProgress),
-    z.literal(SessionStatus.Error),
-  ]),
-});
 
 export type JsonRpcMessage =
   | JsonRpcNotification
@@ -54,18 +39,6 @@ export class ProtocolError extends Error {
     this.name = "ProtocolError";
     this.code = code;
   }
-}
-
-export function sessionUri(id: string): string {
-  return `ahp-session:/${id}`;
-}
-
-export function chatUri(id: string): string {
-  return `ahp-chat:/${id}`;
-}
-
-export function sessionKey(hostId: string, sessionId: string): string {
-  return `${hostId}/${sessionId}`;
 }
 
 export function channelId(channel: string, scheme: "ahp-session" | "ahp-chat"): string {

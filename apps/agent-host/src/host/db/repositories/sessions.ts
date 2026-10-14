@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { HostDatabaseOrm } from "../database";
 import { sessionsTable } from "../schema";
 import type { SessionEntry } from "../schema";
-import type { SessionSummaryData } from "../../../types";
+import type { SessionSummary as AHPSessionSummary } from "@microsoft/agent-host-protocol";
 
 export class SessionsRepository {
   private db: HostDatabaseOrm;
@@ -11,27 +11,27 @@ export class SessionsRepository {
     this.db = db;
   }
 
-  list(): SessionEntry[] {
+  async list(): Promise<SessionEntry[]> {
     return this.db.select().from(sessionsTable).all();
   }
 
-  get(id: string): SessionEntry | undefined {
+  async get(id: string): Promise<SessionEntry | undefined> {
     return this.db.select().from(sessionsTable).where(eq(sessionsTable.id, id)).get();
   }
 
-  findChat(id: string): SessionEntry | undefined {
+  async findChat(id: string): Promise<SessionEntry | undefined> {
     return this.db.select().from(sessionsTable).where(eq(sessionsTable.defaultChatId, id)).get();
   }
 
-  create(entry: SessionEntry): void {
+  async create(entry: SessionEntry): Promise<void> {
     this.db.insert(sessionsTable).values(entry).run();
   }
 
-  update(id: string, summary: SessionSummaryData): void {
+  async update(id: string, summary: AHPSessionSummary): Promise<void> {
     this.db.update(sessionsTable).set({ summary }).where(eq(sessionsTable.id, id)).run();
   }
 
-  remove(id: string): void {
+  async remove(id: string): Promise<void> {
     this.db.delete(sessionsTable).where(eq(sessionsTable.id, id)).run();
   }
 }

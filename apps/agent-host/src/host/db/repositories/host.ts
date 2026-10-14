@@ -10,16 +10,16 @@ export class HostRepository {
     this.db = db;
   }
 
-  get(): HostEntry | undefined {
+  async get(): Promise<HostEntry | undefined> {
     return this.db.select().from(hostTable).get();
   }
 
-  initialize(id: string): void {
+  async initialize(id: string): Promise<void> {
     this.db.insert(hostTable).values({ id }).onConflictDoNothing().run();
   }
 
-  nextSequence(): number {
-    const current = this.get();
+  async nextSequence(): Promise<number> {
+    const current = await this.get();
 
     if (!current) {
       throw new Error("Host has not been initialized");

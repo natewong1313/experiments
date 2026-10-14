@@ -10,19 +10,19 @@ export class SessionRepository {
     this.db = db;
   }
 
-  get(): SessionRecord | undefined {
+  async get(): Promise<SessionRecord | undefined> {
     return this.db.select().from(sessionTable).get();
   }
 
-  create(record: SessionRecordInsert): void {
+  async create(record: SessionRecordInsert): Promise<void> {
     this.db.insert(sessionTable).values(record).run();
   }
 
-  save(record: SessionRecord): void {
+  async save(record: SessionRecord): Promise<void> {
     this.db.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
   }
 
-  remove(id: string): void {
+  async remove(id: string): Promise<void> {
     this.db.delete(sessionTable).where(eq(sessionTable.id, id)).run();
   }
 }

@@ -13,7 +13,7 @@ import { connectPeer } from "./peer";
 import type { Peer } from "./peer";
 import { SessionDatabase } from "../src/session/db/database";
 import { MessageKind } from "@microsoft/agent-host-protocol";
-import { sessionKey } from "../src/protocol";
+import { sessionDOName } from "../src/shared/lookups";
 
 type CreatedSession = { sessionId: string; channel: string; chat: string };
 
@@ -86,7 +86,7 @@ it("streams the same turn to two clients and retains it after reconstruction", a
       state: "complete",
       responseParts: [{ kind: "markdown", content: "hello" }],
     });
-    const sessionStub = env.CONVERSATIONS.getByName(sessionKey(hostId, session.sessionId));
+    const sessionStub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
     await evictDurableObject(sessionStub);
     await evictDurableObject(env.COORDINATORS.getByName(hostId));
     expect(await chatState(first, session.chat)).toEqual(before);
@@ -153,7 +153,7 @@ it("continues a prompt without clients and removes history on explicit disposal"
     expect(first.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
   });
   first.close();
-  await env.CONVERSATIONS.getByName(sessionKey(hostId, session.sessionId)).finishPrompt();
+  await env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId)).finishPrompt();
   const second = await connectPeer(hostId);
 
   try {
@@ -182,10 +182,10 @@ it("records an interrupted turn as an error on reconstruction", async () => {
 
   try {
     const session = await createSession(peer);
-    const stub = env.CONVERSATIONS.getByName(sessionKey(hostId, session.sessionId));
-    await runInDurableObject(stub, (_instance, ctx) => {
+    const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
+    await runInDurableObject(stub, async (_instance, ctx) => {
       const repository = new SessionDatabase(ctx.storage).session;
-      const record = repository.get();
+      const record = await repository.get();
 
       if (!record) {
         throw new Error("Missing session");
@@ -198,7 +198,7 @@ it("records an interrupted turn as an error on reconstruction", async () => {
         responseParts: [],
         usage: undefined,
       };
-      repository.save(record);
+      await repository.save(record);
     });
     await evictDurableObject(stub);
     const state = await chatState(peer, session.chat);
@@ -224,7 +224,7 @@ it("sends ACP cancellation when disposing an active session", async () => {
       expect(peer.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
     });
     await peer.request("disposeSession", { channel: session.channel });
-    const stub = env.CONVERSATIONS.getByName(sessionKey(hostId, session.sessionId));
+    const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
     expect(await stub.cancellationCount()).toBe(1);
   } finally {
     peer.close();
@@ -247,7 +247,7 @@ it.each([true, false])("notifies early subscribers when creation succeeds=%s", a
   const channel = `ahp-session:/${sessionId}`;
   const creator = await connectPeer(hostId);
   const observer = await connectPeer(hostId);
-  const stub = env.CONVERSATIONS.getByName(sessionKey(hostId, sessionId));
+  const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, sessionId));
   await stub.holdInitialization();
 
   try {
