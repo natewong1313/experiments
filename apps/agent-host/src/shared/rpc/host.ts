@@ -1,7 +1,10 @@
 import * as z from "zod";
-import { ActionEnvelopeSchema, SessionSummarySchema } from "@experiments/protocol-schemas/ahp";
+import {
+  ActionEnvelopeSchema as AHPActionEnvelopeSchema,
+  SessionSummarySchema as AHPSessionSummarySchema,
+} from "@experiments/protocol-schemas/ahp";
 
-const SessionActionSchema = ActionEnvelopeSchema.pick({
+const SessionActionSchema = AHPActionEnvelopeSchema.pick({
   channel: true,
   action: true,
   origin: true,
@@ -10,7 +13,7 @@ const SessionActionSchema = ActionEnvelopeSchema.pick({
 export const HostSessionUpdateRequestSchema = z.object({
   sessionId: z.string(),
   revision: z.number(),
-  summary: SessionSummarySchema,
+  summary: AHPSessionSummarySchema,
   /**
    * Subscribers skip actions at or below their channel's revision, so a second action on the
    * same channel with the same revision would never be delivered.

@@ -15,7 +15,7 @@ import type {
   ChatTurnStartedAction as TurnStartedRequest,
   ChatTurnCancelledAction as TurnCancelledRequest,
 } from "@experiments/protocol-schemas/ahp";
-import { errorMessage } from "../../protocol";
+import { errorMessage } from "../../shared/errors";
 import type {
   SessionCreateRequest,
   SessionDispatchRequest,

@@ -1,18 +1,13 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
-import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/durable-sqlite";
-import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { HostDatabase } from "../src/host/db/database";
-import migrations from "../src/host/db/migrations/migrations";
 import { SessionDatabase } from "../src/session/db/database";
 import { buildSession, sessionSummary } from "../src/session/state";
 import type { SessionRecord } from "../src/session/db/schema";
 import { sessionDOName } from "../src/shared/lookups";
 
 const EXPECTED_SEQUENCE_COUNT = 2;
-const UPGRADED_SEQUENCE = 7;
 
 function record(hostId: string): SessionRecord {
   return buildSession(
@@ -58,7 +53,7 @@ it("commits and rolls back host writes across repositories", async () => {
 
     async function abort(): Promise<never> {
       await sessions.remove(entry.id);
-      await host.nextSequence();
+      await host.nextServerSeq();
       throw new Error("Abort host writes");
     }
 
@@ -66,7 +61,7 @@ it("commits and rolls back host writes across repositories", async () => {
     expect(await host.serverSeq()).toBe(0);
     expect(await sessions.get(entry.id)).toEqual(entry);
 
-    const sequences = await Promise.all([host.nextSequence(), host.nextSequence()]);
+    const sequences = await Promise.all([host.nextServerSeq(), host.nextServerSeq()]);
     expect(sequences).toEqual([1, EXPECTED_SEQUENCE_COUNT]);
     expect(await host.serverSeq()).toBe(EXPECTED_SEQUENCE_COUNT);
 
@@ -78,35 +73,6 @@ it("commits and rolls back host writes across repositories", async () => {
     expect(await sessions.list()).toEqual([]);
     expect(await sessions.get(entry.id)).toBeUndefined();
     expect(await sessions.findChat(entry.defaultChatId)).toBeUndefined();
-  });
-});
-
-it("keeps the server sequence when upgrading to the singleton host table", async () => {
-  const hostId = crypto.randomUUID();
-
-  await runInDurableObject(env.COORDINATORS.getByName(hostId), async (_instance, ctx) => {
-    const orm = drizzle(ctx.storage);
-
-    for (const table of ["host", "sessions", "__drizzle_migrations"]) {
-      orm.run(sql`DROP TABLE ${sql.identifier(table)}`);
-    }
-
-    const { m0000 } = migrations.migrations;
-
-    if (m0000 === undefined) {
-      throw new Error("Missing the initial host migration");
-    }
-
-    await migrate(orm, {
-      journal: { ...migrations.journal, entries: migrations.journal.entries.slice(0, 1) },
-      migrations: { m0000 },
-    });
-
-    orm.run(sql`INSERT INTO host (id, server_seq) VALUES (${hostId}, ${UPGRADED_SEQUENCE})`);
-    const database = new HostDatabase(ctx.storage);
-    await database.migrate();
-    expect(orm.all(sql`SELECT * FROM host`)).toEqual([{ server_seq: UPGRADED_SEQUENCE }]);
-    expect(await database.host.nextSequence()).toBe(UPGRADED_SEQUENCE + 1);
   });
 });
 

@@ -9,25 +9,22 @@ export class HostRepository {
     this.db = db;
   }
 
+  /** The last allocated server sequence, or 0 before the first allocation. */
   async serverSeq(): Promise<number> {
-    const host = this.db.select().from(hostTable).get();
-
-    if (!host) {
-      throw new Error("Host row is missing");
-    }
-
-    return host.serverSeq;
+    return this.db.select().from(hostTable).get()?.serverSeq ?? 0;
   }
 
-  async nextSequence(): Promise<number> {
-    // The host table holds exactly one row.
-    // oxlint-disable-next-line drizzle/enforce-update-with-where
-    const updated = this.db
-      .update(hostTable)
-      .set({ serverSeq: sql`${hostTable.serverSeq} + 1` })
+  async nextServerSeq(): Promise<number> {
+    const { serverSeq } = this.db
+      .insert(hostTable)
+      .values({ id: 1, serverSeq: 1 })
+      .onConflictDoUpdate({
+        target: hostTable.id,
+        set: { serverSeq: sql`${hostTable.serverSeq} + 1` },
+      })
       .returning()
       .get();
 
-    return updated.serverSeq;
+    return serverSeq;
   }
 }

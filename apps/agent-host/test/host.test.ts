@@ -7,21 +7,23 @@ import {
   type ChatState,
   SessionStateSchema,
   ListSessionsResultSchema,
+  SessionSummarySchema,
   SubscribeResultSchema,
 } from "@experiments/protocol-schemas/ahp";
 import worker from "./worker";
-import { connectPeer } from "./peer";
-import type { Peer } from "./peer";
+import { Peer, connectPeer } from "./peer";
 import { SessionDatabase } from "../src/session/db/database";
-import { MessageKind } from "@microsoft/agent-host-protocol";
+import { MessageKind, PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { sessionDOName } from "../src/shared/lookups";
 
 type CreatedSession = { sessionId: string; channel: string; chat: string };
 
 const NOT_FOUND = 404;
+const NORMAL_CLOSURE = 1000;
 
 const ChangesSchema = z.record(z.string(), z.json());
 const SummaryChangedSchema = z.object({ changes: ChangesSchema });
+const SessionAddedSchema = z.object({ summary: SessionSummarySchema });
 
 async function createSession(peer: Peer): Promise<CreatedSession> {
   const sessionId = crypto.randomUUID();
@@ -358,4 +360,85 @@ it.each([true, false])("notifies early subscribers when creation succeeds=%s", a
     creator.close();
     observer.close();
   }
+});
+
+it("holds root notifications for a client whose initial snapshots are still loading", async () => {
+  const hostId = crypto.randomUUID();
+  const creator = await connectPeer(hostId);
+  const session = await createSession(creator);
+  const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
+  await stub.holdSnapshots();
+
+  const response = await worker.fetch(
+    new Request(`https://host/hosts/${hostId}/ahp`, { headers: { Upgrade: "websocket" } }),
+    env,
+  );
+
+  if (!response.webSocket) {
+    throw new Error("Host did not accept the WebSocket upgrade");
+  }
+
+  const observer = new Peer(response.webSocket);
+
+  try {
+    const initialized = observer.request("initialize", {
+      channel: "ahp-root://",
+      clientId: crypto.randomUUID(),
+      protocolVersions: [PROTOCOL_VERSION],
+      initialSubscriptions: ["ahp-root://", session.channel],
+    });
+
+    await vi.waitFor(async () => {
+      expect(await stub.heldSnapshotCount()).toBe(1);
+    });
+
+    const added = `ahp-session:/${crypto.randomUUID()}`;
+    await creator.request("createSession", { channel: added, provider: "test" });
+    expect(observer.notifications).toEqual([]);
+    await stub.releaseSnapshots();
+    await initialized;
+
+    await vi.waitFor(() => {
+      const addedSessions = observer.notifications
+        .filter((item) => item.method === "root/sessionAdded")
+        .map((item) => SessionAddedSchema.parse(item.params).summary.resource);
+
+      expect(addedSessions).toEqual([added]);
+      expect(observer.actions).toContainEqual(
+        expect.objectContaining({
+          action: { type: "root/activeSessionsChanged", activeSessions: 2 },
+        }),
+      );
+    });
+  } finally {
+    creator.close();
+    observer.close();
+  }
+});
+
+it("refuses an unsupported protocol version and closes the connection", async () => {
+  const upgrade = new Request(`https://host/hosts/${crypto.randomUUID()}/ahp`, {
+    headers: { Upgrade: "websocket" },
+  });
+
+  const response = await worker.fetch(upgrade, env);
+
+  if (!response.webSocket) {
+    throw new Error("Host did not accept the WebSocket upgrade");
+  }
+
+  const closed = Promise.withResolvers<number>();
+  response.webSocket.addEventListener("close", (event) => {
+    closed.resolve(event.code);
+  });
+  const peer = new Peer(response.webSocket);
+
+  const initialized = peer.request("initialize", {
+    channel: "ahp-root://",
+    clientId: crypto.randomUUID(),
+    protocolVersions: ["0.0.0"],
+  });
+
+  await expect(initialized).rejects.toThrow("Unsupported protocol version");
+  expect(await closed.promise).toBe(NORMAL_CLOSURE);
 });

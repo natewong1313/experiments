@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Stream } from "@agentclientprotocol/sdk";
-import { errorMessage } from "../protocol";
+import { errorMessage } from "../shared/errors";
 import {
   SessionCreateError,
   SessionDispatchError,

@@ -1,8 +1,13 @@
-import type {
-  ChatTurnStartedAction,
-  ChatTurnCancelledAction,
+import * as z from "zod";
+import {
+  ChatTurnCancelledActionSchema as AHPChatTurnCancelledActionSchema,
+  ChatTurnStartedActionSchema as AHPChatTurnStartedActionSchema,
 } from "@experiments/protocol-schemas/ahp";
-import type { ActionOrigin, ChatState, SessionState } from "@microsoft/agent-host-protocol";
+import type {
+  ActionOrigin as AHPActionOrigin,
+  ChatState as AHPChatState,
+  SessionState as AHPSessionState,
+} from "@microsoft/agent-host-protocol";
 
 export type SessionCreateRequest = {
   hostId: string;
@@ -20,9 +25,15 @@ export class SessionCreateError extends Error {
   }
 }
 
+/** The client actions a session accepts through `dispatch`. */
+export const SessionDispatchActionSchema = z.discriminatedUnion("type", [
+  AHPChatTurnStartedActionSchema,
+  AHPChatTurnCancelledActionSchema,
+]);
+
 export type SessionDispatchRequest = {
-  action: ChatTurnStartedAction | ChatTurnCancelledAction;
-  origin: ActionOrigin;
+  action: z.output<typeof SessionDispatchActionSchema>;
+  origin: AHPActionOrigin;
 };
 
 export class SessionDispatchError extends Error {
@@ -36,7 +47,7 @@ export type SessionSnapshotRequest = { channel: string };
 
 export type SessionSnapshotResponse = {
   revision: number;
-  state: SessionState | ChatState;
+  state: AHPSessionState | AHPChatState;
 };
 
 export class SessionSnapshotError extends Error {

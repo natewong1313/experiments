@@ -1,6 +1,7 @@
 import { AgentSession as BaseSession } from "../src";
 import { agent, methods, PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
 import type { AnyMessage, PromptResponse, Stream } from "@agentclientprotocol/sdk";
+import type { SessionSnapshotRequest, SessionSnapshotResponse } from "../src";
 import type { TestEnv } from "./worker";
 import type { AgentHost } from "./host";
 
@@ -10,6 +11,8 @@ export class AgentSession extends BaseSession<TestEnv> {
   private cancellations = 0;
   private setup?: ReturnType<typeof Promise.withResolvers<boolean>>;
   private pending?: ReturnType<typeof Promise.withResolvers<PromptResponse>>;
+  private snapshotGate?: ReturnType<typeof Promise.withResolvers<null>>;
+  private heldSnapshots = 0;
 
   protected getHostNamespace(): DurableObjectNamespace<AgentHost> {
     return this.env.COORDINATORS;
@@ -64,6 +67,28 @@ export class AgentSession extends BaseSession<TestEnv> {
       .connect({ readable: requests.readable, writable: responses.writable });
 
     return { readable: responses.readable, writable: requests.writable };
+  }
+
+  async snapshot(req: SessionSnapshotRequest): Promise<SessionSnapshotResponse> {
+    if (this.snapshotGate) {
+      this.heldSnapshots += 1;
+      await this.snapshotGate.promise;
+    }
+
+    return await super.snapshot(req);
+  }
+
+  holdSnapshots(): void {
+    this.snapshotGate = Promise.withResolvers<null>();
+  }
+
+  heldSnapshotCount(): number {
+    return this.heldSnapshots;
+  }
+
+  releaseSnapshots(): void {
+    this.snapshotGate?.resolve(null);
+    this.snapshotGate = undefined;
   }
 
   holdInitialization(): void {

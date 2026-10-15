@@ -1,11 +1,13 @@
 import * as z from "zod";
+import type { Snapshot as AHPSnapshot } from "@experiments/protocol-schemas/ahp";
 import type { JsonRpcMessage } from "../../protocol";
-import { send } from "../../protocol";
-import type { ActionEnvelope, Snapshot } from "@experiments/protocol-schemas/ahp";
+import { send } from "../websockets";
 
 /**
- * Subscriptions map each channel to the last revision the socket has seen. The root channel
- * counts host server sequences; session and chat channels count their session's revision.
+ * Subscriptions map each channel to the revision of the snapshot the socket received. The root
+ * channel counts host server sequences, whereas session and chat channels count their session's revision.
+ * Revisions reach the host in order per channel, meaning that you can tell a message is new when its
+ * revision > the snapshots.
  */
 const AttachmentSchema = z.object({
   clientId: z.string().optional(),
@@ -14,129 +16,156 @@ const AttachmentSchema = z.object({
 
 type Attachment = z.output<typeof AttachmentSchema>;
 
-export type DeliveredAction = { envelope: ActionEnvelope; revision: number };
+/**
+ * A message for a channel's subscribers. Actions carry the revision they produce so that sockets
+ * whose snapshot already includes them skip them; notifications have no revision.
+ */
+export type ChannelMessageDetails = { channel: string; message: JsonRpcMessage; revision?: number };
 
-export type ChannelSnapshot = { snapshot: Snapshot; revision: number };
+export type ChannelSnapshot = { snapshot: AHPSnapshot; revision: number };
 
-type SubscribeOptions = {
-  socket: WebSocket;
-  channels: string[];
-  load(channel: string): Promise<ChannelSnapshot>;
-  respond(snapshots: Snapshot[]): void;
-};
+type SnapshotLoader = (channel: string) => Promise<ChannelSnapshot>;
 
+// Channels a socket is subscribing to, and the messages buffered for them in arrival order.
+type PendingSubscription = { channels: Set<string>; messages: ChannelMessageDetails[] };
+
+/**
+ * Owns a hosts websocket clients.
+ * Tracks what each websocket is subscribed to and ensures we deliver messages to the right socket.
+ */
 export class ConnectionsService {
   private ctx: DurableObjectState;
-  // Socket attachments survive hibernation; this caches them so deliveries skip re-parsing.
   private attachments: WeakMap<WebSocket, Attachment> = new WeakMap();
-  // Actions broadcast while a socket's snapshots load, held per channel until the response is sent.
-  private held: WeakMap<WebSocket, Map<string, DeliveredAction[]>> = new WeakMap();
-  private queues: WeakMap<WebSocket, Promise<void>> = new WeakMap();
+  private pendingSubscriptions: WeakMap<WebSocket, PendingSubscription> = new WeakMap();
+  private messageQueues: WeakMap<WebSocket, Promise<void>> = new WeakMap();
 
   constructor(ctx: DurableObjectState) {
     this.ctx = ctx;
   }
 
+  /**
+   * Accepts a hibernatable socket with no client ID and no subscriptions.
+   */
   accept(socket: WebSocket): void {
     this.ctx.acceptWebSocket(socket);
     this.save(socket, { subscriptions: {} });
   }
 
-  /** Runs `task` after every earlier task for the same socket has settled. */
+  /**
+   * Runs `task` after every earlier task for the same socket has settled, then delivers what
+   * `subscribe` buffered during it.
+   */
   async serialize(socket: WebSocket, task: () => Promise<void>): Promise<void> {
-    const previous = this.queues.get(socket) ?? Promise.resolve();
+    const previous = this.messageQueues.get(socket) ?? Promise.resolve();
 
     const next = (async (): Promise<void> => {
-      // An earlier task's failure belongs to its own caller.
       await Promise.allSettled([previous]);
-      await task();
+
+      try {
+        await task();
+      } finally {
+        this.completeSubscription(socket);
+      }
     })();
 
-    this.queues.set(socket, next);
+    this.messageQueues.set(socket, next);
     await next;
   }
 
+  /**
+   * Returns the client ID set by the `initialize` function, or undefined before initialization.
+   */
   clientId(socket: WebSocket): string | undefined {
     return this.attachment(socket).clientId;
   }
 
+  /**
+   * Saves the client ID which marks the connection as initialized.
+   */
   initialize(socket: WebSocket, clientId: string): void {
     this.save(socket, { ...this.attachment(socket), clientId });
   }
 
   /**
-   * Loads a snapshot for each channel and subscribes the socket to them.
-   * Actions broadcast while loading are held and delivered after `respond` sends the snapshots.
-   * Calls for one socket must not overlap; `serialize` guarantees this for message handlers.
+   * Loads a snapshot for each channel and subscribes the socket at the snapshots' revisions.
+   * Must run inside `serialize`, at most once per task: messages on these channels are
+   * buffered until the task settles.
    */
-  async subscribe(options: SubscribeOptions): Promise<void> {
-    const { socket, channels } = options;
-    const held = new Map(channels.map((channel): [string, DeliveredAction[]] => [channel, []]));
-    this.held.set(socket, held);
+  async subscribe(
+    socket: WebSocket,
+    channels: string[],
+    load: SnapshotLoader,
+  ): Promise<AHPSnapshot[]> {
+    this.pendingSubscriptions.set(socket, { channels: new Set(channels), messages: [] });
+    const loaded = await Promise.all(channels.map(async (channel) => await load(channel)));
+    const attachment = this.attachment(socket);
 
-    try {
-      const loaded = await Promise.all(channels.map((channel) => options.load(channel)));
-      options.respond(loaded.map((item) => item.snapshot));
-      const attachment = this.attachment(socket);
+    for (const { snapshot, revision } of loaded) {
+      attachment.subscriptions[snapshot.resource] = revision;
+    }
 
-      for (const { snapshot, revision } of loaded) {
-        attachment.subscriptions[snapshot.resource] = revision;
-      }
+    this.save(socket, attachment);
 
+    return loaded.map((item) => item.snapshot);
+  }
+
+  /**
+   * Stops messages on `channel` to the websocket if the socket has active subscriptions.
+   */
+  unsubscribe(socket: WebSocket, channel: string): void {
+    const attachment = this.attachment(socket);
+
+    if (attachment.subscriptions[channel] !== undefined) {
+      delete attachment.subscriptions[channel];
       this.save(socket, attachment);
-
-      for (const action of [...held.values()].flat()) {
-        this.deliver(socket, action);
-      }
-    } finally {
-      this.held.delete(socket);
     }
   }
 
-  unsubscribe(socket: WebSocket, channel: string): void {
-    const attachment = this.attachment(socket);
-    delete attachment.subscriptions[channel];
-    this.save(socket, attachment);
-  }
-
+  /**
+   * Unsubscribes every socket from `channel`, for example after its session is disposed.
+   */
   removeChannel(channel: string): void {
     for (const socket of this.ctx.getWebSockets()) {
       this.unsubscribe(socket, channel);
     }
   }
 
-  broadcast(action: DeliveredAction): void {
+  /**
+   * Sends `messageDetails` to every socket subscribed to its channel, skipping actions a socket's
+   * snapshot already includes. Sockets still subscribing to the channel receive it once their
+   * reply is sent.
+   */
+  publish(messageDetails: ChannelMessageDetails): void {
     for (const socket of this.ctx.getWebSockets()) {
-      const held = this.held.get(socket)?.get(action.envelope.channel);
+      const pending = this.pendingSubscriptions.get(socket);
 
-      if (held) {
-        held.push(action);
+      if (pending !== undefined && pending.channels.has(messageDetails.channel)) {
+        pending.messages.push(messageDetails);
       } else {
-        this.deliver(socket, action);
+        this.deliverMessage(socket, messageDetails);
       }
     }
   }
 
-  notify(channel: string, message: JsonRpcMessage): void {
-    for (const socket of this.ctx.getWebSockets()) {
-      if (this.attachment(socket).subscriptions[channel] !== undefined) {
-        send(socket, message);
-      }
+  private completeSubscription(socket: WebSocket): void {
+    const pending = this.pendingSubscriptions.get(socket);
+    this.pendingSubscriptions.delete(socket);
+
+    for (const messageDetails of pending?.messages ?? []) {
+      this.deliverMessage(socket, messageDetails);
     }
   }
 
-  private deliver(socket: WebSocket, action: DeliveredAction): void {
-    const attachment = this.attachment(socket);
-    const { channel } = action.envelope;
-    const seen = attachment.subscriptions[channel];
+  private deliverMessage(socket: WebSocket, messageDetails: ChannelMessageDetails): void {
+    const snapshotRevision = this.attachment(socket).subscriptions[messageDetails.channel];
 
-    if (seen === undefined || action.revision <= seen) {
+    if (snapshotRevision === undefined) {
       return;
     }
 
-    send(socket, { jsonrpc: "2.0", method: "action", params: action.envelope });
-    attachment.subscriptions[channel] = action.revision;
-    this.save(socket, attachment);
+    if (messageDetails.revision === undefined || messageDetails.revision > snapshotRevision) {
+      send(socket, messageDetails.message);
+    }
   }
 
   private attachment(socket: WebSocket): Attachment {

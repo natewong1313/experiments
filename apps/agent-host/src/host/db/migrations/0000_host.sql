@@ -1,6 +1,7 @@
 CREATE TABLE `host` (
-	`id` text PRIMARY KEY NOT NULL,
-	`server_seq` integer DEFAULT 0 NOT NULL
+	`id` integer PRIMARY KEY NOT NULL,
+	`server_seq` integer NOT NULL,
+	CONSTRAINT "host_singleton" CHECK("host"."id" = 1)
 );
 --> statement-breakpoint
 CREATE TABLE `sessions` (

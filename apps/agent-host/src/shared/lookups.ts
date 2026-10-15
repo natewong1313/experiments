@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { ProtocolError, ROOT_CHANNEL } from "../protocol";
+import { AHPError, ROOT_CHANNEL } from "./protocol";
 
 const SESSION_PREFIX = "ahp-session:/";
 const CHAT_PREFIX = "ahp-chat:/";
@@ -36,13 +36,13 @@ export function parseChannel(uri: string): Channel {
     return { kind: "chat", id: channelId(uri.slice(CHAT_PREFIX.length)) };
   }
 
-  throw new ProtocolError("Unsupported channel");
+  throw new AHPError("Unsupported channel");
 }
 
 // Channel IDs are compared as stored, so only the lowercase canonical UUID form is accepted.
 function channelId(id: string): string {
   if (id !== id.toLowerCase() || !UUIDSchema.safeParse(id).success) {
-    throw new ProtocolError("Channel ID must be a lowercase UUID");
+    throw new AHPError("Channel ID must be a lowercase UUID");
   }
 
   return id;

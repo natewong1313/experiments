@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1791896788083,
-      "tag": "0000_open_magus",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1791986342400,
-      "tag": "0001_host_singleton",
+      "when": 1791989242138,
+      "tag": "0000_host",
       "breakpoints": true
     }
   ]

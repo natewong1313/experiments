@@ -1,20 +1,27 @@
-import { AhpErrorCodes, SessionStatus } from "@microsoft/agent-host-protocol";
-import type { AgentInfo, RootState } from "@microsoft/agent-host-protocol";
+import {
+  AhpErrorCodes as AHPErrorCodes,
+  SessionStatus as AHPSessionStatus,
+} from "@microsoft/agent-host-protocol";
 import type {
-  CreateSessionParams,
-  ListSessionsResult,
-  SessionSummary,
+  AgentInfo as AHPAgentInfo,
+  RootState as AHPRootState,
+} from "@microsoft/agent-host-protocol";
+import type { JsonRpcNotification } from "@experiments/protocol-schemas";
+import type {
+  ActionEnvelope as AHPActionEnvelope,
+  CreateSessionParams as AHPCreateSessionParams,
+  ListSessionsResult as AHPListSessionsResult,
+  SessionSummary as AHPSessionSummary,
 } from "@experiments/protocol-schemas/ahp";
-import { ProtocolError, ROOT_CHANNEL, errorMessage } from "../../protocol";
+import { AHPError, ROOT_CHANNEL } from "../../shared/protocol";
+import { errorMessage } from "../../shared/errors";
+import type { DispatchActionParams, JsonRpcMessage } from "../../protocol";
 import { chatUri, parseChannel, sessionDOName, sessionUri } from "../../shared/lookups";
 import type { ChatChannel, SessionChannel } from "../../shared/lookups";
 import { HostSessionUpdateRequestSchema } from "../../shared/rpc/host";
 import type { HostSessionUpdateRequest } from "../../shared/rpc/host";
-import type {
-  SessionDispatchRequest,
-  SessionRPC,
-  SessionNamespace,
-} from "../../shared/rpc/session";
+import { SessionDispatchActionSchema } from "../../shared/rpc/session";
+import type { SessionRPC, SessionNamespace } from "../../shared/rpc/session";
 import type { HostDatabase } from "../db/database";
 import type { SessionEntry } from "../db/schema";
 import type { ChannelSnapshot, ConnectionsService } from "./connections";
@@ -23,79 +30,129 @@ type HostSessionsOptions = {
   hostId: string;
   db: HostDatabase;
   connections: ConnectionsService;
-  agentInfo(): AgentInfo;
+  agentInfo(): AHPAgentInfo;
   sessionNamespace(): SessionNamespace;
 };
 
+type CreateParams = { id: string; workingDirectory: string | undefined };
+
+/**
+ * Controls the session catalog of one host.
+ * It stores the catalog, sends requests to the session Durable Objects, and publishes
+ * catalog changes to subscribers.
+ */
 export class HostSessionsService {
-  private options: HostSessionsOptions;
+  private hostId: string;
+  private db: HostDatabase;
+  private connections: ConnectionsService;
+  private agentInfo: () => AHPAgentInfo;
+  private sessionNamespace: () => SessionNamespace;
 
   constructor(options: HostSessionsOptions) {
-    this.options = options;
+    this.hostId = options.hostId;
+    this.db = options.db;
+    this.connections = options.connections;
+    this.agentInfo = (): AHPAgentInfo => options.agentInfo();
+    this.sessionNamespace = (): SessionNamespace => options.sessionNamespace();
   }
 
+  /**
+   * Returns the last server sequence of the host.
+   * Before the first allocation, the value is 0.
+   */
   async serverSeq(): Promise<number> {
-    return await this.options.db.host.serverSeq();
+    return await this.db.host.serverSeq();
   }
 
-  async nextSequence(): Promise<number> {
-    return await this.options.db.host.nextSequence();
+  /**
+   * Returns the summary of each session in the catalog.
+   */
+  async list(): Promise<AHPListSessionsResult> {
+    return { items: await this.db.sessions.listSummaries() };
   }
 
-  async list(): Promise<ListSessionsResult> {
-    const entries = await this.options.db.sessions.list();
+  /**
+   * Returns the snapshot of a channel and the revision of that snapshot.
+   * The host makes the root snapshot. The session Durable Object makes session and chat snapshots.
+   *
+   * @throws {AHPError} If the channel is not valid or its session does not exist.
+   */
+  async snapshot(channel: string): Promise<ChannelSnapshot> {
+    const parsed = parseChannel(channel);
+    const fromSeq = await this.db.host.serverSeq();
 
-    return { items: entries.map((entry) => entry.summary) };
-  }
-
-  async snapshot(uri: string): Promise<ChannelSnapshot> {
-    const channel = parseChannel(uri);
-    const fromSeq = await this.options.db.host.serverSeq();
-
-    if (channel.kind === "root") {
+    if (parsed.kind === "root") {
       return {
-        snapshot: { resource: uri, state: await this.rootState(), fromSeq },
+        snapshot: { resource: channel, state: await this.rootState(), fromSeq },
         revision: fromSeq,
       };
     }
 
-    const entry = await this.resolveSession(channel);
-    const { state, revision } = await this.sessionStub(entry.id).snapshot({ channel: uri });
+    const entry = await this.resolveSession(parsed);
+    const { state, revision } = await this.sessionStub(entry.id).snapshot({ channel });
 
-    return { snapshot: { resource: uri, state, fromSeq }, revision };
+    return { snapshot: { resource: channel, state, fromSeq }, revision };
   }
 
-  async dispatch(uri: string, request: SessionDispatchRequest): Promise<void> {
-    const channel = parseChannel(uri);
+  /**
+   * Sends a client action to the session that owns the chat channel.
+   * If the session accepts the action, this method returns undefined. Subscribers then receive
+   * the action as a broadcast.
+   * If the session refuses the action, this method returns a rejection. Send the rejection only to
+   * the client that sent the action.
+   */
+  async dispatch(
+    params: DispatchActionParams,
+    clientId: string,
+  ): Promise<JsonRpcMessage | undefined> {
+    const { channel, clientSeq, action } = params;
+    const origin = { clientId, clientSeq };
 
-    if (channel.kind !== "chat") {
-      throw new ProtocolError("Actions must target a chat channel");
+    try {
+      const parsed = parseChannel(channel);
+
+      if (parsed.kind !== "chat") {
+        throw new AHPError("Actions must target a chat channel");
+      }
+
+      const entry = await this.resolveSession(parsed);
+
+      await this.sessionStub(entry.id).dispatch({
+        action: SessionDispatchActionSchema.parse(action),
+        origin,
+      });
+
+      return undefined;
+    } catch (error) {
+      return {
+        jsonrpc: "2.0",
+        method: "action",
+        params: {
+          channel,
+          action,
+          origin,
+          serverSeq: await this.db.host.nextServerSeq(),
+          rejectionReason: errorMessage(error),
+        },
+      };
     }
-
-    const entry = await this.resolveSession(channel);
-    await this.sessionStub(entry.id).dispatch(request);
   }
 
-  async create(params: CreateSessionParams): Promise<void> {
-    const { id } = sessionChannel(params.channel);
-    const agent = this.options.agentInfo();
+  /**
+   * Adds a session to the catalog and creates its session Durable Object.
+   * Subscribers receive the new session before it is ready, so they can see its lifecycle.
+   * If the session Durable Object fails, this method removes the session from the catalog.
+   *
+   * @throws {AHPError} If the parameters are not valid, the session exists, or creation fails.
+   */
+  async create(params: AHPCreateSessionParams): Promise<void> {
+    const { provider } = this.agentInfo();
+    const { id, workingDirectory } = parseCreateParams(params, provider);
 
-    if (params.provider !== undefined && params.provider !== agent.provider) {
-      throw new ProtocolError("Agent provider does not exist", AhpErrorCodes.ProviderNotFound);
+    if (await this.db.sessions.get(id)) {
+      throw new AHPError("Session already exists", AHPErrorCodes.SessionAlreadyExists);
     }
 
-    if (await this.options.db.sessions.get(id)) {
-      throw new ProtocolError("Session already exists", AhpErrorCodes.SessionAlreadyExists);
-    }
-
-    if (params.config || params.activeClient || (params.workingDirectories?.length ?? 0) > 1) {
-      throw new ProtocolError(
-        "Session configuration and multiple working directories are not supported",
-      );
-    }
-
-    const directory = params.workingDirectories?.[0];
-    const workingDirectory = directory === undefined ? undefined : localPath(directory);
     const now = new Date().toISOString();
     const chatId = crypto.randomUUID();
 
@@ -104,70 +161,74 @@ export class HostSessionsService {
       defaultChatId: chatId,
       summary: {
         resource: params.channel,
-        provider: agent.provider,
+        provider,
         title: "New session",
-        status: SessionStatus.Idle,
+        status: AHPSessionStatus.Idle,
         createdAt: now,
         modifiedAt: now,
       },
     };
 
     // The session is listed while it is still creating, so early subscribers see its lifecycle.
-    await this.options.db.sessions.create(entry);
+    await this.db.sessions.create(entry);
 
-    this.options.connections.notify(ROOT_CHANNEL, {
+    await this.publishCatalogChange({
       jsonrpc: "2.0",
       method: "root/sessionAdded",
       params: { channel: ROOT_CHANNEL, summary: entry.summary },
     });
 
-    await this.catalogueChanged();
-
     try {
       await this.sessionStub(id).create({
-        hostId: this.options.hostId,
+        hostId: this.hostId,
         sessionId: id,
         chatId,
-        provider: agent.provider,
+        provider,
         createdAt: now,
         workingDirectory,
       });
     } catch (error) {
       // Report the creation failure even if cleanup also fails; disposeSession can retry it.
-      await Promise.allSettled([this.dispose(entry)]);
-      throw new ProtocolError(errorMessage(error));
+      await Promise.allSettled([this.remove(entry)]);
+      throw new AHPError(errorMessage(error));
     }
   }
 
-  async disposeChannel(uri: string): Promise<void> {
-    await this.dispose(await this.resolveSession(sessionChannel(uri)));
+  /**
+   * Disposes the session Durable Object and removes the session from the catalog.
+   *
+   * @throws {AHPError} If the channel is not a session channel or the session does not exist.
+   */
+  async dispose(channel: string): Promise<void> {
+    await this.remove(await this.resolveSession(sessionChannel(channel)));
   }
 
+  /**
+   * Applies an update from a session Durable Object.
+   * This method stores the new summary, broadcasts each action, and sends the summary fields
+   * that changed. If the session is not in the catalog, this method ignores the update.
+   */
   async sessionUpdate(req: HostSessionUpdateRequest): Promise<void> {
     const update = HostSessionUpdateRequestSchema.parse(req);
-    const entry = await this.options.db.sessions.get(update.sessionId);
+    const entry = await this.db.sessions.get(update.sessionId);
 
     if (!entry) {
       return;
     }
 
-    await this.options.db.sessions.update(entry.id, update.summary);
+    await this.db.sessions.update(entry.id, update.summary);
 
     for (const { channel, action, origin } of update.actions) {
       // Server sequences must be allocated in broadcast order.
       // oxlint-disable-next-line eslint/no-await-in-loop
-      const serverSeq = await this.options.db.host.nextSequence();
-
-      this.options.connections.broadcast({
-        envelope: { channel, action, origin, serverSeq },
-        revision: update.revision,
-      });
+      const serverSeq = await this.db.host.nextServerSeq();
+      this.publishAction({ channel, action, origin, serverSeq }, update.revision);
     }
 
     const changes = summaryChanges(entry.summary, update.summary);
 
     if (Object.keys(changes).length > 0) {
-      this.options.connections.notify(ROOT_CHANNEL, {
+      this.notifyRoot({
         jsonrpc: "2.0",
         method: "root/sessionSummaryChanged",
         params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id), changes },
@@ -175,82 +236,143 @@ export class HostSessionsService {
     }
   }
 
-  private async rootState(): Promise<RootState> {
+  private async rootState(): Promise<AHPRootState> {
     return {
-      agents: [this.options.agentInfo()],
-      activeSessions: await this.options.db.sessions.count(),
+      agents: [this.agentInfo()],
+      activeSessions: await this.db.sessions.count(),
     };
   }
 
-  private async resolveSession(channel: SessionChannel | ChatChannel): Promise<SessionEntry> {
+  /**
+   * Finds the catalog entry for a session channel or for the default chat of a session.
+   *
+   * @throws {AHPError} If the session does not exist.
+   */
+  private async resolveSession(parsed: SessionChannel | ChatChannel): Promise<SessionEntry> {
     const entry =
-      channel.kind === "session"
-        ? await this.options.db.sessions.get(channel.id)
-        : await this.options.db.sessions.findChat(channel.id);
+      parsed.kind === "session"
+        ? await this.db.sessions.get(parsed.id)
+        : await this.db.sessions.findChat(parsed.id);
 
     if (!entry) {
-      throw new ProtocolError("Session does not exist", AhpErrorCodes.SessionNotFound);
+      throw new AHPError("Session does not exist", AHPErrorCodes.SessionNotFound);
     }
 
     return entry;
   }
 
   private sessionStub(id: string): SessionRPC {
-    return this.options.sessionNamespace().getByName(sessionDOName(this.options.hostId, id));
+    return this.sessionNamespace().getByName(sessionDOName(this.hostId, id));
   }
 
-  private async dispose(entry: SessionEntry): Promise<void> {
+  /**
+   * Disposes the session Durable Object, then removes the session from the catalog.
+   * All sockets stop their subscriptions to the session channel and the chat channel.
+   */
+  private async remove(entry: SessionEntry): Promise<void> {
     await this.sessionStub(entry.id).dispose();
-    await this.options.db.sessions.remove(entry.id);
-    this.options.connections.removeChannel(sessionUri(entry.id));
-    this.options.connections.removeChannel(chatUri(entry.defaultChatId));
+    await this.db.sessions.remove(entry.id);
+    this.connections.removeChannel(sessionUri(entry.id));
+    this.connections.removeChannel(chatUri(entry.defaultChatId));
 
-    this.options.connections.notify(ROOT_CHANNEL, {
+    await this.publishCatalogChange({
       jsonrpc: "2.0",
       method: "root/sessionRemoved",
       params: { channel: ROOT_CHANNEL, session: sessionUri(entry.id) },
     });
-
-    await this.catalogueChanged();
   }
 
-  private async catalogueChanged(): Promise<void> {
-    const activeSessions = await this.options.db.sessions.count();
-    const serverSeq = await this.options.db.host.nextSequence();
+  /**
+   * Sends a notification about a session that the host added or removed.
+   * Then broadcasts the new number of active sessions.
+   */
+  private async publishCatalogChange(notification: JsonRpcNotification): Promise<void> {
+    this.notifyRoot(notification);
+    const activeSessions = await this.db.sessions.count();
+    const serverSeq = await this.db.host.nextServerSeq();
 
-    this.options.connections.broadcast({
-      revision: serverSeq,
-      envelope: {
+    this.publishAction(
+      {
         channel: ROOT_CHANNEL,
         serverSeq,
         action: { type: "root/activeSessionsChanged", activeSessions },
       },
+      serverSeq,
+    );
+  }
+
+  private notifyRoot(notification: JsonRpcNotification): void {
+    this.connections.publish({ channel: ROOT_CHANNEL, message: notification });
+  }
+
+  private publishAction(envelope: AHPActionEnvelope, revision: number): void {
+    this.connections.publish({
+      channel: envelope.channel,
+      revision,
+      message: { jsonrpc: "2.0", method: "action", params: envelope },
     });
   }
 }
 
-function sessionChannel(uri: string): SessionChannel {
-  const channel = parseChannel(uri);
+/**
+ * Validates the create parameters and returns the session ID and the working directory.
+ *
+ * @throws {AHPError} If the host does not support the parameters.
+ */
+function parseCreateParams(params: AHPCreateSessionParams, provider: string): CreateParams {
+  const { id } = sessionChannel(params.channel);
 
-  if (channel.kind !== "session") {
-    throw new ProtocolError("Expected an ahp-session channel");
+  if (params.provider !== undefined && params.provider !== provider) {
+    throw new AHPError("Agent provider does not exist", AHPErrorCodes.ProviderNotFound);
   }
 
-  return channel;
+  if (params.config || params.activeClient || (params.workingDirectories?.length ?? 0) > 1) {
+    throw new AHPError("Session configuration and multiple working directories are not supported");
+  }
+
+  const directory = params.workingDirectories?.[0];
+
+  return { id, workingDirectory: directory === undefined ? undefined : localPath(directory) };
 }
 
+/**
+ * Parses a session channel.
+ *
+ * @throws {AHPError} If the channel is not a session channel.
+ */
+function sessionChannel(channel: string): SessionChannel {
+  const parsed = parseChannel(channel);
+
+  if (parsed.kind !== "session") {
+    throw new AHPError("Expected an ahp-session channel");
+  }
+
+  return parsed;
+}
+
+/**
+ * Converts a local `file:` URI to a file system path.
+ *
+ * @throws {AHPError} If the URI is not a local file URI.
+ */
 function localPath(directory: string): string {
   const url = new URL(directory);
 
   if (url.protocol !== "file:" || url.hostname || url.search || url.hash) {
-    throw new ProtocolError("Expected a local file working directory");
+    throw new AHPError("Expected a local file working directory");
   }
 
   return decodeURIComponent(url.pathname);
 }
 
-// Identity fields never change, so only mutable fields that differ are reported.
-function summaryChanges(previous: SessionSummary, next: SessionSummary): Partial<SessionSummary> {
+/**
+ * Returns the summary fields that changed.
+ * Identity fields do not change, so this function does not compare them.
+ */
+function summaryChanges(
+  previous: AHPSessionSummary,
+  next: AHPSessionSummary,
+): Partial<AHPSessionSummary> {
   const { resource: _resource, provider: _provider, createdAt: _createdAt, ...mutable } = next;
   const before = new Map(Object.entries(previous));
 

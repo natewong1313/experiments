@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "78e2972e-373a-4ca2-a58c-a1fc4fd1798b",
+  "id": "b9b119e3-7d69-45d8-b8b2-4291d0b3dffa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "host": {
@@ -9,7 +9,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "integer",
           "primaryKey": true,
           "notNull": true,
           "autoincrement": false
@@ -19,15 +19,19 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": 0
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "host_singleton": {
+          "name": "host_singleton",
+          "value": "\"host\".\"id\" = 1"
+        }
+      }
     },
     "sessions": {
       "name": "sessions",

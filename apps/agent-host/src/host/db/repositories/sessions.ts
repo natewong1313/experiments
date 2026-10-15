@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { HostDatabaseOrm } from "../database";
 import { sessionsTable } from "../schema";
 import type { SessionEntry } from "../schema";
-import type { SessionSummary } from "@experiments/protocol-schemas/ahp";
+import type { SessionSummary as AHPSessionSummary } from "@experiments/protocol-schemas/ahp";
 
 export class SessionsRepository {
   private db: HostDatabaseOrm;
@@ -13,6 +13,12 @@ export class SessionsRepository {
 
   async list(): Promise<SessionEntry[]> {
     return this.db.select().from(sessionsTable).all();
+  }
+
+  async listSummaries(): Promise<AHPSessionSummary[]> {
+    const rows = this.db.select({ summary: sessionsTable.summary }).from(sessionsTable).all();
+
+    return rows.map((row) => row.summary);
   }
 
   async count(): Promise<number> {
@@ -31,7 +37,7 @@ export class SessionsRepository {
     this.db.insert(sessionsTable).values(entry).run();
   }
 
-  async update(id: string, summary: SessionSummary): Promise<void> {
+  async update(id: string, summary: AHPSessionSummary): Promise<void> {
     this.db.update(sessionsTable).set({ summary }).where(eq(sessionsTable.id, id)).run();
   }
 
