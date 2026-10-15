@@ -119,33 +119,41 @@ export class SessionService {
         applySession(record, { type: AHPActionType.SessionReady }),
       );
     } catch (error) {
-      const current = this.db.orm
-        .select({ sessionState: sessionTable.sessionState })
-        .from(sessionTable)
-        .get();
-
-      if (current?.sessionState.defaultChat !== chatUri(options.chatId)) {
-        throw error;
-      }
-
-      this.agent.close();
-
-      try {
-        await this.apply((record) => {
-          if (record.sessionState.defaultChat !== chatUri(options.chatId)) {
-            return;
-          }
-
-          return applySession(record, {
-            type: AHPActionType.SessionCreationFailed,
-            error: { errorType: "agent", message: errorMessage(error) },
-          });
-        });
-      } finally {
-        await this.removeRecord(chatUri(options.chatId));
-      }
-
+      await this.handleCreationFailed(error, chatUri(options.chatId));
       throw error;
+    }
+  }
+
+  /**
+   * Closes the agent, records a creation-failed action, and removes the session record for the
+   * generation identified by `chat`.
+   */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- error comes from a catch binding
+  private async handleCreationFailed(error: unknown, chat: string): Promise<void> {
+    const current = this.db.orm
+      .select({ sessionState: sessionTable.sessionState })
+      .from(sessionTable)
+      .get();
+
+    if (!isCurrentGeneration(current?.sessionState.defaultChat, chat)) {
+      return;
+    }
+
+    this.agent.close();
+
+    try {
+      await this.apply((record) => {
+        if (!isCurrentGeneration(record.sessionState.defaultChat, chat)) {
+          return;
+        }
+
+        return applySession(record, {
+          type: AHPActionType.SessionCreationFailed,
+          error: { errorType: "agent", message: errorMessage(error) },
+        });
+      });
+    } finally {
+      await this.removeRecord(chat);
     }
   }
 
@@ -397,7 +405,10 @@ export class SessionService {
         .from(sessionTable)
         .get();
 
-      if (defaultChat !== undefined && record?.sessionState.defaultChat !== defaultChat) {
+      if (
+        defaultChat !== undefined &&
+        !isCurrentGeneration(record?.sessionState.defaultChat, defaultChat)
+      ) {
         return;
       }
 
@@ -406,4 +417,12 @@ export class SessionService {
       await this.hostUpdates.clear();
     });
   }
+}
+
+/**
+ * Mega edge case but if a session is disposed and recreated with the same ID
+ * it'll have the same ID but a different default chat id. We check against this.
+ */
+function isCurrentGeneration(defaultChat: string | undefined, chat: string): boolean {
+  return defaultChat === chat;
 }

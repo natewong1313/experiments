@@ -225,12 +225,13 @@ export class HostSessionsService {
         .where(eq(sessionsTable.id, update.sessionId))
         .get();
 
-      if (
-        !entry ||
-        update.revision <= entry.revision ||
-        update.summary.createdAt !== entry.summary.createdAt ||
-        (update.defaultChat !== undefined && update.defaultChat !== chatUri(entry.defaultChatId))
-      ) {
+      const isSameSession =
+        // If the createdAt or default chat id changes we know it's not the same session.
+        // We can get in this weird state if a user disposes a session than recreates with the same id.
+        update.summary.createdAt === entry?.summary.createdAt &&
+        (update.defaultChat === undefined || update.defaultChat === chatUri(entry.defaultChatId));
+
+      if (!entry || update.revision <= entry.revision || !isSameSession) {
         return;
       }
 
