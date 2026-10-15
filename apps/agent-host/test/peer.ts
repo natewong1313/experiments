@@ -6,6 +6,7 @@ import {
   type ActionEnvelope,
   type JsonRpcNotification,
   type JsonRpcReply,
+  type JsonValue,
   type ChannelParams,
   type CreateSessionParams,
   type DispatchActionParams,
@@ -18,7 +19,7 @@ import {
   type SubscribeParams,
 } from "@experiments/protocol-schemas/ahp";
 import * as z from "zod";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import worker from "./worker";
 import { env } from "cloudflare:workers";
 
@@ -40,6 +41,7 @@ type PeerParams =
   | SubscribeParams;
 
 export class Peer {
+  readonly messages: z.output<typeof MessageSchema>[] = [];
   readonly actions: ActionEnvelope[] = [];
   readonly notifications: JsonRpcNotification[] = [];
   private readonly replies: JsonRpcReply[] = [];
@@ -52,6 +54,7 @@ export class Peer {
       const text = z.string().parse(event.data);
       const value: unknown = JSON.parse(text);
       const message = MessageSchema.parse(value);
+      this.messages.push(message);
 
       if ("method" in message) {
         if (message.method === "action") {
@@ -91,12 +94,16 @@ export class Peer {
     this.socket.send(JSON.stringify({ jsonrpc: "2.0", method, params }));
   }
 
+  notifyRaw(method: string, params: JsonValue): void {
+    this.socket.send(JSON.stringify({ jsonrpc: "2.0", method, params }));
+  }
+
   close(): void {
     this.socket.close();
   }
 }
 
-export async function connectPeer(hostId: string, clientId = crypto.randomUUID()): Promise<Peer> {
+export async function openPeer(hostId: string): Promise<Peer> {
   const response = await worker.fetch(
     new Request(`https://host/hosts/${hostId}/ahp`, {
       headers: { Upgrade: "websocket" },
@@ -109,6 +116,15 @@ export async function connectPeer(hostId: string, clientId = crypto.randomUUID()
   }
 
   const peer = new Peer(response.webSocket);
+  onTestFinished(() => {
+    peer.close();
+  });
+
+  return peer;
+}
+
+export async function connectPeer(hostId: string, clientId = crypto.randomUUID()): Promise<Peer> {
+  const peer = await openPeer(hostId);
   await peer.request("initialize", {
     channel: "ahp-root://",
     clientId,

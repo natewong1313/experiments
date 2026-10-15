@@ -50,4 +50,6 @@ export type JsonRpcSuccess = z.output<typeof JsonRpcSuccessSchema>;
 
 export type JsonRpcFailure = z.output<typeof JsonRpcFailureSchema>;
 
+export type JsonRpcMessage = JsonRpcNotification | JsonRpcSuccess | JsonRpcFailure;
+
 export type JsonRpcReply = z.output<typeof JsonRpcReplySchema>;

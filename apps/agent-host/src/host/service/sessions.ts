@@ -10,12 +10,12 @@ import type { JsonRpcNotification } from "@experiments/protocol-schemas";
 import type {
   ActionEnvelope as AHPActionEnvelope,
   CreateSessionParams as AHPCreateSessionParams,
+  DispatchActionParams as AHPDispatchActionParams,
   ListSessionsResult as AHPListSessionsResult,
   SessionSummary as AHPSessionSummary,
 } from "@experiments/protocol-schemas/ahp";
 import { AHPError, ROOT_CHANNEL } from "../../shared/protocol";
 import { errorMessage } from "../../shared/errors";
-import type { DispatchActionParams, JsonRpcMessage } from "../../protocol";
 import { chatUri, parseChannel, sessionDOName, sessionUri } from "../../shared/lookups";
 import type { ChatChannel, SessionChannel } from "../../shared/lookups";
 import { HostSessionUpdateRequestSchema } from "../../shared/rpc/host";
@@ -64,6 +64,10 @@ export class HostSessionsService {
     return await this.db.host.serverSeq();
   }
 
+  async nextServerSeq(): Promise<number> {
+    return await this.db.host.nextServerSeq();
+  }
+
   /**
    * Returns the summary of each session in the catalog.
    */
@@ -96,46 +100,26 @@ export class HostSessionsService {
 
   /**
    * Sends a client action to the session that owns the chat channel.
-   * If the session accepts the action, this method returns undefined. Subscribers then receive
-   * the action as a broadcast.
-   * If the session refuses the action, this method returns a rejection. Send the rejection only to
-   * the client that sent the action.
+   * Subscribers receive accepted actions as broadcasts.
+   *
+   * @throws {Error} If the channel, action, or session state does not permit the dispatch.
    */
-  async dispatch(
-    params: DispatchActionParams,
-    clientId: string,
-  ): Promise<JsonRpcMessage | undefined> {
+  async dispatch(params: AHPDispatchActionParams, clientId: string): Promise<void> {
     const { channel, clientSeq, action } = params;
     const origin = { clientId, clientSeq };
 
-    try {
-      const parsed = parseChannel(channel);
+    const parsed = parseChannel(channel);
 
-      if (parsed.kind !== "chat") {
-        throw new AHPError("Actions must target a chat channel");
-      }
-
-      const entry = await this.resolveSession(parsed);
-
-      await this.sessionStub(entry.id).dispatch({
-        action: SessionDispatchActionSchema.parse(action),
-        origin,
-      });
-
-      return undefined;
-    } catch (error) {
-      return {
-        jsonrpc: "2.0",
-        method: "action",
-        params: {
-          channel,
-          action,
-          origin,
-          serverSeq: await this.db.host.nextServerSeq(),
-          rejectionReason: errorMessage(error),
-        },
-      };
+    if (parsed.kind !== "chat") {
+      throw new AHPError("Actions must target a chat channel");
     }
+
+    const entry = await this.resolveSession(parsed);
+
+    await this.sessionStub(entry.id).dispatch({
+      action: SessionDispatchActionSchema.parse(action),
+      origin,
+    });
   }
 
   /**

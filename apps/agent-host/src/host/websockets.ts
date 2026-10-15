@@ -1,5 +1,4 @@
-import type { JsonRpcFailure } from "@experiments/protocol-schemas";
-import type { JsonRpcMessage } from "../protocol";
+import type { JsonRpcFailure, JsonRpcMessage } from "@experiments/protocol-schemas/ahp";
 import type { AHPError } from "../shared/protocol";
 
 /** The WebSocket close codes that the host uses. */

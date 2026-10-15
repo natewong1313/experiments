@@ -1,6 +1,5 @@
 import * as z from "zod";
-import type { Snapshot as AHPSnapshot } from "@experiments/protocol-schemas/ahp";
-import type { JsonRpcMessage } from "../../protocol";
+import type { JsonRpcMessage, Snapshot as AHPSnapshot } from "@experiments/protocol-schemas/ahp";
 import { send } from "../websockets";
 
 /**

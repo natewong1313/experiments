@@ -11,7 +11,9 @@ import type {
   SubscribeResult as AHPSubscribeResult,
 } from "@experiments/protocol-schemas/ahp";
 import {
+  ChannelParamsSchema as AHPChannelParamsSchema,
   CreateSessionParamsSchema as AHPCreateSessionParamsSchema,
+  DispatchActionParamsSchema as AHPDispatchActionParamsSchema,
   InitializeParamsSchema as AHPInitializeParamsSchema,
   ListSessionsParamsSchema as AHPListSessionsParamsSchema,
   RootChannelParamsSchema as AHPRootChannelParamsSchema,
@@ -19,8 +21,7 @@ import {
 } from "@experiments/protocol-schemas/ahp";
 import { JsonRpcCallSchema } from "@experiments/protocol-schemas";
 import type { JsonRpcCall } from "@experiments/protocol-schemas";
-import { ChannelParamsSchema, DispatchActionParamsSchema } from "../protocol";
-import type { DispatchActionParams } from "../protocol";
+import { errorMessage } from "../shared/errors";
 import { AHPError, toAHPError } from "../shared/protocol";
 import type { ConnectionsService } from "./service/connections";
 import type { HostSessionsService } from "./service/sessions";
@@ -47,8 +48,6 @@ export class AHPRouter {
   async handleMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     await this.connections.serialize(socket, () => this.handleFrame(socket, raw));
   }
-
-  // Framing
 
   /** Sends a reply with a null ID if the frame is not a valid JSON-RPC message. */
   private async handleFrame(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
@@ -81,7 +80,8 @@ export class AHPRouter {
     message: JsonRpcCall,
   ): Promise<void> {
     try {
-      send(socket, { jsonrpc: "2.0", id, result: await this.request(socket, message) });
+      const result = await this.request(socket, message);
+      send(socket, { jsonrpc: "2.0", id, result });
     } catch (error) {
       const failure = toAHPError(error);
       sendError(socket, id, failure);
@@ -93,9 +93,27 @@ export class AHPRouter {
     }
   }
 
-  private async handleNotification(socket: WebSocket, message: JsonRpcCall): Promise<void> {
+  private async handleNotification(
+    socket: WebSocket,
+    { method, params }: JsonRpcCall,
+  ): Promise<void> {
     try {
-      await this.notification(socket, message);
+      switch (method) {
+        case "dispatchAction": {
+          await this.dispatchAction(socket, params);
+          break;
+        }
+
+        case "unsubscribe": {
+          this.requireClientId(socket);
+          this.connections.unsubscribe(socket, AHPChannelParamsSchema.parse(params).channel);
+          break;
+        }
+
+        default: {
+          break;
+        }
+      }
     } catch {
       // JSON-RPC gives notifications no way to report a failure, so the router drops it.
     }
@@ -139,7 +157,7 @@ export class AHPRouter {
           }
 
           case "disposeSession": {
-            await this.sessions.dispose(ChannelParamsSchema.parse(params).channel);
+            await this.sessions.dispose(AHPChannelParamsSchema.parse(params).channel);
 
             return null;
           }
@@ -153,26 +171,6 @@ export class AHPRouter {
             throw new AHPError("Method is not supported", AHPJsonRpcErrorCodes.MethodNotFound);
           }
         }
-      }
-    }
-  }
-
-  /** Routes notifications. The router ignores unknown notifications. */
-  private async notification(socket: WebSocket, { method, params }: JsonRpcCall): Promise<void> {
-    switch (method) {
-      case "dispatchAction": {
-        await this.dispatchAction(socket, DispatchActionParamsSchema.parse(params));
-        break;
-      }
-
-      case "unsubscribe": {
-        this.requireClientId(socket);
-        this.connections.unsubscribe(socket, ChannelParamsSchema.parse(params).channel);
-        break;
-      }
-
-      default: {
-        break;
       }
     }
   }
@@ -222,11 +220,24 @@ export class AHPRouter {
    * Only the client that sent the action receives a rejection.
    * All subscribers receive an accepted action as a broadcast.
    */
-  private async dispatchAction(socket: WebSocket, params: DispatchActionParams): Promise<void> {
-    const rejection = await this.sessions.dispatch(params, this.requireClientId(socket));
+  private async dispatchAction(socket: WebSocket, params: JsonRpcCall["params"]): Promise<void> {
+    const clientId = this.requireClientId(socket);
+    const submitted = AHPDispatchActionParamsSchema.parse(params);
 
-    if (rejection) {
-      send(socket, rejection);
+    try {
+      await this.sessions.dispatch(submitted, clientId);
+    } catch (error) {
+      send(socket, {
+        jsonrpc: "2.0",
+        method: "action",
+        params: {
+          channel: submitted.channel,
+          action: submitted.action,
+          origin: { clientId, clientSeq: submitted.clientSeq },
+          serverSeq: await this.sessions.nextServerSeq(),
+          rejectionReason: errorMessage(error),
+        },
+      });
     }
   }
 
