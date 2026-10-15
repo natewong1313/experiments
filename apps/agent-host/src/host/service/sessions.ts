@@ -29,7 +29,7 @@ import type { SessionEntry } from "../db/schema";
 import type { ChannelSnapshot, ConnectionsService } from "./connections";
 
 type HostSessionsOptions = {
-  hostId: string;
+  hostId(): string;
   db: HostDatabase;
   connections: ConnectionsService;
   agentInfo(): AHPAgentInfo;
@@ -44,14 +44,14 @@ type CreateParams = { id: string; workingDirectory: string | undefined };
  * catalog changes to subscribers.
  */
 export class HostSessionsService {
-  private hostId: string;
+  private hostId: () => string;
   private db: HostDatabase;
   private connections: ConnectionsService;
   private agentInfo: () => AHPAgentInfo;
   private sessionNamespace: () => SessionNamespace;
 
   constructor(options: HostSessionsOptions) {
-    this.hostId = options.hostId;
+    this.hostId = (): string => options.hostId();
     this.db = options.db;
     this.connections = options.connections;
     this.agentInfo = (): AHPAgentInfo => options.agentInfo();
@@ -187,7 +187,7 @@ export class HostSessionsService {
 
     try {
       await this.sessionStub(id).create({
-        hostId: this.hostId,
+        hostId: this.hostId(),
         sessionId: id,
         chatId,
         provider,
@@ -304,7 +304,7 @@ export class HostSessionsService {
   }
 
   private sessionStub(id: string): SessionRPC {
-    return this.sessionNamespace().getByName(sessionDOName(this.hostId, id));
+    return this.sessionNamespace().getByName(sessionDOName(this.hostId(), id));
   }
 
   /**

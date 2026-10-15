@@ -14,7 +14,7 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
   private db = new HostDatabase(this.ctx.storage);
   private connections = new ConnectionsService(this.ctx);
   private sessions = new HostSessionsService({
-    hostId: this.ctx.id.name!,
+    hostId: (): string => this.hostName(),
     db: this.db,
     connections: this.connections,
     agentInfo: (): AHPAgentInfo => this.getAgentInfo(),
@@ -43,6 +43,10 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
   protected abstract getSessionNamespace(): SessionNamespace;
 
   async fetch(request: Request): Promise<Response> {
+    if (this.ctx.id.name === undefined) {
+      throw new Error("AgentHost must be addressed by name");
+    }
+
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected a WebSocket upgrade", { status: 426 });
     }
@@ -84,5 +88,17 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
     await this.sessions.sessionUpdate(req).catch((error) => {
       throw new HostSessionUpdateError(errorMessage(error));
     });
+  }
+
+  /**
+   * Returns the name this Durable Object was addressed with. Throws if the host was created
+   * with newUniqueId(), since every session DO name derives from this name.
+   */
+  private hostName(): string {
+    if (this.ctx.id.name === undefined) {
+      throw new Error("AgentHost must be addressed by name");
+    }
+
+    return this.ctx.id.name;
   }
 }
