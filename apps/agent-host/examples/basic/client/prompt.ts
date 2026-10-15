@@ -1,7 +1,7 @@
-import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
+import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import * as z from "zod";
 import { ChatActionSchema, SessionActionSchema } from "@experiments/protocol-schemas/ahp";
-import type { Subscription } from "@microsoft/agent-host-protocol/client";
+import type { Subscription as AHPSubscription } from "@microsoft/agent-host-protocol/client";
 import { AhpClient } from "@microsoft/agent-host-protocol/client";
 import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
 
@@ -29,7 +29,7 @@ const timeout = setTimeout(() => {
 }, TIMEOUT_MS);
 
 async function waitUntilReady(
-  subscription: Subscription,
+  subscription: AHPSubscription,
   initial: z.output<typeof SessionPreviewSchema>,
 ): Promise<void> {
   if (initial.lifecycle === "ready") {
@@ -122,7 +122,7 @@ try {
   client.connect();
   await client.initialize({
     clientId: crypto.randomUUID(),
-    protocolVersions: [PROTOCOL_VERSION],
+    protocolVersions: [AHP_PROTOCOL_VERSION],
   });
   await client.request("createSession", { channel: session });
   const { result, subscription } = await client.subscribe(session);

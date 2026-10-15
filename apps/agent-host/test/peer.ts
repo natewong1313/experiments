@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
+import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import {
   ActionEnvelopeSchema,
   JsonRpcNotificationSchema,
@@ -128,7 +128,7 @@ export async function connectPeer(hostId: string, clientId = crypto.randomUUID()
   await peer.request("initialize", {
     channel: "ahp-root://",
     clientId,
-    protocolVersions: [PROTOCOL_VERSION],
+    protocolVersions: [AHP_PROTOCOL_VERSION],
   });
 
   return peer;

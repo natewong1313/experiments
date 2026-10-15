@@ -2,10 +2,10 @@ import { env } from "cloudflare:workers";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import {
-  SessionOriginKind,
-  MessageKind,
-  ResponsePartKind,
-  TurnState,
+  SessionOriginKind as AHPSessionOriginKind,
+  MessageKind as AHPMessageKind,
+  ResponsePartKind as AHPResponsePartKind,
+  TurnState as AHPTurnState,
 } from "@microsoft/agent-host-protocol";
 import type {
   HostRPC,
@@ -134,12 +134,12 @@ it("retains opaque AHP metadata in snapshots after reconstruction and subscripti
         record.chatState.activity = "Retained activity";
         record.chatState.turns.push({
           id: crypto.randomUUID(),
-          state: TurnState.Error,
-          message: { text: "hello", origin: { kind: MessageKind.User }, _meta: metadata },
+          state: AHPTurnState.Error,
+          message: { text: "hello", origin: { kind: AHPMessageKind.User }, _meta: metadata },
           usage: { inputTokens: 1, _meta: metadata },
           responseParts: [
             {
-              kind: ResponsePartKind.Error,
+              kind: AHPResponsePartKind.Error,
               error: { errorType: "agent", message: "Retained error", _meta: metadata },
             },
           ],
@@ -237,7 +237,7 @@ it("retains the full AHP summary through host RPC and storage", async () => {
     ...original,
     title: "Updated summary",
     origin: {
-      kind: SessionOriginKind.Automation,
+      kind: AHPSessionOriginKind.Automation,
       automation: "ahp-automation:/scheduled-task",
       run: "ahp-automation-run:/scheduled-run",
     },

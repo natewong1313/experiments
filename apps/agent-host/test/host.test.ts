@@ -13,7 +13,10 @@ import {
 import worker from "./worker";
 import { Peer, connectPeer } from "./peer";
 import { SessionDatabase } from "../src/session/db/database";
-import { MessageKind, PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
+import {
+  MessageKind as AHPMessageKind,
+  PROTOCOL_VERSION as AHP_PROTOCOL_VERSION,
+} from "@microsoft/agent-host-protocol";
 import { sessionDOName } from "../src/shared/lookups";
 
 type CreatedSession = { sessionId: string; channel: string; chat: string };
@@ -271,7 +274,7 @@ it("records an interrupted turn as an error on reconstruction", async () => {
         record.chatState.activeTurn = {
           id: crypto.randomUUID(),
           startedAt: new Date().toISOString(),
-          message: { text: "unfinished", origin: { kind: MessageKind.User } },
+          message: { text: "unfinished", origin: { kind: AHPMessageKind.User } },
           responseParts: [],
           usage: undefined,
         };
@@ -384,7 +387,7 @@ it("holds root notifications for a client whose initial snapshots are still load
     const initialized = observer.request("initialize", {
       channel: "ahp-root://",
       clientId: crypto.randomUUID(),
-      protocolVersions: [PROTOCOL_VERSION],
+      protocolVersions: [AHP_PROTOCOL_VERSION],
       initialSubscriptions: ["ahp-root://", session.channel],
     });
 

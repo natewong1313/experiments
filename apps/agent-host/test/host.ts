@@ -1,10 +1,10 @@
 import { AgentHost as BaseHost } from "../src";
-import type { AgentInfo } from "@microsoft/agent-host-protocol";
+import type { AgentInfo as AHPAgentInfo } from "@microsoft/agent-host-protocol";
 import type { TestEnv } from "./worker";
 import type { AgentSession } from "./session";
 
 export class AgentHost extends BaseHost<TestEnv> {
-  protected getAgentInfo(): AgentInfo {
+  protected getAgentInfo(): AHPAgentInfo {
     return {
       provider: "test",
       displayName: "Test",
