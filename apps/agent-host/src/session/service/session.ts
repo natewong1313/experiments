@@ -1,4 +1,5 @@
 import { waitUntil } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 import {
   ActionType as AHPActionType,
@@ -25,14 +26,14 @@ import type {
 import type { HostRPC, HostSessionUpdateRequest } from "../../shared/rpc/host";
 import { chatUri, sessionUri } from "../../shared/lookups";
 import type { SessionDatabase } from "../db/database";
+import { sessionTable } from "../db/schema";
 import type { SessionRecord } from "../db/schema";
 import { applyChat, applySession, buildSession } from "../state";
 import { AgentConnection } from "./agent";
 import { HostUpdatesService } from "./host-updates";
 import type { SessionChange } from "./host-updates";
 
-type SessionOptions = {
-  db: SessionDatabase;
+type SessionServiceCallbacks = {
   workingDirectory(): string;
   hostNamespace(): DurableObjectNamespace<HostRPC>;
   connectAgent(sessionId: string): Promise<ACPStream>;
@@ -45,17 +46,16 @@ type SessionOptions = {
 export class SessionService {
   // Covers a turn's whole prompt run, which can outlast the active turn after cancellation.
   private promptRunning = false;
-  private readonly agent = new AgentConnection();
-  private readonly options: SessionOptions;
-  private readonly hostUpdates: HostUpdatesService;
+  private agent = new AgentConnection();
+  private db: SessionDatabase;
+  private callbacks: SessionServiceCallbacks;
+  private hostUpdates: HostUpdatesService;
 
-  constructor(options: SessionOptions) {
-    this.options = options;
-    this.hostUpdates = new HostUpdatesService({
-      db: options.db,
-      deliver: async (hostId, update): Promise<void> => {
-        await options.hostNamespace().getByName(hostId).sessionUpdate(update);
-      },
+  constructor(db: SessionDatabase, callbacks: SessionServiceCallbacks) {
+    this.db = db;
+    this.callbacks = callbacks;
+    this.hostUpdates = new HostUpdatesService(db, async (hostId, update): Promise<void> => {
+      await callbacks.hostNamespace().getByName(hostId).sessionUpdate(update);
     });
   }
 
@@ -97,18 +97,18 @@ export class SessionService {
    * creation error, removes the record, and rethrows.
    */
   async create(options: SessionCreateRequest): Promise<void> {
-    const cwd = options.workingDirectory ?? this.options.workingDirectory();
+    const cwd = options.workingDirectory ?? this.callbacks.workingDirectory();
 
     if (!cwd.startsWith("/")) {
       throw new Error("Working directory must be an absolute path");
     }
 
-    await this.options.db.transaction(async () => {
-      if (await this.options.db.session.get()) {
+    await this.db.transaction(async () => {
+      if (this.db.orm.select({ id: sessionTable.id }).from(sessionTable).get()) {
         throw new Error("Session already exists");
       }
 
-      await this.options.db.session.create(buildSession(options, cwd));
+      this.db.orm.insert(sessionTable).values(buildSession(options, cwd)).run();
     });
 
     try {
@@ -117,7 +117,10 @@ export class SessionService {
         applySession(record, { type: AHPActionType.SessionReady }),
       );
     } catch (error) {
-      const current = await this.options.db.session.get();
+      const current = this.db.orm
+        .select({ sessionState: sessionTable.sessionState })
+        .from(sessionTable)
+        .get();
 
       if (current?.sessionState.defaultChat !== chatUri(options.chatId)) {
         throw error;
@@ -150,7 +153,15 @@ export class SessionService {
    * @throws {Error} If the session does not exist or the channel is foreign to it.
    */
   async snapshot(req: SessionSnapshotRequest): Promise<SessionSnapshotResponse> {
-    const record = await this.options.db.session.get();
+    const record = this.db.orm
+      .select({
+        id: sessionTable.id,
+        sessionState: sessionTable.sessionState,
+        chatState: sessionTable.chatState,
+        revision: sessionTable.revision,
+      })
+      .from(sessionTable)
+      .get();
 
     if (!record) {
       throw new Error("Session does not exist");
@@ -258,20 +269,31 @@ export class SessionService {
    * Opens the agent connection and persists the agent session id when a new one is assigned.
    */
   private async openAgent(): Promise<void> {
-    const record = await this.options.db.session.get();
+    const record = this.db.orm
+      .select({
+        id: sessionTable.id,
+        cwd: sessionTable.cwd,
+        acpSessionId: sessionTable.acpSessionId,
+      })
+      .from(sessionTable)
+      .get();
 
     if (!record) {
       throw new Error("Session does not exist");
     }
 
     const acpSessionId = await this.agent.open({
-      stream: (): Promise<ACPStream> => this.options.connectAgent(record.id),
+      stream: (): Promise<ACPStream> => this.callbacks.connectAgent(record.id),
       cwd: record.cwd,
       sessionId: record.acpSessionId,
     });
 
     if (acpSessionId !== record.acpSessionId) {
-      await this.options.db.session.setAcpSessionId(record.id, acpSessionId);
+      this.db.orm
+        .update(sessionTable)
+        .set({ acpSessionId })
+        .where(eq(sessionTable.id, record.id))
+        .run();
     }
   }
 
@@ -365,16 +387,20 @@ export class SessionService {
   }
 
   private async removeRecord(defaultChat?: string): Promise<void> {
-    const { db } = this.options;
+    const { db } = this;
 
     await db.transaction(async () => {
-      const record = await db.session.get();
+      const record = db.orm
+        .select({ sessionState: sessionTable.sessionState })
+        .from(sessionTable)
+        .get();
 
       if (defaultChat !== undefined && record?.sessionState.defaultChat !== defaultChat) {
         return;
       }
 
-      await db.session.remove();
+      // oxlint-disable-next-line drizzle/enforce-delete-with-where -- removes the only session row
+      db.orm.delete(sessionTable).run();
       await this.hostUpdates.clear();
     });
   }

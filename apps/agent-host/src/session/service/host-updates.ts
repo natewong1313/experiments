@@ -1,14 +1,11 @@
+import { asc, eq } from "drizzle-orm";
 import { errorMessage } from "../../shared/errors";
 import { isErrorRetryable } from "durable-utils/do-utils";
 import { jitterBackoff } from "durable-utils/retries";
 import type { HostSessionUpdateRequest } from "../../shared/rpc/host";
 import type { SessionDatabase } from "../db/database";
+import { hostUpdatesTable, sessionTable } from "../db/schema";
 import type { PendingHostUpdate, SessionRecord } from "../db/schema";
-
-type HostUpdatesOptions = {
-  db: SessionDatabase;
-  deliver(hostId: string, update: HostSessionUpdateRequest): Promise<void>;
-};
 
 export type SessionChange = (record: SessionRecord) => HostSessionUpdateRequest | undefined;
 
@@ -21,28 +18,34 @@ const deliveryTimeoutError = new Error("Host update timed out");
 
 /** Stores host updates with session changes and delivers them in order. */
 export class HostUpdatesService {
-  private options: HostUpdatesOptions;
   private sending?: Promise<void>;
+  private db: SessionDatabase;
+  private deliver: (hostId: string, update: HostSessionUpdateRequest) => Promise<void>;
 
-  constructor(options: HostUpdatesOptions) {
-    this.options = options;
+  constructor(
+    db: SessionDatabase,
+    deliver: (hostId: string, update: HostSessionUpdateRequest) => Promise<void>,
+  ) {
+    this.db = db;
+    this.deliver = deliver;
   }
 
   /** Saves the change, its host update, and the recovery alarm in one storage transaction. */
   async save(change: SessionChange): Promise<boolean> {
-    const { db } = this.options;
-
-    return await db.transaction(async () => {
-      const record = await db.session.get();
+    return await this.db.transaction(async () => {
+      const record = this.db.orm.select().from(sessionTable).get();
       const update = record ? change(record) : undefined;
 
       if (record && update) {
-        await db.session.update(record);
-        db.hostUpdates.add({
-          hostId: record.hostId,
-          update: { ...update, defaultChat: record.sessionState.defaultChat },
-          retryAt: Date.now() + BASE_RETRY_MS,
-        });
+        this.db.orm.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
+        this.db.orm
+          .insert(hostUpdatesTable)
+          .values({
+            hostId: record.hostId,
+            update: { ...update, defaultChat: record.sessionState.defaultChat },
+            retryAt: Date.now() + BASE_RETRY_MS,
+          })
+          .run();
       }
 
       await this.schedule();
@@ -69,19 +72,29 @@ export class HostUpdatesService {
     try {
       await this.flush();
     } finally {
-      await this.options.db.transaction(() => this.schedule());
+      await this.db.transaction(() => this.schedule());
     }
   }
 
   /** Restarts delivery of stored updates, including updates stopped by a permanent failure. */
   async resume(): Promise<void> {
-    const { db } = this.options;
-
-    await db.transaction(async () => {
-      const first = db.hostUpdates.first();
+    await this.db.transaction(async () => {
+      const first = this.db.orm
+        .select({
+          id: hostUpdatesTable.id,
+          retryAt: hostUpdatesTable.retryAt,
+          attempts: hostUpdatesTable.attempts,
+        })
+        .from(hostUpdatesTable)
+        .orderBy(asc(hostUpdatesTable.id))
+        .get();
 
       if (first?.retryAt === null) {
-        db.hostUpdates.attempt(first.id, first.attempts, Date.now());
+        this.db.orm
+          .update(hostUpdatesTable)
+          .set({ attempts: first.attempts, retryAt: Date.now() })
+          .where(eq(hostUpdatesTable.id, first.id))
+          .run();
       }
 
       await this.schedule();
@@ -91,29 +104,36 @@ export class HostUpdatesService {
 
   /** Clears pending updates and their alarm within the caller's session removal transaction. */
   async clear(): Promise<void> {
-    this.options.db.hostUpdates.clear();
+    // oxlint-disable-next-line drizzle/enforce-delete-with-where -- removes all updates owned by the disposed session
+    this.db.orm.delete(hostUpdatesTable).run();
     await this.schedule();
   }
 
   /** Schedules an alarm for the oldest update. A null retry time stops automatic delivery after a permanent failure. */
   async schedule(): Promise<void> {
-    const { db } = this.options;
-    const first = db.hostUpdates.first();
+    const first = this.db.orm
+      .select({ retryAt: hostUpdatesTable.retryAt })
+      .from(hostUpdatesTable)
+      .orderBy(asc(hostUpdatesTable.id))
+      .get();
 
     if (first?.retryAt === null || first === undefined) {
-      await db.deleteAlarm();
+      await this.db.deleteAlarm();
     } else {
       const time = Math.max(Date.now(), first.retryAt);
-      await db.setAlarm(time);
+      await this.db.setAlarm(time);
     }
   }
 
   private async drain(): Promise<void> {
-    const { db } = this.options;
     const deadline = Date.now() + PASS_BUDGET_MS;
 
     for (let count = 0; count < MAX_BATCH_SIZE && Date.now() < deadline; count += 1) {
-      const pending = db.hostUpdates.first();
+      const pending = this.db.orm
+        .select()
+        .from(hostUpdatesTable)
+        .orderBy(asc(hostUpdatesTable.id))
+        .get();
 
       if (!pending) {
         return;
@@ -138,24 +158,31 @@ export class HostUpdatesService {
   }
 
   private async send(pending: PendingHostUpdate): Promise<boolean> {
-    const { db } = this.options;
     const attempts = pending.attempts + 1;
 
     const jitter = jitterBackoff(attempts, BASE_RETRY_MS, MAX_RETRY_MS);
     const retryAt = Date.now() + DELIVERY_TIMEOUT_MS + Math.max(BASE_RETRY_MS, jitter);
 
-    await db.transaction(async () => {
-      db.hostUpdates.attempt(pending.id, attempts, retryAt);
+    await this.db.transaction(async () => {
+      this.db.orm
+        .update(hostUpdatesTable)
+        .set({ attempts, retryAt })
+        .where(eq(hostUpdatesTable.id, pending.id))
+        .run();
       await this.schedule();
     });
 
     try {
-      await deliverWithinDeadline(() => this.options.deliver(pending.hostId, pending.update));
+      await deliverWithinDeadline(() => this.deliver(pending.hostId, pending.update));
     } catch (error) {
       const retryable = error === deliveryTimeoutError || isErrorRetryable(error);
 
-      await db.transaction(async () => {
-        db.hostUpdates.fail(pending.id, errorMessage(error), retryable ? retryAt : null);
+      await this.db.transaction(async () => {
+        this.db.orm
+          .update(hostUpdatesTable)
+          .set({ error: errorMessage(error), retryAt: retryable ? retryAt : null })
+          .where(eq(hostUpdatesTable.id, pending.id))
+          .run();
         await this.schedule();
       });
 
@@ -171,8 +198,8 @@ export class HostUpdatesService {
       return false;
     }
 
-    await db.transaction(async () => {
-      db.hostUpdates.remove(pending.id);
+    await this.db.transaction(async () => {
+      this.db.orm.delete(hostUpdatesTable).where(eq(hostUpdatesTable.id, pending.id)).run();
       await this.schedule();
     });
 

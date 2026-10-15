@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import {
@@ -17,6 +18,7 @@ import type {
 import { buildSession, sessionSummary } from "../src/session/state";
 import { HostDatabase } from "../src/host/db/database";
 import { SessionDatabase } from "../src/session/db/database";
+import { sessionTable } from "../src/session/db/schema";
 import { connectPeer } from "./peer";
 import { sessionDOName, sessionUri, chatUri } from "../src/shared/lookups";
 
@@ -141,7 +143,7 @@ it("retains opaque AHP metadata in snapshots after reconstruction and subscripti
 
     const chat = await runInDurableObject(stub, async (_instance, ctx) => {
       const db = new SessionDatabase(ctx.storage);
-      const record = await db.session.get();
+      const record = db.orm.select().from(sessionTable).get();
 
       if (!record) {
         throw new Error("Missing session");
@@ -163,7 +165,7 @@ it("retains opaque AHP metadata in snapshots after reconstruction and subscripti
         ],
       });
 
-      await db.session.update(record);
+      db.orm.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
 
       return record.chatState.resource;
     });

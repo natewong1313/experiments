@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { asc, eq } from "drizzle-orm";
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import * as z from "zod";
@@ -10,6 +11,7 @@ import type { SessionCreateRequest, HostSessionUpdateRequest, SessionRPC } from 
 import type { SessionEntry } from "../src/host/db/schema";
 import { HostDatabase } from "../src/host/db/database";
 import { SessionDatabase } from "../src/session/db/database";
+import { hostUpdatesTable, sessionTable } from "../src/session/db/schema";
 import type { SessionRecord } from "../src/session/db/schema";
 import { HostUpdatesService } from "../src/session/service/host-updates";
 import { applySession, buildSession, sessionSummary } from "../src/session/state";
@@ -67,13 +69,17 @@ async function makeRetryDue(req: SessionCreateRequest): Promise<void> {
 
   await runInDurableObject(stub, async (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
-    const pending = db.hostUpdates.first();
+    const pending = db.orm.select().from(hostUpdatesTable).orderBy(asc(hostUpdatesTable.id)).get();
 
     if (!pending) {
       throw new Error("Missing pending update");
     }
 
-    db.hostUpdates.attempt(pending.id, pending.attempts, Date.now());
+    db.orm
+      .update(hostUpdatesTable)
+      .set({ attempts: pending.attempts, retryAt: Date.now() })
+      .where(eq(hostUpdatesTable.id, pending.id))
+      .run();
     expect(await ctx.storage.getAlarm()).not.toBeNull();
   });
 }
@@ -85,15 +91,13 @@ it("delivers a saved change after the session restarts", async () => {
   await runInDurableObject(stub, async (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
 
-    const updates = new HostUpdatesService({
-      db,
-      deliver: async (): Promise<void> => {
-        throw new Error("Delivery must wait for the alarm");
-      },
+    const updates = new HostUpdatesService(db, async (): Promise<void> => {
+      throw new Error("Delivery must wait for the alarm");
     });
 
     expect(await updates.save((record) => rename(record, "Saved before restart"))).toBe(true);
-    expect(db.hostUpdates.first()?.update).toMatchObject({
+    const pending = db.orm.select().from(hostUpdatesTable).orderBy(asc(hostUpdatesTable.id)).get();
+    expect(pending?.update).toMatchObject({
       revision: NEXT_REVISION,
       defaultChat: chatUri(req.chatId),
     });
@@ -112,7 +116,13 @@ it("delivers a saved change after the session restarts", async () => {
     state: { title: "Saved before restart" },
   });
   await runInDurableObject(stub, async (_instance, ctx) => {
-    expect(new SessionDatabase(ctx.storage).hostUpdates.first()).toBeUndefined();
+    const pending = new SessionDatabase(ctx.storage).orm
+      .select()
+      .from(hostUpdatesTable)
+      .orderBy(asc(hostUpdatesTable.id))
+      .get();
+
+    expect(pending).toBeUndefined();
     expect(await ctx.storage.getAlarm()).toBeNull();
   });
 });
@@ -126,17 +136,15 @@ it("retries a lost reply without broadcasting the accepted update twice", async 
   await runInDurableObject(stub, async (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
 
-    const updates = new HostUpdatesService({
-      db,
-      deliver: async (hostId, update): Promise<void> => {
-        await env.COORDINATORS.getByName(hostId).sessionUpdate(update);
-        throw Object.assign(new Error("Reply lost"), { retryable: true });
-      },
+    const updates = new HostUpdatesService(db, async (hostId, update): Promise<void> => {
+      await env.COORDINATORS.getByName(hostId).sessionUpdate(update);
+      throw Object.assign(new Error("Reply lost"), { retryable: true });
     });
 
     await updates.save((record) => rename(record, "Accepted once"));
     await updates.flush();
-    expect(db.hostUpdates.first()).toMatchObject({ attempts: 1, error: "Reply lost" });
+    const pending = db.orm.select().from(hostUpdatesTable).orderBy(asc(hostUpdatesTable.id)).get();
+    expect(pending).toMatchObject({ attempts: 1, error: "Reply lost" });
   });
 
   await vi.waitFor(() => {
@@ -150,7 +158,13 @@ it("retries a lost reply without broadcasting the accepted update twice", async 
   expect(await hostState(req)).toEqual(accepted);
   expect(peer.actions).toHaveLength(1);
   await runInDurableObject(stub, (_instance, ctx) => {
-    expect(new SessionDatabase(ctx.storage).hostUpdates.first()).toBeUndefined();
+    const pending = new SessionDatabase(ctx.storage).orm
+      .select()
+      .from(hostUpdatesTable)
+      .orderBy(asc(hostUpdatesTable.id))
+      .get();
+
+    expect(pending).toBeUndefined();
   });
 });
 
@@ -167,7 +181,7 @@ it("keeps later changes behind a failed delivery and sends them in order", async
       throw Object.assign(new Error("Host unavailable"), { retryable: true });
     });
 
-    const updates = new HostUpdatesService({ db, deliver });
+    const updates = new HostUpdatesService(db, deliver);
     await updates.save((record) => rename(record, "First change"));
     await updates.flush();
     await updates.save((record) => rename(record, "Second change"));
@@ -209,7 +223,7 @@ it("rolls back the session change and pending update when alarm scheduling fails
 
   await runInDurableObject(stub, async (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
-    const updates = new HostUpdatesService({ db, deliver: async (): Promise<void> => {} });
+    const updates = new HostUpdatesService(db, async (): Promise<void> => {});
 
     const schedule = vi.spyOn(updates, "schedule").mockRejectedValueOnce(new Error("Alarm failed"));
 
@@ -221,11 +235,12 @@ it("rolls back the session change and pending update when alarm scheduling fails
       schedule.mockRestore();
     }
 
-    expect(await db.session.get()).toMatchObject({
+    expect(db.orm.select().from(sessionTable).get()).toMatchObject({
       revision: 1,
       sessionState: { title: "New session" },
     });
-    expect(db.hostUpdates.first()).toBeUndefined();
+    const pending = db.orm.select().from(hostUpdatesTable).orderBy(asc(hostUpdatesTable.id)).get();
+    expect(pending).toBeUndefined();
     expect(await ctx.storage.getAlarm()).toBeNull();
 
     expect(
@@ -235,8 +250,17 @@ it("rolls back the session change and pending update when alarm scheduling fails
         return undefined;
       }),
     ).toBe(false);
-    expect(await db.session.get()).toMatchObject({ sessionState: { title: "New session" } });
-    expect(db.hostUpdates.first()).toBeUndefined();
+    expect(db.orm.select().from(sessionTable).get()).toMatchObject({
+      sessionState: { title: "New session" },
+    });
+
+    const stillPending = db.orm
+      .select()
+      .from(hostUpdatesTable)
+      .orderBy(asc(hostUpdatesTable.id))
+      .get();
+
+    expect(stillPending).toBeUndefined();
   });
 });
 
@@ -247,26 +271,32 @@ it("retains permanent delivery failures without scheduling more attempts", async
   await runInDurableObject(stub, async (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
 
-    const updates = new HostUpdatesService({
-      db,
-      deliver: async (): Promise<void> => {
-        throw new Error("Rejected update");
-      },
+    const updates = new HostUpdatesService(db, async (): Promise<void> => {
+      throw new Error("Rejected update");
     });
 
     await updates.save((record) => rename(record, "Saved locally"));
     await expect(updates.flush()).resolves.toBeUndefined();
     await expect(updates.flush()).resolves.toBeUndefined();
-    expect(db.hostUpdates.first()).toMatchObject({ retryAt: null, error: "Rejected update" });
+    const pending = db.orm.select().from(hostUpdatesTable).orderBy(asc(hostUpdatesTable.id)).get();
+    expect(pending).toMatchObject({ retryAt: null, error: "Rejected update" });
     expect(await ctx.storage.getAlarm()).toBeNull();
-    expect(await db.session.get()).toMatchObject({ sessionState: { title: "Saved locally" } });
+    expect(db.orm.select().from(sessionTable).get()).toMatchObject({
+      sessionState: { title: "Saved locally" },
+    });
   });
 
   await stub.retryHostUpdates();
   const after = await hostState(req);
   expect(after.entry?.summary.title).toBe("Saved locally");
   await runInDurableObject(stub, (_instance, ctx) => {
-    expect(new SessionDatabase(ctx.storage).hostUpdates.first()).toBeUndefined();
+    const pending = new SessionDatabase(ctx.storage).orm
+      .select()
+      .from(hostUpdatesTable)
+      .orderBy(asc(hostUpdatesTable.id))
+      .get();
+
+    expect(pending).toBeUndefined();
   });
 });
 
@@ -276,12 +306,12 @@ it("starts and cancels a prompt while a permanent host failure awaits repair", a
   const session: SessionRPC = stub;
 
   await runInDurableObject(stub, async (_instance, ctx) => {
-    const updates = new HostUpdatesService({
-      db: new SessionDatabase(ctx.storage),
-      deliver: async (): Promise<void> => {
+    const updates = new HostUpdatesService(
+      new SessionDatabase(ctx.storage),
+      async (): Promise<void> => {
         throw new Error("Host needs repair");
       },
-    });
+    );
 
     await updates.save((record) => rename(record, "Saved during host failure"));
     await updates.flush();
@@ -365,16 +395,22 @@ it("clears pending updates on disposal and ignores late updates for a replaced s
 
   const oldUpdate = await runInDurableObject(stub, async (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
-    const updates = new HostUpdatesService({ db, deliver: async (): Promise<void> => {} });
+    const updates = new HostUpdatesService(db, async (): Promise<void> => {});
     await updates.save((record) => rename(record, "Old session"));
 
-    return db.hostUpdates.first()?.update;
+    return db.orm.select().from(hostUpdatesTable).orderBy(asc(hostUpdatesTable.id)).get()?.update;
   });
 
   expect(oldUpdate).toBeDefined();
   await stub.dispose();
   await runInDurableObject(stub, async (_instance, ctx) => {
-    expect(new SessionDatabase(ctx.storage).hostUpdates.first()).toBeUndefined();
+    const pending = new SessionDatabase(ctx.storage).orm
+      .select()
+      .from(hostUpdatesTable)
+      .orderBy(asc(hostUpdatesTable.id))
+      .get();
+
+    expect(pending).toBeUndefined();
     expect(await ctx.storage.getAlarm()).toBeNull();
   });
 
@@ -489,18 +525,22 @@ it(
       const db = new SessionDatabase(ctx.storage);
       const reply = Promise.withResolvers<null>();
 
-      const updates = new HostUpdatesService({
-        db,
-        deliver: async (): Promise<void> => {
-          await reply.promise;
-        },
+      const updates = new HostUpdatesService(db, async (): Promise<void> => {
+        await reply.promise;
       });
 
       await updates.save((record) => rename(record, "Waiting for host"));
 
       try {
         await updates.flush();
-        expect(db.hostUpdates.first()).toMatchObject({
+
+        const pending = db.orm
+          .select()
+          .from(hostUpdatesTable)
+          .orderBy(asc(hostUpdatesTable.id))
+          .get();
+
+        expect(pending).toMatchObject({
           attempts: 1,
           error: "Host update timed out",
         });

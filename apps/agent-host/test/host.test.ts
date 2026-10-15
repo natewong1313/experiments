@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import * as z from "zod";
@@ -13,6 +14,7 @@ import {
 import worker from "./worker";
 import { Peer, connectPeer } from "./peer";
 import { SessionDatabase } from "../src/session/db/database";
+import { sessionTable } from "../src/session/db/schema";
 import {
   MessageKind as AHPMessageKind,
   PROTOCOL_VERSION as AHP_PROTOCOL_VERSION,
@@ -271,7 +273,7 @@ it("records an interrupted turn as an error on reconstruction", async () => {
 
     const interrupted = await runInDurableObject(stub, async (_instance, ctx) => {
       const db = new SessionDatabase(ctx.storage);
-      const record = await db.session.get();
+      const record = db.orm.select().from(sessionTable).get();
 
       if (!record) {
         throw new Error("Missing session");
@@ -285,7 +287,7 @@ it("records an interrupted turn as an error on reconstruction", async () => {
         usage: undefined,
       };
 
-      await db.session.update(record);
+      db.orm.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
 
       return record.chatState.activeTurn.id;
     });

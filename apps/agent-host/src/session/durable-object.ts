@@ -19,9 +19,8 @@ import { SessionDatabase } from "./db/database";
 import { SessionService } from "./service/session";
 
 export abstract class AgentSession<Env = unknown> extends DurableObject<Env> implements SessionRPC {
-  protected db = new SessionDatabase(this.ctx.storage);
-  private session = new SessionService({
-    db: this.db,
+  private db = new SessionDatabase(this.ctx.storage);
+  private session = new SessionService(this.db, {
     workingDirectory: (): string => this.getWorkingDirectory(),
     hostNamespace: (): DurableObjectNamespace<HostRPC> => this.getHostNamespace(),
     connectAgent: (id): Promise<ACPStream> => this.connectAgent(id),

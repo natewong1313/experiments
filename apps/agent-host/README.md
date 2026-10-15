@@ -112,9 +112,7 @@ src/
 │       ├── schema.ts
 │       ├── database.ts
 │       ├── drizzle.config.ts
-│       ├── migrations/
-│       └── repositories/
-│           └── session.ts
+│       └── migrations/
 ├── shared/
 │   ├── lookups.ts
 │   └── rpc/

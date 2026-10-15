@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { HostDatabase } from "../src/host/db/database";
 import { SessionDatabase } from "../src/session/db/database";
+import { sessionTable } from "../src/session/db/schema";
 import { buildSession, sessionSummary } from "../src/session/state";
 import type { SessionRecord } from "../src/session/db/schema";
 import { sessionDOName } from "../src/shared/lookups";
@@ -77,7 +79,7 @@ it("commits and rolls back host writes across repositories", async () => {
   });
 });
 
-it("commits and rolls back session repository writes", async () => {
+it("commits and rolls back session writes", async () => {
   const hostId = crypto.randomUUID();
   const session = record(hostId);
   const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.id));
@@ -85,33 +87,49 @@ it("commits and rolls back session repository writes", async () => {
   await runInDurableObject(stub, async (_instance, ctx) => {
     const database = new SessionDatabase(ctx.storage);
     await database.migrate();
-    const { session: sessions } = database;
-    expect(await sessions.get()).toBeUndefined();
+    const { orm } = database;
+    expect(orm.select().from(sessionTable).get()).toBeUndefined();
 
     const result = await database.transaction(async () => {
-      await sessions.create(session);
+      orm.insert(sessionTable).values(session).run();
 
       return session.id;
     });
 
     expect(result).toBe(session.id);
-    expect(await sessions.get()).toEqual(session);
-    await expect(sessions.create(session)).rejects.toBeInstanceOf(Error);
+    expect(orm.select().from(sessionTable).get()).toEqual(session);
+    await expect(
+      database.transaction(async () => orm.insert(sessionTable).values(session).run()),
+    ).rejects.toBeInstanceOf(Error);
 
     async function abort(): Promise<never> {
-      await sessions.update({ ...session, revision: 1 });
-      await sessions.remove();
+      orm
+        .update(sessionTable)
+        .set({ ...session, revision: 1 })
+        .where(eq(sessionTable.id, session.id))
+        .run();
+      // oxlint-disable-next-line drizzle/enforce-delete-with-where -- removes the only session row
+      orm.delete(sessionTable).run();
       throw new Error("Abort session writes");
     }
 
     await expect(database.transaction(abort)).rejects.toThrow("Abort session writes");
-    expect(await sessions.get()).toEqual(session);
+    expect(orm.select().from(sessionTable).get()).toEqual(session);
 
-    await sessions.update({ ...session, revision: 1 });
-    expect(await sessions.get()).toEqual({ ...session, revision: 1 });
-    await sessions.setAcpSessionId(session.id, "acp-session");
-    expect(await sessions.get()).toMatchObject({ acpSessionId: "acp-session" });
-    await sessions.remove();
-    expect(await sessions.get()).toBeUndefined();
+    orm
+      .update(sessionTable)
+      .set({ ...session, revision: 1 })
+      .where(eq(sessionTable.id, session.id))
+      .run();
+    expect(orm.select().from(sessionTable).get()).toEqual({ ...session, revision: 1 });
+    orm
+      .update(sessionTable)
+      .set({ acpSessionId: "acp-session" })
+      .where(eq(sessionTable.id, session.id))
+      .run();
+    expect(orm.select().from(sessionTable).get()).toMatchObject({ acpSessionId: "acp-session" });
+    // oxlint-disable-next-line drizzle/enforce-delete-with-where -- removes the only session row
+    orm.delete(sessionTable).run();
+    expect(orm.select().from(sessionTable).get()).toBeUndefined();
   });
 });
