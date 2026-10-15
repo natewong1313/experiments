@@ -30,6 +30,18 @@ function request(): SessionCreateRequest {
   };
 }
 
+function turnStart(turnId: string): Parameters<SessionRPC["dispatch"]>[0] {
+  return {
+    action: {
+      type: "chat/turnStarted",
+      turnId,
+      startedAt: new Date().toISOString(),
+      message: { text: "hold", origin: { kind: "user" } },
+    },
+    origin: { clientId: crypto.randomUUID(), clientSeq: 1 },
+  };
+}
+
 async function rpcError(
   operation: () => Promise<void> | Promise<SessionSnapshotResponse>,
 ): Promise<Error> {
@@ -127,31 +139,34 @@ it("retains opaque AHP metadata in snapshots after reconstruction and subscripti
   try {
     await peer.request("createSession", { channel, provider: "test" });
 
-    const chat = await runInDurableObject(stub, (_instance, ctx) =>
-      new SessionDatabase(ctx.storage).session.update((record) => {
-        record.sessionState._meta = metadata;
-        record.chatState._meta = metadata;
-        record.chatState.activity = "Retained activity";
-        record.chatState.turns.push({
-          id: crypto.randomUUID(),
-          state: AHPTurnState.Error,
-          message: { text: "hello", origin: { kind: AHPMessageKind.User }, _meta: metadata },
-          usage: { inputTokens: 1, _meta: metadata },
-          responseParts: [
-            {
-              kind: AHPResponsePartKind.Error,
-              error: { errorType: "agent", message: "Retained error", _meta: metadata },
-            },
-          ],
-        });
+    const chat = await runInDurableObject(stub, async (_instance, ctx) => {
+      const db = new SessionDatabase(ctx.storage);
+      const record = await db.session.get();
 
-        return record.chatState.resource;
-      }),
-    );
+      if (!record) {
+        throw new Error("Missing session");
+      }
 
-    if (chat === undefined) {
-      throw new Error("Missing session");
-    }
+      record.sessionState._meta = metadata;
+      record.chatState._meta = metadata;
+      record.chatState.activity = "Retained activity";
+      record.chatState.turns.push({
+        id: crypto.randomUUID(),
+        state: AHPTurnState.Error,
+        message: { text: "hello", origin: { kind: AHPMessageKind.User }, _meta: metadata },
+        usage: { inputTokens: 1, _meta: metadata },
+        responseParts: [
+          {
+            kind: AHPResponsePartKind.Error,
+            error: { errorType: "agent", message: "Retained error", _meta: metadata },
+          },
+        ],
+      });
+
+      await db.session.update(record);
+
+      return record.chatState.resource;
+    });
 
     await evictDurableObject(stub);
     expect(await peer.request("subscribe", { channel })).toMatchObject({
@@ -247,7 +262,7 @@ it("retains the full AHP summary through host RPC and storage", async () => {
   await stub.sessionUpdate({ sessionId: req.sessionId, revision: 1, summary, actions: [] });
 
   const stored = await runInDurableObject(stub, async (_instance, ctx) => {
-    const entry = await new HostDatabase(ctx.storage).sessions.get(req.sessionId);
+    const entry = new HostDatabase(ctx.storage).sessions.get(req.sessionId);
 
     return entry?.summary;
   });
@@ -292,6 +307,46 @@ it("rejects a second concurrent turn through the public dispatch method", async 
     expect(snapshot.state).toMatchObject({ activeTurn: { id: firstTurnId } });
   } finally {
     await stub.dispose();
+  }
+});
+
+it("rejects a turn start when the session does not exist", async () => {
+  const req = request();
+  const session: SessionRPC = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
+  const start = turnStart(crypto.randomUUID());
+  const error = await rpcError(() => session.dispatch(start));
+  expect(error).toMatchObject({ name: "SessionDispatchError", message: "Session does not exist" });
+});
+
+it("does not cancel the agent when a cancellation targets another turn", async () => {
+  const req = request();
+  const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
+  const session: SessionRPC = stub;
+  const turnId = crypto.randomUUID();
+  await session.create(req);
+
+  try {
+    await session.dispatch(turnStart(turnId));
+    await vi.waitFor(async () => {
+      const snapshot = await session.snapshot({ channel: chatUri(req.chatId) });
+      expect(snapshot.state).toMatchObject({
+        activeTurn: { id: turnId, responseParts: [{ content: "hold" }] },
+      });
+    });
+
+    const rejected = await rpcError(() =>
+      session.dispatch({
+        action: { type: "chat/turnCancelled", turnId: crypto.randomUUID(), duration: 0 },
+        origin: { clientId: crypto.randomUUID(), clientSeq: 1 },
+      }),
+    );
+
+    expect(rejected.message).toBe("No matching active turn to cancel");
+    expect(await stub.cancellationCount()).toBe(0);
+    const snapshot = await session.snapshot({ channel: chatUri(req.chatId) });
+    expect(snapshot.state).toMatchObject({ activeTurn: { id: turnId } });
+  } finally {
+    await session.dispose();
   }
 });
 

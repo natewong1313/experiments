@@ -19,25 +19,8 @@ export class SessionRepository {
     this.db.insert(sessionTable).values(record).run();
   }
 
-  /**
-   * Reads, changes, and writes the record without yielding, so concurrent changes cannot interleave.
-   * `change` mutates the record and returns a result; returning undefined skips the write.
-   * Returns undefined when the session does not exist.
-   */
-  update<T>(change: (record: SessionRecord) => T | undefined): T | undefined {
-    const record = this.db.select().from(sessionTable).get();
-
-    if (!record) {
-      return undefined;
-    }
-
-    const result = change(record);
-
-    if (result !== undefined) {
-      this.db.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
-    }
-
-    return result;
+  async update(record: SessionRecord): Promise<void> {
+    this.db.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
   }
 
   async setAcpSessionId(id: string, acpSessionId: string): Promise<void> {

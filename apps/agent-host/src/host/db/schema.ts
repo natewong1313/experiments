@@ -16,6 +16,9 @@ export const sessionsTable = sqliteTable("sessions", {
   id: text().primaryKey(),
   defaultChatId: text().notNull().unique(),
   summary: text({ mode: "json" }).$type<AHPSessionSummary>().notNull(),
+  revision: integer().notNull().default(0),
 });
 
 export type SessionEntry = typeof sessionsTable.$inferSelect;
+
+export type SessionEntryInsert = typeof sessionsTable.$inferInsert;

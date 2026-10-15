@@ -65,9 +65,12 @@ export class SessionDisposeError extends Error {
 }
 
 export interface SessionRPC {
+  /** Retries retained host updates after a delivery failure is repaired. */
+  retryHostUpdates(): Promise<void>;
+
   /**
    * Creates persisted session state and opens its ACP connection.
-   * Resolves after the host receives the session-ready update.
+   * Resolves after storing the session-ready update for delivery to the host.
    * Failed setup removes the newly created session state.
    *
    * @throws {SessionCreateError} If the session exists or setup fails.
@@ -77,7 +80,7 @@ export interface SessionRPC {
   /**
    * Accepts a text turn or cancels the matching active turn.
    * Starting a turn resolves after persistence and scheduling, before agent completion.
-   * Cancellation resolves after publishing the action and sending ACP cancellation.
+   * Cancellation resolves after saving its host update and sending ACP cancellation.
    * Publishes agent failures after acceptance as chat error actions.
    *
    * @throws {SessionDispatchError} If the action is invalid, rejected, or cannot be applied.

@@ -12,7 +12,9 @@ const SessionActionSchema = AHPActionEnvelopeSchema.pick({
 
 export const HostSessionUpdateRequestSchema = z.object({
   sessionId: z.string(),
-  revision: z.number(),
+  revision: z.int().nonnegative(),
+  /** Identifies the session instance when a session ID is reused. */
+  defaultChat: z.string().optional(),
   summary: AHPSessionSummarySchema,
   /**
    * Subscribers skip actions at or below their channel's revision, so a second action on the
@@ -40,6 +42,7 @@ export interface HostRPC extends Rpc.DurableObjectBranded {
    * A session notifies its host after persisting a state update.
    * Resolves after updating the catalogue and broadcasting or buffering actions for subscribers.
    * Ignores updates for sessions absent from the catalogue.
+   * Ignores revisions at or below the stored revision and updates for a replaced session.
    *
    * @throws {HostSessionUpdateError} If validation, storage, or socket delivery fails.
    */

@@ -13,7 +13,9 @@ import type {
 type OpenOptions = {
   stream(): Promise<ACPStream>;
   cwd: string;
-  // Loads this ACP session when set, otherwise starts a new one.
+  /**
+   * Selects an existing ACP session to load. If null then we start a new session.
+   */
   sessionId: string | null;
 };
 
@@ -22,15 +24,26 @@ type TextHandler = (text: string) => Promise<void>;
 type AgentSession = {
   connection: ACPClientConnection;
   sessionId: string;
-  // Set while a prompt is in flight. Text outside a prompt, such as session/load replay, is dropped.
+  /**
+   * Receives text while a prompt is active. Text outside a prompt, including session/load replay, is ignored.
+   */
   onText?: TextHandler;
 };
 
+/**
+ * Maintains one ACP session connection and forwards text updates to the active prompt's handler.
+ * The caller must run one prompt at a time.
+ */
 export class AgentConnection {
   private current?: AgentSession;
   private opening?: Promise<AgentSession>;
   private closing = new AbortController();
 
+  /**
+   * Returns the live session ID or opens a connection and creates or loads an ACP session.
+   * Concurrent calls share the pending connection attempt and its options.
+   * If close is called during the attempt, the pending calls fail.
+   */
   async open(options: OpenOptions): Promise<string> {
     const live = this.live();
 
@@ -54,7 +67,12 @@ export class AgentConnection {
     }
   }
 
-  // The caller runs one prompt at a time.
+  /**
+   * Sends a text prompt and forwards its text updates until the request settles.
+   * The caller must wait for this request to settle before starting another prompt.
+   *
+   * @throws {Error} If no live connection is available.
+   */
   async prompt(text: string, onText: TextHandler): Promise<ACPPromptResponse> {
     const live = this.live();
 
@@ -74,6 +92,10 @@ export class AgentConnection {
     }
   }
 
+  /**
+   * Sends a cancellation notification if a live connection exists.
+   * This method does not wait for the active prompt to finish.
+   */
   async cancel(): Promise<void> {
     const live = this.live();
 
@@ -84,7 +106,9 @@ export class AgentConnection {
     }
   }
 
-  // Closes the live connection and fails any open in flight.
+  /**
+   * Closes the current connection and invalidates pending connection attempts.
+   */
   close(): void {
     this.closing.abort(new Error("Agent connection was closed"));
     this.closing = new AbortController();
@@ -93,10 +117,17 @@ export class AgentConnection {
     this.current = undefined;
   }
 
+  /**
+   * Excludes connections whose abort signal indicates that they have closed.
+   */
   private live(): AgentSession | undefined {
     return this.current && !this.current.connection.signal.aborted ? this.current : undefined;
   }
 
+  /**
+   * Opens the stream and initializes the ACP session before making the connection available to callers.
+   * Initialization failure or cancellation closes the connection.
+   */
   private async connect(options: OpenOptions, signal: AbortSignal): Promise<AgentSession> {
     const stream = await options.stream();
     let opened: AgentSession | undefined;
@@ -130,6 +161,11 @@ export class AgentConnection {
     }
   }
 
+  /**
+   * Initializes ACP with no client capabilities, then creates or loads a session without MCP servers.
+   *
+   * @throws {Error} If an existing session is requested but the agent does not support loading sessions.
+   */
   private async initialize(connection: ACPClientConnection, options: OpenOptions): Promise<string> {
     const initialized = await connection.agent.request(acpMethods.agent.initialize, {
       protocolVersion: ACP_PROTOCOL_VERSION,
@@ -158,6 +194,10 @@ export class AgentConnection {
     return options.sessionId;
   }
 
+  /**
+   * Forwards text chunks only when they match the session with an active prompt handler.
+   * Updates received before initialization or outside a prompt are ignored.
+   */
   private async receive(
     session: AgentSession | undefined,
     notification: ACPSessionNotification,

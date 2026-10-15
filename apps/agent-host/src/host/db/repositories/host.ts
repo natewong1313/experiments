@@ -14,7 +14,7 @@ export class HostRepository {
     return this.db.select().from(hostTable).get()?.serverSeq ?? 0;
   }
 
-  async nextServerSeq(): Promise<number> {
+  nextServerSeq(): number {
     const { serverSeq } = this.db
       .insert(hostTable)
       .values({ id: 1, serverSeq: 1 })

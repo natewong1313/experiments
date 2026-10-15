@@ -9,10 +9,12 @@ export type HostDatabaseOrm = DrizzleSqliteDODatabase<typeof schema>;
 
 export class HostDatabase {
   private orm: HostDatabaseOrm;
+  private storage: DurableObjectStorage;
   readonly host: HostRepository;
   readonly sessions: SessionsRepository;
 
   constructor(storage: DurableObjectStorage) {
+    this.storage = storage;
     this.orm = drizzle(storage, { schema, casing: "snake_case" });
     this.host = new HostRepository(this.orm);
     this.sessions = new SessionsRepository(this.orm);
@@ -20,5 +22,9 @@ export class HostDatabase {
 
   migrate(): Promise<void> {
     return migrate(this.orm, migrations);
+  }
+
+  transactionSync<T>(operation: () => T): T {
+    return this.storage.transactionSync(operation);
   }
 }

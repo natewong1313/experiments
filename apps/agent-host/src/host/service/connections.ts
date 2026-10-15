@@ -1,6 +1,6 @@
 import * as z from "zod";
 import type { JsonRpcMessage, Snapshot as AHPSnapshot } from "@experiments/protocol-schemas/ahp";
-import { send } from "../websockets";
+import { CloseCode, send } from "../websockets";
 
 /**
  * Subscriptions map each channel to the revision of the snapshot the socket received. The root
@@ -141,7 +141,11 @@ export class ConnectionsService {
       if (pending !== undefined && pending.channels.has(messageDetails.channel)) {
         pending.messages.push(messageDetails);
       } else {
-        this.deliverMessage(socket, messageDetails);
+        try {
+          this.deliverMessage(socket, messageDetails);
+        } catch {
+          socket.close(CloseCode.InternalError, "Message delivery failed");
+        }
       }
     }
   }

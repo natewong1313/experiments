@@ -42,6 +42,14 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> imp
     return "/";
   }
 
+  async alarm(): Promise<void> {
+    await this.session.deliverHostUpdates();
+  }
+
+  async retryHostUpdates(): Promise<void> {
+    await this.session.retryHostUpdates();
+  }
+
   async create(req: SessionCreateRequest): Promise<void> {
     try {
       await this.session.create(req);

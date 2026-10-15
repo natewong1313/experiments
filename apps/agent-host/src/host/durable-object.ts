@@ -10,9 +10,6 @@ import { ConnectionsService } from "./service/connections";
 import { HostSessionsService } from "./service/sessions";
 import { AHPRouter } from "./router";
 
-/**
- *
- */
 export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implements HostRPC {
   private db = new HostDatabase(this.ctx.storage);
   private connections = new ConnectionsService(this.ctx);
@@ -25,6 +22,9 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
   });
   private router = new AHPRouter({ sessions: this.sessions, connections: this.connections });
 
+  /**
+   * Runs host database migrations before the DO processes events.
+   */
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(async () => {
@@ -32,7 +32,14 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
     });
   }
 
+  /**
+   * Returns the agent metadata for the root snapshot and the provider used to create sessions.
+   */
   protected abstract getAgentInfo(): AHPAgentInfo;
+
+  /**
+   * Returns the namespace used to for session Durable Object stubs.
+   */
   protected abstract getSessionNamespace(): SessionNamespace;
 
   async fetch(request: Request): Promise<Response> {
@@ -46,18 +53,33 @@ export abstract class AgentHost<Env = unknown> extends DurableObject<Env> implem
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  /**
+   * Handles JSON RPC messages over websockets.
+   */
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     await this.router.handleMessage(socket, message);
   }
 
+  /**
+   * Completes the close handshake with the normal closure code.
+   */
   webSocketClose(socket: WebSocket): void {
     socket.close(CloseCode.Normal, "Connection closed");
   }
 
+  /**
+   * Closes the socket with the internal error code after a connection error.
+   */
   webSocketError(socket: WebSocket): void {
     socket.close(CloseCode.InternalError, "Connection error");
   }
 
+  /**
+   * Stores a session summary and publishes its actions and summary changes to subscribers.
+   * If the session is absent from the catalog, the host ignores the update after validation.
+   *
+   * @throws {HostSessionUpdateError} If validation, storage, or socket delivery fails.
+   */
   async sessionUpdate(req: HostSessionUpdateRequest): Promise<void> {
     await this.sessions.sessionUpdate(req).catch((error) => {
       throw new HostSessionUpdateError(errorMessage(error));

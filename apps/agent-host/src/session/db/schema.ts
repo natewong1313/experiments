@@ -3,6 +3,7 @@ import type {
   ChatState as AHPChatState,
   SessionState as AHPSessionState,
 } from "@microsoft/agent-host-protocol";
+import type { HostSessionUpdateRequest } from "../../shared/rpc/host";
 
 export const sessionTable = sqliteTable("session", {
   id: text().primaryKey(),
@@ -20,3 +21,14 @@ export const sessionTable = sqliteTable("session", {
 export type SessionRecord = typeof sessionTable.$inferSelect;
 
 export type SessionRecordInsert = typeof sessionTable.$inferInsert;
+
+export const hostUpdatesTable = sqliteTable("host_updates", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  hostId: text().notNull(),
+  update: text({ mode: "json" }).$type<HostSessionUpdateRequest>().notNull(),
+  attempts: integer().notNull().default(0),
+  retryAt: integer(),
+  error: text(),
+});
+
+export type PendingHostUpdate = typeof hostUpdatesTable.$inferSelect;

@@ -34,6 +34,7 @@ it("commits and rolls back host writes across repositories", async () => {
 
     const entry = {
       id: session.id,
+      revision: 0,
       defaultChatId: session.chatState.resource.slice("ahp-chat:/".length),
       summary: sessionSummary(session),
     };
@@ -49,29 +50,29 @@ it("commits and rolls back host writes across repositories", async () => {
     expect(await sessions.count()).toBe(1);
     expect(await sessions.findChat(entry.defaultChatId)).toEqual(entry);
     await expect(sessions.create(entry)).rejects.toBeInstanceOf(Error);
-    expect(await sessions.get(entry.id)).toEqual(entry);
+    expect(sessions.get(entry.id)).toEqual(entry);
 
     async function abort(): Promise<never> {
       await sessions.remove(entry.id);
-      await host.nextServerSeq();
+      host.nextServerSeq();
       throw new Error("Abort host writes");
     }
 
     await expect(ctx.storage.transaction(abort)).rejects.toThrow("Abort host writes");
     expect(await host.serverSeq()).toBe(0);
-    expect(await sessions.get(entry.id)).toEqual(entry);
+    expect(sessions.get(entry.id)).toEqual(entry);
 
-    const sequences = await Promise.all([host.nextServerSeq(), host.nextServerSeq()]);
+    const sequences = [host.nextServerSeq(), host.nextServerSeq()];
     expect(sequences).toEqual([1, EXPECTED_SEQUENCE_COUNT]);
     expect(await host.serverSeq()).toBe(EXPECTED_SEQUENCE_COUNT);
 
     const summary = { ...entry.summary, title: "Updated session" };
-    await sessions.update(entry.id, summary);
-    const updated = await sessions.get(entry.id);
+    sessions.update({ ...entry, summary });
+    const updated = sessions.get(entry.id);
     expect(updated?.summary).toEqual(summary);
     await sessions.remove(entry.id);
     expect(await sessions.list()).toEqual([]);
-    expect(await sessions.get(entry.id)).toBeUndefined();
+    expect(sessions.get(entry.id)).toBeUndefined();
     expect(await sessions.findChat(entry.defaultChatId)).toBeUndefined();
   });
 });
@@ -98,11 +99,7 @@ it("commits and rolls back session repository writes", async () => {
     await expect(sessions.create(session)).rejects.toBeInstanceOf(Error);
 
     async function abort(): Promise<never> {
-      sessions.update((current) => {
-        current.revision = 1;
-
-        return current;
-      });
+      await sessions.update({ ...session, revision: 1 });
       await sessions.remove();
       throw new Error("Abort session writes");
     }
@@ -110,21 +107,11 @@ it("commits and rolls back session repository writes", async () => {
     await expect(database.transaction(abort)).rejects.toThrow("Abort session writes");
     expect(await sessions.get()).toEqual(session);
 
-    const skipped = sessions.update((current): number | undefined => {
-      current.revision = 1;
-
-      return undefined;
-    });
-
-    expect(skipped).toBeUndefined();
-    expect(await sessions.get()).toEqual(session);
-
-    expect(sessions.update((current) => ++current.revision)).toBe(1);
+    await sessions.update({ ...session, revision: 1 });
     expect(await sessions.get()).toEqual({ ...session, revision: 1 });
     await sessions.setAcpSessionId(session.id, "acp-session");
     expect(await sessions.get()).toMatchObject({ acpSessionId: "acp-session" });
     await sessions.remove();
     expect(await sessions.get()).toBeUndefined();
-    expect(sessions.update((current) => current.id)).toBeUndefined();
   });
 });

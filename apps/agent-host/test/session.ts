@@ -112,6 +112,21 @@ export class AgentSession extends BaseSession<TestEnv> {
     return this.cancellations;
   }
 
+  failDeliveryScheduling(): void {
+    const setAlarm = this.db.setAlarm.bind(this.db);
+    let saved = false;
+
+    this.db.setAlarm = async (time): Promise<void> => {
+      if (saved) {
+        this.db.setAlarm = setAlarm;
+        throw new Error("Delivery scheduling failed");
+      }
+
+      saved = true;
+      await setAlarm(time);
+    };
+  }
+
   finishPrompt(): void {
     this.pending?.resolve({ stopReason: "end_turn" });
   }

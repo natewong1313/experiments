@@ -269,19 +269,26 @@ it("records an interrupted turn as an error on reconstruction", async () => {
     const session = await createSession(peer);
     const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
 
-    const interrupted = await runInDurableObject(stub, (_instance, ctx) =>
-      new SessionDatabase(ctx.storage).session.update((record) => {
-        record.chatState.activeTurn = {
-          id: crypto.randomUUID(),
-          startedAt: new Date().toISOString(),
-          message: { text: "unfinished", origin: { kind: AHPMessageKind.User } },
-          responseParts: [],
-          usage: undefined,
-        };
+    const interrupted = await runInDurableObject(stub, async (_instance, ctx) => {
+      const db = new SessionDatabase(ctx.storage);
+      const record = await db.session.get();
 
-        return record.chatState.activeTurn.id;
-      }),
-    );
+      if (!record) {
+        throw new Error("Missing session");
+      }
+
+      record.chatState.activeTurn = {
+        id: crypto.randomUUID(),
+        startedAt: new Date().toISOString(),
+        message: { text: "unfinished", origin: { kind: AHPMessageKind.User } },
+        responseParts: [],
+        usage: undefined,
+      };
+
+      await db.session.update(record);
+
+      return record.chatState.activeTurn.id;
+    });
 
     expect(interrupted).toBeDefined();
     await evictDurableObject(stub);

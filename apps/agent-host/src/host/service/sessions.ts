@@ -65,7 +65,7 @@ export class HostSessionsService {
   }
 
   async nextServerSeq(): Promise<number> {
-    return await this.db.host.nextServerSeq();
+    return this.db.host.nextServerSeq();
   }
 
   /**
@@ -133,7 +133,7 @@ export class HostSessionsService {
     const { provider } = this.agentInfo();
     const { id, workingDirectory } = parseCreateParams(params, provider);
 
-    if (await this.db.sessions.get(id)) {
+    if (this.db.sessions.get(id)) {
       throw new AHPError("Session already exists", AHPErrorCodes.SessionAlreadyExists);
     }
 
@@ -142,6 +142,7 @@ export class HostSessionsService {
 
     const entry: SessionEntry = {
       id,
+      revision: 0,
       defaultChatId: chatId,
       summary: {
         resource: params.channel,
@@ -194,21 +195,38 @@ export class HostSessionsService {
    */
   async sessionUpdate(req: HostSessionUpdateRequest): Promise<void> {
     const update = HostSessionUpdateRequestSchema.parse(req);
-    const entry = await this.db.sessions.get(update.sessionId);
 
-    if (!entry) {
+    const accepted = this.db.transactionSync(() => {
+      const entry = this.db.sessions.get(update.sessionId);
+
+      if (
+        !entry ||
+        update.revision <= entry.revision ||
+        update.summary.createdAt !== entry.summary.createdAt ||
+        (update.defaultChat !== undefined && update.defaultChat !== chatUri(entry.defaultChatId))
+      ) {
+        return;
+      }
+
+      this.db.sessions.update({ id: entry.id, summary: update.summary, revision: update.revision });
+
+      const actions = update.actions.map((action) => ({
+        ...action,
+        serverSeq: this.db.host.nextServerSeq(),
+      }));
+
+      return { entry, actions };
+    });
+
+    if (!accepted) {
       return;
     }
 
-    await this.db.sessions.update(entry.id, update.summary);
-
-    for (const { channel, action, origin } of update.actions) {
-      // Server sequences must be allocated in broadcast order.
-      // oxlint-disable-next-line eslint/no-await-in-loop
-      const serverSeq = await this.db.host.nextServerSeq();
-      this.publishAction({ channel, action, origin, serverSeq }, update.revision);
+    for (const action of accepted.actions) {
+      this.publishAction(action, update.revision);
     }
 
+    const { entry } = accepted;
     const changes = summaryChanges(entry.summary, update.summary);
 
     if (Object.keys(changes).length > 0) {
@@ -235,7 +253,7 @@ export class HostSessionsService {
   private async resolveSession(parsed: SessionChannel | ChatChannel): Promise<SessionEntry> {
     const entry =
       parsed.kind === "session"
-        ? await this.db.sessions.get(parsed.id)
+        ? this.db.sessions.get(parsed.id)
         : await this.db.sessions.findChat(parsed.id);
 
     if (!entry) {
@@ -273,7 +291,7 @@ export class HostSessionsService {
   private async publishCatalogChange(notification: JsonRpcNotification): Promise<void> {
     this.notifyRoot(notification);
     const activeSessions = await this.db.sessions.count();
-    const serverSeq = await this.db.host.nextServerSeq();
+    const serverSeq = this.db.host.nextServerSeq();
 
     this.publishAction(
       {

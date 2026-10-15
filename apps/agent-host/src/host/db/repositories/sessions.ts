@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { HostDatabaseOrm } from "../database";
 import { sessionsTable } from "../schema";
-import type { SessionEntry } from "../schema";
+import type { SessionEntry, SessionEntryInsert } from "../schema";
 import type { SessionSummary as AHPSessionSummary } from "@experiments/protocol-schemas/ahp";
 
 export class SessionsRepository {
@@ -25,7 +25,7 @@ export class SessionsRepository {
     return await this.db.$count(sessionsTable);
   }
 
-  async get(id: string): Promise<SessionEntry | undefined> {
+  get(id: string): SessionEntry | undefined {
     return this.db.select().from(sessionsTable).where(eq(sessionsTable.id, id)).get();
   }
 
@@ -33,12 +33,16 @@ export class SessionsRepository {
     return this.db.select().from(sessionsTable).where(eq(sessionsTable.defaultChatId, id)).get();
   }
 
-  async create(entry: SessionEntry): Promise<void> {
+  async create(entry: SessionEntryInsert): Promise<void> {
     this.db.insert(sessionsTable).values(entry).run();
   }
 
-  async update(id: string, summary: AHPSessionSummary): Promise<void> {
-    this.db.update(sessionsTable).set({ summary }).where(eq(sessionsTable.id, id)).run();
+  update(entry: Pick<SessionEntry, "id" | "summary" | "revision">): void {
+    this.db
+      .update(sessionsTable)
+      .set({ summary: entry.summary, revision: entry.revision })
+      .where(eq(sessionsTable.id, entry.id))
+      .run();
   }
 
   async remove(id: string): Promise<void> {

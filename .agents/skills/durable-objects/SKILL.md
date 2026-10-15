@@ -1,99 +1,60 @@
 ---
 name: durable-objects
-description: Architects, builds, debugs, and reviews Cloudflare Durable Objects code, covering object boundaries, lifecycle and concurrency tradeoffs, idempotency, durable effects, alarms, and testing. Use when creating or reviewing a Durable Object, choosing whether a problem needs one, designing sharding or coordination, handling restarts or hibernation, writing RPC callers or alarm handlers, or setting up wrangler config and migrations for DOs.
+description: Designs, implements, debugs, and reviews Cloudflare Durable Objects. Use when working on Durable Object boundaries, routing, storage, RPC retries, durable jobs, alarms, migrations, hibernatable WebSockets, or capacity.
 ---
 
 # Durable Objects
 
-A Durable Object is a **restartable actor with a stable identity and private, strongly
-consistent storage**. Its JS instance can vanish at any moment (eviction, hibernation,
-deploy, crash) and be reconstructed later; only what you persist survives.
-
-Your knowledge of DO APIs may be outdated. Prefer retrieval over pre-training:
-[docs](https://developers.cloudflare.com/durable-objects/),
-[best practices](https://developers.cloudflare.com/durable-objects/best-practices/),
-[limits](https://developers.cloudflare.com/durable-objects/platform/limits/).
-
-## Is a DO even the right tool?
-
-| Good fit | Bad fit |
-| --- | --- |
-| Coordination: rooms, games, collaborative docs | Stateless request handling (plain Worker) |
-| Strong consistency over one entity: inventory, bookings | Max global distribution / multi-region active writes |
-| Per-entity storage: tenant, account, workflow partition | Independent high-fanout requests (a hot DO is still one actor) |
-| Persistent connections: WebSockets, real-time | Cron across many entities without per-entity state |
+Treat each object as a restartable actor. Its durable state must explain how to
+continue after reconstruction or replay.
 
 ## Workflow
 
-1. **Choose the object boundary first.** One object per entity that owns a useful
-   invariant (room, account, inventory partition, workflow). Keep that entity's state,
-   decisions, and deduplication inside one object. Cross-object invariants need an
-   explicit coordinator or reconciliation protocol — an operation ID is unique within
-   one object, not globally.
-2. **Design for reconstruction.** Ask for each piece of state: "does this survive a
-   restart?" Persist completion records, claims, memberships, workflow progress, and
-   cleanup intent. In-memory state is only a cache — define how to rebuild it.
-3. **Route and authorize explicitly.** Centralize name derivation, canonicalize IDs,
-   authenticate before routing (an object name is not permission), persist
-   `newUniqueId()` mappings, and treat name-format changes as data migrations.
-4. **Write crash-safe mutations.** Idempotency keys, atomic transaction boundaries,
-   durable effects — follow the patterns in [architecture.md](./architecture.md).
-5. **Test the failures you claim to survive.** See the scenario table in
-   [architecture.md](./architecture.md).
+1. Trace the affected invariant through callers, object identity, storage, and
+   external effects. Identify the storage backend and deployment configuration.
+   Finish when every affected entry point and state owner is accounted for.
+2. Read the guide sections for each affected concern from the table below. Use
+   [lifecycle and initialization](references/durable-object-new.md#lifecycle-and-initialization)
+   and [concurrency and transactions](references/durable-object-new.md#concurrency-and-transactions)
+   to check reconstruction and interleaving assumptions. Finish when each
+   correctness-critical value has a persistence or reconstruction strategy and
+   each mutation has an explicit atomicity boundary.
+   Before adding retries, durable jobs, alarm multiplexing, fanout, or adaptive
+   routing, read [library guidance](references/libraries.md) for the installed
+   helpers and their delivery, deduplication, and migration contracts.
+3. Implement or review each transition with its replay and recovery behavior.
+   For example, a retryable order RPC must bind its operation ID to the request,
+   commit the order and result together, and return that result after response
+   loss. Finish when every external effect, retry, and interrupted operation has
+   an owner, a bounded execution budget, and a recovery path.
+4. Select applicable scenarios from
+   [capacity, observability, and testing](references/durable-object-new.md#capacity-observability-and-testing).
+   Verify each affected failure boundary with a test or concrete evidence. For a
+   review, identify the path that violates the required result. Finish when each
+   applicable scenario has a result or an explicit verification gap. Distinguish
+   local runtime evidence from deployment and network behavior requiring staging.
 
-## Core rules
+## Guide sections
 
-1. **SQLite-backed storage for new classes** (`new_sqlite_classes` in migrations). It
-   supports both SQL and KV; legacy KV classes do not support `storage.sql`.
-2. **Synchronous code runs atomically; awaits open the gates.** Storage input gates and
-   output gates make many storage-only read-modify-write sequences safe, but *not*
-   sequences spanning an `await` on external I/O. Recheck assumptions after awaits;
-   consume SQL cursors before awaiting.
-3. **`blockConcurrencyWhile()` is for bounded init only** (schema, local config) — never
-   request processing or external calls. A thrown error or 30s timeout resets the object.
-4. **Persist first, then act.** A timer or background promise is not a durable job.
-5. **One alarm slot per object** — `setAlarm()` replaces the existing schedule; alarms
-   are at-least-once, can run late, and retry ~6 times. Never schedule unconditionally
-   in the constructor.
-6. **Return structured errors** (`{ok, error:{code, retryable}}`), not custom classes
-   that break across RPC. Retry only `.retryable === true`; never retry
-   `.overloaded === true`. Bound retries with attempts + deadline + backoff.
-7. **External effects are never atomic with local storage.** Persist an outbox/operation
-   record first, act outside the transaction with a downstream idempotency key,
-   record completion conditionally afterward.
+The [local guide](references/durable-object-new.md) consolidates the previous
+implementation, infrastructure, and edge-case guides. Load the sections relevant
+to the task rather than all examples and historical evidence.
 
-## Quick start
+| When the task involves | Read |
+| --- | --- |
+| Object boundaries, authorization, names, namespaces, class changes, or cross-object invariants | [Identity and routing](references/durable-object-new.md#identity-and-routing) |
+| Retried mutations, duplicate delivery, operation-key reuse, or result retention | [RPC and idempotency](references/durable-object-new.md#rpc-and-idempotency) |
+| Transport failures, overload, timeouts, or cancellation | [Retries, deadlines, and cancellation](references/durable-object-new.md#retries-deadlines-and-cancellation) |
+| HTTP, queues, other objects, outboxes, claims, leases, or checkpoints | [External effects and recoverable work](references/durable-object-new.md#external-effects-and-recoverable-work) |
+| Scheduled work, alarm multiplexing, stale wake-ups, or abandoned running jobs | [Alarms and logical timers](references/durable-object-new.md#alarms-and-logical-timers) |
+| SQL schema changes, backfills, storage conversion, or recovery | [Schema migrations and bulk work](references/durable-object-new.md#schema-migrations-and-bulk-work) |
+| Socket callbacks, attachments, reconnects, or fan-out | [WebSockets and hibernation](references/durable-object-new.md#websockets-and-hibernation) |
+| Hot objects, sharding, admission limits, metrics, or failure tests | [Capacity, observability, and testing](references/durable-object-new.md#capacity-observability-and-testing) |
+| Repeated coordination behavior being extracted into a helper | [Shared infrastructure](references/durable-object-new.md#shared-infrastructure) |
+| A claim based on private APIs or internal runtime limits | [Source notes and implementation evidence](references/durable-object-new.md#source-notes-and-implementation-evidence) |
 
-```typescript
-import { DurableOrder } from "./order-do"; // class with idempotent RPC, see architecture.md
-
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    // authorize first, then route deterministically
-    const stub = env.ORDERS.getByName(canonicalRoomId(url.pathname));
-    const result = await stub.createOrder({ operationId, orderId }); // idempotent
-    return result.ok ? Response.json(result.value) : jsonError(result.error);
-  },
-};
-```
-
-```jsonc
-// wrangler.jsonc — bindings + SQLite migration tag
-{
-  "durable_objects": { "bindings": [{ "name": "ORDERS", "class_name": "OrderDO" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["OrderDO"] }],
-}
-```
-
-## References
-
-- [architecture.md](./architecture.md) — deep patterns: idempotency records, outbox and
-  leases, alarm multiplexing, resumable backfills, hibernation, capacity, test scenarios.
-- [rules.md](./rules.md) — doc lookup table for API-level questions (storage, gates,
-  routing, placement, lifecycle).
-- [testing.md](./testing.md) — read before configuring a DO test suite.
-- [workers.md](./workers.md) — Workers handlers, types, wrangler config, observability.
-
-Anti-patterns: one global DO for everything; `blockConcurrencyWhile()` per request;
-critical state only in memory; `await` between related storage writes; unbounded RPC
-polling; retrying unknown or `.overloaded` errors; alarm scheduling in the constructor.
+The guide records its documentation check date. Verify API behavior, limits, and
+deployment semantics against current official Cloudflare documentation before
+relying on them. Treat internal implementation observations as evidence to
+investigate, not public platform guarantees. Check local dependencies and helper
+contracts before choosing a retry utility.
