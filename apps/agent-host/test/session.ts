@@ -1,6 +1,15 @@
 import { AgentSession as BaseSession } from "../src";
-import { agent, methods, PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
-import type { AnyMessage, PromptResponse, Stream } from "@agentclientprotocol/sdk";
+import {
+  agent as acpAgent,
+  methods as acpMethods,
+  PROTOCOL_VERSION as ACP_PROTOCOL_VERSION,
+  RequestError as ACPRequestError,
+} from "@agentclientprotocol/sdk";
+import type {
+  AnyMessage as ACPAnyMessage,
+  PromptResponse as ACPPromptResponse,
+  Stream as ACPStream,
+} from "@agentclientprotocol/sdk";
 import type { SessionSnapshotRequest, SessionSnapshotResponse } from "../src";
 import type { TestEnv } from "./worker";
 import type { AgentHost } from "./host";
@@ -10,7 +19,7 @@ const INTERNAL_ERROR = -32_603;
 export class AgentSession extends BaseSession<TestEnv> {
   private cancellations = 0;
   private setup?: ReturnType<typeof Promise.withResolvers<boolean>>;
-  private pending?: ReturnType<typeof Promise.withResolvers<PromptResponse>>;
+  private pending?: ReturnType<typeof Promise.withResolvers<ACPPromptResponse>>;
   private snapshotGate?: ReturnType<typeof Promise.withResolvers<null>>;
   private heldSnapshots = 0;
 
@@ -18,27 +27,27 @@ export class AgentSession extends BaseSession<TestEnv> {
     return this.env.COORDINATORS;
   }
 
-  protected async connectAgent(): Promise<Stream> {
-    const requests: TransformStream<AnyMessage, AnyMessage> = new TransformStream();
-    const responses: TransformStream<AnyMessage, AnyMessage> = new TransformStream();
-    agent()
-      .onRequest(methods.agent.initialize, () => ({
-        protocolVersion: PROTOCOL_VERSION,
+  protected async connectAgent(): Promise<ACPStream> {
+    const requests: TransformStream<ACPAnyMessage, ACPAnyMessage> = new TransformStream();
+    const responses: TransformStream<ACPAnyMessage, ACPAnyMessage> = new TransformStream();
+    acpAgent()
+      .onRequest(acpMethods.agent.initialize, () => ({
+        protocolVersion: ACP_PROTOCOL_VERSION,
         agentCapabilities: { loadSession: true },
       }))
-      .onRequest(methods.agent.session.new, async () => {
+      .onRequest(acpMethods.agent.session.new, async () => {
         if (this.setup && !(await this.setup.promise)) {
-          throw new RequestError(INTERNAL_ERROR, "Agent setup failed");
+          throw new ACPRequestError(INTERNAL_ERROR, "Agent setup failed");
         }
 
         return { sessionId: crypto.randomUUID() };
       })
-      .onRequest(methods.agent.session.load, () => ({}))
-      .onNotification(methods.agent.session.cancel, () => {
+      .onRequest(acpMethods.agent.session.load, () => ({}))
+      .onNotification(acpMethods.agent.session.cancel, () => {
         this.cancellations += 1;
         this.pending?.resolve({ stopReason: "cancelled" });
       })
-      .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
+      .onRequest(acpMethods.agent.session.prompt, async ({ params, client }) => {
         const [text] = params.prompt;
         const output = text?.type === "text" ? text.text : "";
         // "stream" arrives as several updates; anything else is a single update.
@@ -46,7 +55,7 @@ export class AgentSession extends BaseSession<TestEnv> {
 
         await Promise.all(
           chunks.map((chunk) =>
-            client.notify(methods.client.session.update, {
+            client.notify(acpMethods.client.session.update, {
               sessionId: params.sessionId,
               update: {
                 sessionUpdate: "agent_message_chunk",
@@ -57,7 +66,7 @@ export class AgentSession extends BaseSession<TestEnv> {
         );
 
         if (output === "hold") {
-          this.pending = Promise.withResolvers<PromptResponse>();
+          this.pending = Promise.withResolvers<ACPPromptResponse>();
 
           return await this.pending.promise;
         }

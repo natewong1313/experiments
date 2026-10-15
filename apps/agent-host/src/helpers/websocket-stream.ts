@@ -1,4 +1,4 @@
-import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
+import type { AnyMessage as ACPAnyMessage, Stream as ACPStream } from "@agentclientprotocol/sdk";
 import * as z from "zod";
 import { AcpMessageSchema, AcpOutboundMessageSchema } from "@experiments/protocol-schemas/acp";
 
@@ -10,7 +10,7 @@ const MAX_QUEUED_BYTES = 2_097_152;
 const frameEncoder = new TextEncoder();
 
 /** Rejects frames exceeding the byte limit or the incoming queue budget, then decodes the frame. */
-function decodeFrame(text: string, desiredSize: number | null): AnyMessage {
+function decodeFrame(text: string, desiredSize: number | null): ACPAnyMessage {
   if (text.length > MAX_FRAME_BYTES) {
     throw new Error("Invalid ACP WebSocket frame");
   }
@@ -29,10 +29,10 @@ function decodeFrame(text: string, desiredSize: number | null): AnyMessage {
 }
 
 /** Incoming WebSocket frames become ACP messages. */
-function createReadable(socket: WebSocket): ReadableStream<AnyMessage> {
+function createReadable(socket: WebSocket): ReadableStream<ACPAnyMessage> {
   let ended = false;
 
-  return new ReadableStream<AnyMessage>(
+  return new ReadableStream<ACPAnyMessage>(
     {
       start(controller): void {
         socket.addEventListener("message", (event) => {
@@ -82,8 +82,8 @@ function createReadable(socket: WebSocket): ReadableStream<AnyMessage> {
 }
 
 /** Outgoing ACP messages become WebSocket frames. */
-function createWritable(socket: WebSocket): WritableStream<AnyMessage> {
-  return new WritableStream<AnyMessage>({
+function createWritable(socket: WebSocket): WritableStream<ACPAnyMessage> {
+  return new WritableStream<ACPAnyMessage>({
     write(message): void {
       if (socket.readyState !== WebSocket.OPEN) {
         throw new Error("Agent connection is closed");
@@ -108,7 +108,7 @@ function createWritable(socket: WebSocket): WritableStream<AnyMessage> {
  * Sibling in apps/pi-acp/src/websocket-stream.ts has different failure semantics:
  * it soft-fails protocol errors, while this one closes the socket with code 1007.
  */
-export function websocketStream(socket: WebSocket): Stream {
+export function websocketStream(socket: WebSocket): ACPStream {
   const readable = createReadable(socket);
   const writable = createWritable(socket);
 

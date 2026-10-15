@@ -12,7 +12,7 @@ import { connectAcp } from "@experiments/pi-acp";
 import { AgentSession as BaseAgentSession } from "@experiments/agent-host";
 import { websocketStream } from "@experiments/agent-host/helpers";
 import type { AgentHost } from "./agent-host";
-import type { Stream as AcpStream } from "@agentclientprotocol/sdk";
+import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 
 export class AgentSession extends BaseAgentSession<Env> {
   workspace = new Workspace({
@@ -74,7 +74,7 @@ export class AgentSession extends BaseAgentSession<Env> {
     return this.env.WORKSPACE_DIR;
   }
 
-  protected override async connectAgent(_sessionId: string): Promise<AcpStream> {
+  protected override async connectAgent(_sessionId: string): Promise<ACPStream> {
     await this.lifecycle.start();
 
     const { 0: client, 1: server } = new WebSocketPair();

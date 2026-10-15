@@ -1,13 +1,17 @@
-import { client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import {
+  client as acpClient,
+  methods as acpMethods,
+  PROTOCOL_VERSION as ACP_PROTOCOL_VERSION,
+} from "@agentclientprotocol/sdk";
 import type {
-  ClientConnection,
-  SessionNotification,
-  Stream,
-  PromptResponse,
+  ClientConnection as ACPClientConnection,
+  SessionNotification as ACPSessionNotification,
+  Stream as ACPStream,
+  PromptResponse as ACPPromptResponse,
 } from "@agentclientprotocol/sdk";
 
 type OpenOptions = {
-  stream(): Promise<Stream>;
+  stream(): Promise<ACPStream>;
   cwd: string;
   // Loads this ACP session when set, otherwise starts a new one.
   sessionId: string | null;
@@ -16,7 +20,7 @@ type OpenOptions = {
 type TextHandler = (text: string) => Promise<void>;
 
 type AgentSession = {
-  connection: ClientConnection;
+  connection: ACPClientConnection;
   sessionId: string;
   // Set while a prompt is in flight. Text outside a prompt, such as session/load replay, is dropped.
   onText?: TextHandler;
@@ -51,7 +55,7 @@ export class AgentConnection {
   }
 
   // The caller runs one prompt at a time.
-  async prompt(text: string, onText: TextHandler): Promise<PromptResponse> {
+  async prompt(text: string, onText: TextHandler): Promise<ACPPromptResponse> {
     const live = this.live();
 
     if (!live) {
@@ -61,7 +65,7 @@ export class AgentConnection {
     live.onText = onText;
 
     try {
-      return await live.connection.agent.request(methods.agent.session.prompt, {
+      return await live.connection.agent.request(acpMethods.agent.session.prompt, {
         sessionId: live.sessionId,
         prompt: [{ type: "text", text }],
       });
@@ -74,7 +78,7 @@ export class AgentConnection {
     const live = this.live();
 
     if (live) {
-      await live.connection.agent.notify(methods.agent.session.cancel, {
+      await live.connection.agent.notify(acpMethods.agent.session.cancel, {
         sessionId: live.sessionId,
       });
     }
@@ -97,8 +101,8 @@ export class AgentConnection {
     const stream = await options.stream();
     let opened: AgentSession | undefined;
 
-    const connection = client({ name: "agent-host" })
-      .onNotification(methods.client.session.update, async ({ params }) => {
+    const connection = acpClient({ name: "agent-host" })
+      .onNotification(acpMethods.client.session.update, async ({ params }) => {
         await this.receive(opened, params);
       })
       .connect(stream);
@@ -126,14 +130,14 @@ export class AgentConnection {
     }
   }
 
-  private async initialize(connection: ClientConnection, options: OpenOptions): Promise<string> {
-    const initialized = await connection.agent.request(methods.agent.initialize, {
-      protocolVersion: PROTOCOL_VERSION,
+  private async initialize(connection: ACPClientConnection, options: OpenOptions): Promise<string> {
+    const initialized = await connection.agent.request(acpMethods.agent.initialize, {
+      protocolVersion: ACP_PROTOCOL_VERSION,
       clientCapabilities: {},
     });
 
     if (options.sessionId === null) {
-      const created = await connection.agent.request(methods.agent.session.new, {
+      const created = await connection.agent.request(acpMethods.agent.session.new, {
         cwd: options.cwd,
         mcpServers: [],
       });
@@ -145,7 +149,7 @@ export class AgentConnection {
       throw new Error("Agent does not support loading a persisted session");
     }
 
-    await connection.agent.request(methods.agent.session.load, {
+    await connection.agent.request(acpMethods.agent.session.load, {
       sessionId: options.sessionId,
       cwd: options.cwd,
       mcpServers: [],
@@ -156,7 +160,7 @@ export class AgentConnection {
 
   private async receive(
     session: AgentSession | undefined,
-    notification: SessionNotification,
+    notification: ACPSessionNotification,
   ): Promise<void> {
     const { update } = notification;
 

@@ -1,5 +1,5 @@
 import { waitUntil } from "cloudflare:workers";
-import type { Stream } from "@agentclientprotocol/sdk";
+import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 import {
   ActionType as AHPActionType,
   ResponsePartKind as AHPResponsePartKind,
@@ -33,7 +33,7 @@ type SessionOptions = {
   db: SessionDatabase;
   workingDirectory(): string;
   hostNamespace(): DurableObjectNamespace<HostRPC>;
-  connectAgent(sessionId: string): Promise<Stream>;
+  connectAgent(sessionId: string): Promise<ACPStream>;
 };
 
 // Mutates the record and returns the update to publish, or undefined to leave it unchanged.
@@ -214,7 +214,7 @@ export class SessionService {
     }
 
     const acpSessionId = await this.agent.open({
-      stream: (): Promise<Stream> => this.options.connectAgent(record.id),
+      stream: (): Promise<ACPStream> => this.options.connectAgent(record.id),
       cwd: record.cwd,
       sessionId: record.acpSessionId,
     });

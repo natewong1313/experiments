@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import type { Stream } from "@agentclientprotocol/sdk";
+import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 import { errorMessage } from "../shared/errors";
 import {
   SessionCreateError,
@@ -19,12 +19,12 @@ import { SessionDatabase } from "./db/database";
 import { SessionService } from "./service/session";
 
 export abstract class AgentSession<Env = unknown> extends DurableObject<Env> implements SessionRPC {
-  protected readonly db = new SessionDatabase(this.ctx.storage);
-  private readonly session = new SessionService({
+  protected db = new SessionDatabase(this.ctx.storage);
+  private session = new SessionService({
     db: this.db,
     workingDirectory: (): string => this.getWorkingDirectory(),
     hostNamespace: (): DurableObjectNamespace<HostRPC> => this.getHostNamespace(),
-    connectAgent: (id): Promise<Stream> => this.connectAgent(id),
+    connectAgent: (id): Promise<ACPStream> => this.connectAgent(id),
   });
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -36,7 +36,7 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> imp
   }
 
   protected abstract getHostNamespace(): DurableObjectNamespace<HostRPC>;
-  protected abstract connectAgent(sessionId: string): Promise<Stream>;
+  protected abstract connectAgent(sessionId: string): Promise<ACPStream>;
 
   protected getWorkingDirectory(): string {
     return "/";
