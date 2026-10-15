@@ -16,6 +16,7 @@ import type {
   SessionSummary as AHPSessionSummary,
 } from "@experiments/protocol-schemas/ahp";
 import { AHPError, ROOT_CHANNEL } from "../../shared/protocol";
+import { callDoRpc } from "../../shared/do-rpc";
 import { errorMessage } from "../../shared/errors";
 import { chatUri, parseChannel, sessionDOName, sessionUri } from "../../shared/lookups";
 import type { ChatChannel, SessionChannel } from "../../shared/lookups";
@@ -109,7 +110,11 @@ export class HostSessionsService {
     }
 
     const entry = this.resolveSession(parsed);
-    const { state, revision } = await this.sessionStub(entry.id).snapshot({ channel });
+
+    const { state, revision } = await callDoRpc(
+      () => this.sessionStub(entry.id),
+      (session) => session.snapshot({ channel }),
+    );
 
     return { snapshot: { resource: channel, state, fromSeq }, revision };
   }
@@ -132,10 +137,14 @@ export class HostSessionsService {
 
     const entry = this.resolveSession(parsed);
 
-    await this.sessionStub(entry.id).dispatch({
-      action: SessionDispatchActionSchema.parse(action),
-      origin,
-    });
+    await callDoRpc(
+      () => this.sessionStub(entry.id),
+      (session) =>
+        session.dispatch({
+          action: SessionDispatchActionSchema.parse(action),
+          origin,
+        }),
+    );
   }
 
   /**
@@ -186,14 +195,18 @@ export class HostSessionsService {
     });
 
     try {
-      await this.sessionStub(id).create({
-        hostId: this.hostId(),
-        sessionId: id,
-        chatId,
-        provider,
-        createdAt: now,
-        workingDirectory,
-      });
+      await callDoRpc(
+        () => this.sessionStub(id),
+        (session) =>
+          session.create({
+            hostId: this.hostId(),
+            sessionId: id,
+            chatId,
+            provider,
+            createdAt: now,
+            workingDirectory,
+          }),
+      );
     } catch (error) {
       // Report the creation failure even if cleanup also fails; disposeSession can retry it.
       await Promise.allSettled([this.remove(entry)]);
@@ -313,7 +326,10 @@ export class HostSessionsService {
    * All sockets stop their subscriptions to the session channel and the chat channel.
    */
   private async remove(entry: Pick<SessionEntry, "id" | "defaultChatId">): Promise<void> {
-    await this.sessionStub(entry.id).dispose();
+    await callDoRpc(
+      () => this.sessionStub(entry.id),
+      (session) => session.dispose(),
+    );
     this.db.orm.delete(sessionsTable).where(eq(sessionsTable.id, entry.id)).run();
     this.connections.removeChannel(sessionUri(entry.id));
     this.connections.removeChannel(chatUri(entry.defaultChatId));
