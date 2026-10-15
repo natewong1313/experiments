@@ -98,10 +98,7 @@ src/
 │       ├── schema.ts
 │       ├── database.ts
 │       ├── drizzle.config.ts
-│       ├── migrations/
-│       └── repositories/
-│           ├── host.ts
-│           └── sessions.ts
+│       └── migrations/
 ├── session/
 │   ├── durable-object.ts
 │   ├── state.ts

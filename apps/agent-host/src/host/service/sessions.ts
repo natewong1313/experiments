@@ -1,3 +1,4 @@
+import { eq, sql } from "drizzle-orm";
 import {
   AhpErrorCodes as AHPErrorCodes,
   SessionStatus as AHPSessionStatus,
@@ -23,6 +24,7 @@ import type { HostSessionUpdateRequest } from "../../shared/rpc/host";
 import { SessionDispatchActionSchema } from "../../shared/rpc/session";
 import type { SessionRPC, SessionNamespace } from "../../shared/rpc/session";
 import type { HostDatabase } from "../db/database";
+import { hostTable, sessionsTable } from "../db/schema";
 import type { SessionEntry } from "../db/schema";
 import type { ChannelSnapshot, ConnectionsService } from "./connections";
 
@@ -60,19 +62,33 @@ export class HostSessionsService {
    * Returns the last server sequence of the host.
    * Before the first allocation, the value is 0.
    */
-  async serverSeq(): Promise<number> {
-    return await this.db.host.serverSeq();
+  serverSeq(): number {
+    return (
+      this.db.orm.select({ serverSeq: hostTable.serverSeq }).from(hostTable).get()?.serverSeq ?? 0
+    );
   }
 
-  async nextServerSeq(): Promise<number> {
-    return this.db.host.nextServerSeq();
+  nextServerSeq(): number {
+    const { serverSeq } = this.db.orm
+      .insert(hostTable)
+      .values({ id: 1, serverSeq: 1 })
+      .onConflictDoUpdate({
+        target: hostTable.id,
+        set: { serverSeq: sql`${hostTable.serverSeq} + 1` },
+      })
+      .returning({ serverSeq: hostTable.serverSeq })
+      .get();
+
+    return serverSeq;
   }
 
   /**
    * Returns the summary of each session in the catalog.
    */
   async list(): Promise<AHPListSessionsResult> {
-    return { items: await this.db.sessions.listSummaries() };
+    const rows = this.db.orm.select({ summary: sessionsTable.summary }).from(sessionsTable).all();
+
+    return { items: rows.map((row) => row.summary) };
   }
 
   /**
@@ -83,7 +99,7 @@ export class HostSessionsService {
    */
   async snapshot(channel: string): Promise<ChannelSnapshot> {
     const parsed = parseChannel(channel);
-    const fromSeq = await this.db.host.serverSeq();
+    const fromSeq = this.serverSeq();
 
     if (parsed.kind === "root") {
       return {
@@ -92,7 +108,7 @@ export class HostSessionsService {
       };
     }
 
-    const entry = await this.resolveSession(parsed);
+    const entry = this.resolveSession(parsed);
     const { state, revision } = await this.sessionStub(entry.id).snapshot({ channel });
 
     return { snapshot: { resource: channel, state, fromSeq }, revision };
@@ -114,7 +130,7 @@ export class HostSessionsService {
       throw new AHPError("Actions must target a chat channel");
     }
 
-    const entry = await this.resolveSession(parsed);
+    const entry = this.resolveSession(parsed);
 
     await this.sessionStub(entry.id).dispatch({
       action: SessionDispatchActionSchema.parse(action),
@@ -133,7 +149,13 @@ export class HostSessionsService {
     const { provider } = this.agentInfo();
     const { id, workingDirectory } = parseCreateParams(params, provider);
 
-    if (this.db.sessions.get(id)) {
+    if (
+      this.db.orm
+        .select({ id: sessionsTable.id })
+        .from(sessionsTable)
+        .where(eq(sessionsTable.id, id))
+        .get()
+    ) {
       throw new AHPError("Session already exists", AHPErrorCodes.SessionAlreadyExists);
     }
 
@@ -155,7 +177,7 @@ export class HostSessionsService {
     };
 
     // The session is listed while it is still creating, so early subscribers see its lifecycle.
-    await this.db.sessions.create(entry);
+    this.db.orm.insert(sessionsTable).values(entry).run();
 
     await this.publishCatalogChange({
       jsonrpc: "2.0",
@@ -185,7 +207,7 @@ export class HostSessionsService {
    * @throws {AHPError} If the channel is not a session channel or the session does not exist.
    */
   async dispose(channel: string): Promise<void> {
-    await this.remove(await this.resolveSession(sessionChannel(channel)));
+    await this.remove(this.resolveSession(sessionChannel(channel)));
   }
 
   /**
@@ -197,7 +219,11 @@ export class HostSessionsService {
     const update = HostSessionUpdateRequestSchema.parse(req);
 
     const accepted = this.db.transactionSync(() => {
-      const entry = this.db.sessions.get(update.sessionId);
+      const entry = this.db.orm
+        .select()
+        .from(sessionsTable)
+        .where(eq(sessionsTable.id, update.sessionId))
+        .get();
 
       if (
         !entry ||
@@ -208,11 +234,15 @@ export class HostSessionsService {
         return;
       }
 
-      this.db.sessions.update({ id: entry.id, summary: update.summary, revision: update.revision });
+      this.db.orm
+        .update(sessionsTable)
+        .set({ summary: update.summary, revision: update.revision })
+        .where(eq(sessionsTable.id, entry.id))
+        .run();
 
       const actions = update.actions.map((action) => ({
         ...action,
-        serverSeq: this.db.host.nextServerSeq(),
+        serverSeq: this.nextServerSeq(),
       }));
 
       return { entry, actions };
@@ -239,9 +269,11 @@ export class HostSessionsService {
   }
 
   private async rootState(): Promise<AHPRootState> {
+    const activeSessions = await this.db.orm.$count(sessionsTable);
+
     return {
       agents: [this.agentInfo()],
-      activeSessions: await this.db.sessions.count(),
+      activeSessions,
     };
   }
 
@@ -250,11 +282,19 @@ export class HostSessionsService {
    *
    * @throws {AHPError} If the session does not exist.
    */
-  private async resolveSession(parsed: SessionChannel | ChatChannel): Promise<SessionEntry> {
-    const entry =
+  private resolveSession(
+    parsed: SessionChannel | ChatChannel,
+  ): Pick<SessionEntry, "id" | "defaultChatId"> {
+    const clause =
       parsed.kind === "session"
-        ? this.db.sessions.get(parsed.id)
-        : await this.db.sessions.findChat(parsed.id);
+        ? eq(sessionsTable.id, parsed.id)
+        : eq(sessionsTable.defaultChatId, parsed.id);
+
+    const entry = this.db.orm
+      .select({ id: sessionsTable.id, defaultChatId: sessionsTable.defaultChatId })
+      .from(sessionsTable)
+      .where(clause)
+      .get();
 
     if (!entry) {
       throw new AHPError("Session does not exist", AHPErrorCodes.SessionNotFound);
@@ -271,9 +311,9 @@ export class HostSessionsService {
    * Disposes the session Durable Object, then removes the session from the catalog.
    * All sockets stop their subscriptions to the session channel and the chat channel.
    */
-  private async remove(entry: SessionEntry): Promise<void> {
+  private async remove(entry: Pick<SessionEntry, "id" | "defaultChatId">): Promise<void> {
     await this.sessionStub(entry.id).dispose();
-    await this.db.sessions.remove(entry.id);
+    this.db.orm.delete(sessionsTable).where(eq(sessionsTable.id, entry.id)).run();
     this.connections.removeChannel(sessionUri(entry.id));
     this.connections.removeChannel(chatUri(entry.defaultChatId));
 
@@ -290,8 +330,8 @@ export class HostSessionsService {
    */
   private async publishCatalogChange(notification: JsonRpcNotification): Promise<void> {
     this.notifyRoot(notification);
-    const activeSessions = await this.db.sessions.count();
-    const serverSeq = this.db.host.nextServerSeq();
+    const activeSessions = await this.db.orm.$count(sessionsTable);
+    const serverSeq = this.nextServerSeq();
 
     this.publishAction(
       {

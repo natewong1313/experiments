@@ -17,6 +17,7 @@ import type {
 } from "../src";
 import { buildSession, sessionSummary } from "../src/session/state";
 import { HostDatabase } from "../src/host/db/database";
+import { sessionsTable } from "../src/host/db/schema";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
 import { connectPeer } from "./peer";
@@ -243,11 +244,14 @@ it("retains the full AHP summary through host RPC and storage", async () => {
   const stub = env.COORDINATORS.getByName(req.hostId);
   const original = sessionSummary(buildSession(req, "/"));
   await runInDurableObject(stub, async (_instance, ctx) => {
-    await new HostDatabase(ctx.storage).sessions.create({
-      id: req.sessionId,
-      defaultChatId: req.chatId,
-      summary: original,
-    });
+    new HostDatabase(ctx.storage).orm
+      .insert(sessionsTable)
+      .values({
+        id: req.sessionId,
+        defaultChatId: req.chatId,
+        summary: original,
+      })
+      .run();
   });
 
   const summary = {
@@ -264,7 +268,11 @@ it("retains the full AHP summary through host RPC and storage", async () => {
   await stub.sessionUpdate({ sessionId: req.sessionId, revision: 1, summary, actions: [] });
 
   const stored = await runInDurableObject(stub, async (_instance, ctx) => {
-    const entry = new HostDatabase(ctx.storage).sessions.get(req.sessionId);
+    const entry = new HostDatabase(ctx.storage).orm
+      .select()
+      .from(sessionsTable)
+      .where(eq(sessionsTable.id, req.sessionId))
+      .get();
 
     return entry?.summary;
   });

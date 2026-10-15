@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { HostDatabase } from "../src/host/db/database";
+import { hostTable, sessionsTable } from "../src/host/db/schema";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
 import { buildSession, sessionSummary } from "../src/session/state";
@@ -24,15 +25,34 @@ function record(hostId: string): SessionRecord {
   );
 }
 
-it("commits and rolls back host writes across repositories", async () => {
+it("commits and rolls back host writes", async () => {
   const hostId = crypto.randomUUID();
   const session = record(hostId);
 
   await runInDurableObject(env.COORDINATORS.getByName(hostId), async (_instance, ctx) => {
     const database = new HostDatabase(ctx.storage);
     await database.migrate();
-    const { host, sessions } = database;
-    expect(await host.serverSeq()).toBe(0);
+    const { orm } = database;
+
+    function serverSeq(): number {
+      return orm.select({ serverSeq: hostTable.serverSeq }).from(hostTable).get()?.serverSeq ?? 0;
+    }
+
+    function nextServerSeq(): number {
+      const { serverSeq: seq } = orm
+        .insert(hostTable)
+        .values({ id: 1, serverSeq: 1 })
+        .onConflictDoUpdate({
+          target: hostTable.id,
+          set: { serverSeq: sql`${hostTable.serverSeq} + 1` },
+        })
+        .returning({ serverSeq: hostTable.serverSeq })
+        .get();
+
+      return seq;
+    }
+
+    expect(serverSeq()).toBe(0);
 
     const entry = {
       id: session.id,
@@ -42,40 +62,70 @@ it("commits and rolls back host writes across repositories", async () => {
     };
 
     const result = await ctx.storage.transaction(async () => {
-      await sessions.create(entry);
+      orm.insert(sessionsTable).values(entry).run();
 
       return entry.id;
     });
 
     expect(result).toBe(entry.id);
-    expect(await sessions.list()).toEqual([entry]);
-    expect(await sessions.count()).toBe(1);
-    expect(await sessions.findChat(entry.defaultChatId)).toEqual(entry);
-    await expect(sessions.create(entry)).rejects.toBeInstanceOf(Error);
-    expect(sessions.get(entry.id)).toEqual(entry);
 
-    async function abort(): Promise<never> {
-      await sessions.remove(entry.id);
-      host.nextServerSeq();
+    const all = orm.select().from(sessionsTable).all();
+    expect(all).toEqual([entry]);
+    expect(await orm.$count(sessionsTable)).toBe(1);
+
+    const byChat = orm
+      .select()
+      .from(sessionsTable)
+      .where(eq(sessionsTable.defaultChatId, entry.defaultChatId))
+      .get();
+
+    expect(byChat).toEqual(entry);
+    expect(() => orm.insert(sessionsTable).values(entry).run()).toThrow(Error);
+
+    const byId = orm.select().from(sessionsTable).where(eq(sessionsTable.id, entry.id)).get();
+    expect(byId).toEqual(entry);
+
+    function abort(): never {
+      orm.delete(sessionsTable).where(eq(sessionsTable.id, entry.id)).run();
+      nextServerSeq();
       throw new Error("Abort host writes");
     }
 
     await expect(ctx.storage.transaction(abort)).rejects.toThrow("Abort host writes");
-    expect(await host.serverSeq()).toBe(0);
-    expect(sessions.get(entry.id)).toEqual(entry);
+    expect(serverSeq()).toBe(0);
 
-    const sequences = [host.nextServerSeq(), host.nextServerSeq()];
+    const afterAbort = orm.select().from(sessionsTable).where(eq(sessionsTable.id, entry.id)).get();
+    expect(afterAbort).toEqual(entry);
+
+    const sequences = [nextServerSeq(), nextServerSeq()];
     expect(sequences).toEqual([1, EXPECTED_SEQUENCE_COUNT]);
-    expect(await host.serverSeq()).toBe(EXPECTED_SEQUENCE_COUNT);
+    expect(serverSeq()).toBe(EXPECTED_SEQUENCE_COUNT);
 
     const summary = { ...entry.summary, title: "Updated session" };
-    sessions.update({ ...entry, summary });
-    const updated = sessions.get(entry.id);
+    orm
+      .update(sessionsTable)
+      .set({ summary, revision: entry.revision })
+      .where(eq(sessionsTable.id, entry.id))
+      .run();
+
+    const updated = orm.select().from(sessionsTable).where(eq(sessionsTable.id, entry.id)).get();
     expect(updated?.summary).toEqual(summary);
-    await sessions.remove(entry.id);
-    expect(await sessions.list()).toEqual([]);
-    expect(sessions.get(entry.id)).toBeUndefined();
-    expect(await sessions.findChat(entry.defaultChatId)).toBeUndefined();
+
+    orm.delete(sessionsTable).where(eq(sessionsTable.id, entry.id)).run();
+
+    const remaining = orm.select().from(sessionsTable).all();
+    expect(remaining).toEqual([]);
+
+    const deleted = orm.select().from(sessionsTable).where(eq(sessionsTable.id, entry.id)).get();
+    expect(deleted).toBeUndefined();
+
+    const deletedByChat = orm
+      .select()
+      .from(sessionsTable)
+      .where(eq(sessionsTable.defaultChatId, entry.defaultChatId))
+      .get();
+
+    expect(deletedByChat).toBeUndefined();
   });
 });
 

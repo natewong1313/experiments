@@ -193,7 +193,7 @@ export class AHPRouter {
       });
     }
 
-    const serverSeq = await this.sessions.serverSeq();
+    const serverSeq = this.sessions.serverSeq();
     const snapshots = await this.subscribeAll(socket, [...new Set(params.initialSubscriptions)]);
     this.connections.initialize(socket, params.clientId);
 
@@ -234,7 +234,7 @@ export class AHPRouter {
           channel: submitted.channel,
           action: submitted.action,
           origin: { clientId, clientSeq: submitted.clientSeq },
-          serverSeq: await this.sessions.nextServerSeq(),
+          serverSeq: this.sessions.nextServerSeq(),
           rejectionReason: errorMessage(error),
         },
       });

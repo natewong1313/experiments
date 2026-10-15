@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import * as z from "zod";
@@ -8,6 +8,7 @@ import {
   SessionStatus as AHPSessionStatus,
 } from "@microsoft/agent-host-protocol";
 import type { SessionCreateRequest, HostSessionUpdateRequest, SessionRPC } from "../src";
+import { hostTable, sessionsTable } from "../src/host/db/schema";
 import type { SessionEntry } from "../src/host/db/schema";
 import { HostDatabase } from "../src/host/db/database";
 import { SessionDatabase } from "../src/session/db/database";
@@ -34,11 +35,14 @@ async function createSession(): Promise<SessionCreateRequest> {
   await runInDurableObject(env.COORDINATORS.getByName(req.hostId), async (_instance, ctx) => {
     const summary = sessionSummary(buildSession(req, "/"));
 
-    await new HostDatabase(ctx.storage).sessions.create({
-      id: req.sessionId,
-      defaultChatId: req.chatId,
-      summary,
-    });
+    new HostDatabase(ctx.storage).orm
+      .insert(sessionsTable)
+      .values({
+        id: req.sessionId,
+        defaultChatId: req.chatId,
+        summary,
+      })
+      .run();
   });
   await env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId)).create(req);
 
@@ -59,7 +63,11 @@ async function hostState(
     async (_instance, ctx) => {
       const db = new HostDatabase(ctx.storage);
 
-      return { entry: db.sessions.get(req.sessionId), sequence: await db.host.serverSeq() };
+      return {
+        entry: db.orm.select().from(sessionsTable).where(eq(sessionsTable.id, req.sessionId)).get(),
+        sequence:
+          db.orm.select({ serverSeq: hostTable.serverSeq }).from(hostTable).get()?.serverSeq ?? 0,
+      };
     },
   );
 }
@@ -416,14 +424,17 @@ it("clears pending updates on disposal and ignores late updates for a replaced s
 
   await runInDurableObject(env.COORDINATORS.getByName(req.hostId), async (_instance, ctx) => {
     const db = new HostDatabase(ctx.storage);
-    await db.sessions.remove(req.sessionId);
+    db.orm.delete(sessionsTable).where(eq(sessionsTable.id, req.sessionId)).run();
     const summary = sessionSummary(buildSession(req, "/"));
 
-    await db.sessions.create({
-      id: req.sessionId,
-      defaultChatId: crypto.randomUUID(),
-      summary,
-    });
+    db.orm
+      .insert(sessionsTable)
+      .values({
+        id: req.sessionId,
+        defaultChatId: crypto.randomUUID(),
+        summary,
+      })
+      .run();
   });
 
   if (!oldUpdate) {
@@ -502,8 +513,19 @@ it("rolls back host acceptance and sequence allocation together", async () => {
     const db = new HostDatabase(ctx.storage);
 
     function abort(): never {
-      db.sessions.update({ id: req.sessionId, summary: update.summary, revision: update.revision });
-      db.host.nextServerSeq();
+      db.orm
+        .update(sessionsTable)
+        .set({ summary: update.summary, revision: update.revision })
+        .where(eq(sessionsTable.id, req.sessionId))
+        .run();
+      db.orm
+        .insert(hostTable)
+        .values({ id: 1, serverSeq: 1 })
+        .onConflictDoUpdate({
+          target: hostTable.id,
+          set: { serverSeq: sql`${hostTable.serverSeq} + 1` },
+        })
+        .run();
       throw new Error("Abort acceptance");
     }
 
