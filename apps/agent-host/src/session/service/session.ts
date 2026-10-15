@@ -84,12 +84,14 @@ export class SessionService {
     });
   }
 
-  async deliverHostUpdates(): Promise<void> {
-    await this.hostUpdates.retry();
+  /** Delivers due host updates after an alarm fires. */
+  async onAlarm(): Promise<void> {
+    await this.hostUpdates.onAlarm();
   }
 
+  /** Resumes host-update delivery after a permanent failure has been repaired. */
   async retryHostUpdates(): Promise<void> {
-    await this.hostUpdates.resume();
+    await this.hostUpdates.resumeAfterFailure();
   }
 
   /**

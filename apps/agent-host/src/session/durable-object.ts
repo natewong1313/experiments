@@ -42,7 +42,7 @@ export abstract class AgentSession<Env = unknown> extends DurableObject<Env> imp
   }
 
   async alarm(): Promise<void> {
-    await this.session.deliverHostUpdates();
+    await this.session.onAlarm();
   }
 
   async retryHostUpdates(): Promise<void> {

@@ -68,7 +68,8 @@ export class HostUpdatesService {
     }
   }
 
-  async retry(): Promise<void> {
+  /** Delivers due updates, then reschedules the alarm for the next one. Safe to call when nothing is due. */
+  async onAlarm(): Promise<void> {
     try {
       await this.flush();
     } finally {
@@ -77,7 +78,7 @@ export class HostUpdatesService {
   }
 
   /** Restarts delivery of stored updates, including updates stopped by a permanent failure. */
-  async resume(): Promise<void> {
+  async resumeAfterFailure(): Promise<void> {
     await this.db.transaction(async () => {
       const first = this.db.orm
         .select({
@@ -99,7 +100,7 @@ export class HostUpdatesService {
 
       await this.schedule();
     });
-    await this.retry();
+    await this.onAlarm();
   }
 
   /** Clears pending updates and their alarm within the caller's session removal transaction. */
