@@ -3,7 +3,7 @@
 A minimal AHP 0.9 host with one Durable Object per host and one per session.
 Each session has one default chat and accepts one active text turn at a time.
 
-The host owns client WebSockets, the session catalogue, subscriptions, and
+The host owns client WebSockets, the session catalog, subscriptions, and
 `serverSeq`. Session objects own ACP connections and persisted conversation
 state. Sessions publish actions to their host over RPC. Closing a client socket
 does not cancel a turn.
@@ -63,8 +63,8 @@ The host supports `initialize`, `ping`, `listSessions`, `createSession`,
 Clients dispatch `chat/turnStarted` and `chat/turnCancelled`. Agent text becomes
 markdown response parts and deltas, followed by completion or error actions.
 
-Subscribe to root for the catalogue, a session for its default-chat reference,
-and the chat for its conversation and activity status. The host updates catalogue
+Subscribe to root for the catalog, a session for its default-chat reference,
+and the chat for its conversation and activity status. The host updates catalog
 status and the session's chat summary. Session-level activity aggregation is not
 implemented; use the chat status.
 
@@ -76,7 +76,7 @@ not duplicate the retained AHP transcript.
 Sessions remain until explicit disposal. Disposal stops the connection and removes
 AHP history. Backend-owned data follows the backend's own lifecycle.
 
-To recover a client connection, initialize a new connection, fetch the catalogue,
+To recover a client connection, initialize a new connection, fetch the catalog,
 and subscribe again. There is no `reconnect` handler or replay log. There are no
 multiple chats, tool approval UI, resource APIs, terminals, authentication, or
 automatic prompt retries. Agent tools may still run internally.
@@ -123,7 +123,7 @@ src/
 └── types.ts
 ```
 
-Each DO constructs its services once. The host sessions service owns catalogue
+Each DO constructs its services once. The host sessions service owns catalog
 workflows, sequence allocation, and publication decisions. It uses the connections
 service for socket subscriptions, buffering, and delivery. The session service owns
 session state, disposal and active-prompt flags, and the ordered host-update queue.
