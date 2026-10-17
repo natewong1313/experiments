@@ -1,10 +1,10 @@
-import { JsonRpcErrorCodes as AHPJsonRpcErrorCodes } from "@microsoft/agent-host-protocol";
+import {
+  AhpErrorCodes as AHPErrorCodes,
+  JsonRpcErrorCodes as AHPJsonRpcErrorCodes,
+} from "@microsoft/agent-host-protocol";
 import type { JsonValue } from "@experiments/protocol-schemas";
-import { errorMessage } from "./errors";
 
-/**
- * Shared AHP stuff
- */
+/** The URI of the root channel. */
 export const ROOT_CHANNEL = "ahp-root://";
 
 /** An AHP error that the host sends to the client as a JSON-RPC error. */
@@ -24,10 +24,7 @@ export class AHPError extends Error {
   }
 }
 
-/**
- * Returns `cause` if it is an `AHPError`.
- * Otherwise, returns a new `AHPError` with the message of `cause`.
- */
-export function toAHPError(cause: unknown): AHPError {
-  return cause instanceof AHPError ? cause : new AHPError(errorMessage(cause));
+/** Returns the AHP error for a session that does not exist. */
+export function sessionNotFound(): AHPError {
+  return new AHPError("Session does not exist", AHPErrorCodes.SessionNotFound);
 }

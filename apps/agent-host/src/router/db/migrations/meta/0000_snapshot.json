@@ -1,11 +1,11 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c3314c8f-f463-4d2f-b7b6-5fe444e6fe8b",
-  "prevId": "b9b119e3-7d69-45d8-b8b2-4291d0b3dffa",
+  "id": "cf1fb498-d3cd-4598-9763-48ad312857fd",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "host": {
-      "name": "host",
+    "connection": {
+      "name": "connection",
       "columns": {
         "id": {
           "name": "id",
@@ -27,14 +27,14 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "host_singleton": {
-          "name": "host_singleton",
-          "value": "\"host\".\"id\" = 1"
+        "connection_singleton": {
+          "name": "connection_singleton",
+          "value": "\"connection\".\"id\" = 1"
         }
       }
     },
-    "sessions": {
-      "name": "sessions",
+    "senders": {
+      "name": "senders",
       "columns": {
         "id": {
           "name": "id",
@@ -43,15 +43,32 @@
           "notNull": true,
           "autoincrement": false
         },
-        "default_chat_id": {
-          "name": "default_chat_id",
-          "type": "text",
+        "revision": {
+          "name": "revision",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "subscriptions": {
+      "name": "subscriptions",
+      "columns": {
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
-        "summary": {
-          "name": "summary",
+        "sender": {
+          "name": "sender",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -62,19 +79,10 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": 0
+          "autoincrement": false
         }
       },
-      "indexes": {
-        "sessions_defaultChatId_unique": {
-          "name": "sessions_defaultChatId_unique",
-          "columns": [
-            "default_chat_id"
-          ],
-          "isUnique": true
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

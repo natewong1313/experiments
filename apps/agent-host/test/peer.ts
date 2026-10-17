@@ -1,6 +1,8 @@
 import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import {
   ActionEnvelopeSchema,
+  SessionStateSchema,
+  SubscribeResultSchema,
   JsonRpcNotificationSchema,
   JsonRpcReplySchema,
   type ActionEnvelope,
@@ -44,12 +46,18 @@ export class Peer {
   readonly messages: z.output<typeof MessageSchema>[] = [];
   readonly actions: ActionEnvelope[] = [];
   readonly notifications: JsonRpcNotification[] = [];
+  readonly closed: Promise<number>;
   private readonly replies: JsonRpcReply[] = [];
   private readonly socket: WebSocket;
   private nextId = 0;
 
   constructor(socket: WebSocket) {
     this.socket = socket;
+    const closed = Promise.withResolvers<number>();
+    this.closed = closed.promise;
+    socket.addEventListener("close", (event) => {
+      closed.resolve(event.code);
+    });
     socket.addEventListener("message", (event) => {
       const text = z.string().parse(event.data);
       const value: unknown = JSON.parse(text);
@@ -103,16 +111,9 @@ export class Peer {
   }
 }
 
-export async function openPeer(hostId: string): Promise<Peer> {
-  const response = await worker.fetch(
-    new Request(`https://host/hosts/${hostId}/ahp`, {
-      headers: { Upgrade: "websocket" },
-    }),
-    env,
-  );
-
+function accept(response: Response): Peer {
   if (!response.webSocket) {
-    throw new Error("Host did not accept the WebSocket upgrade");
+    throw new Error("Router did not accept the WebSocket upgrade");
   }
 
   const peer = new Peer(response.webSocket);
@@ -123,8 +124,25 @@ export async function openPeer(hostId: string): Promise<Peer> {
   return peer;
 }
 
-export async function connectPeer(hostId: string, clientId = crypto.randomUUID()): Promise<Peer> {
-  const peer = await openPeer(hostId);
+function upgrade(url: string): Request {
+  return new Request(url, { headers: { Upgrade: "websocket" } });
+}
+
+export async function openPeer(hostId: string): Promise<Peer> {
+  const request = upgrade(`https://host/hosts/${hostId}/ahp`);
+
+  return accept(await worker.fetch(request, env));
+}
+
+/** Opens a connection through a router with a known name, so tests can inspect the router. */
+export async function openPeerAt(router: string): Promise<Peer> {
+  const stub = env.CONNECTIONS.getByName(router);
+  const request = upgrade("https://host/");
+
+  return accept(await stub.fetch(request));
+}
+
+export async function initialize(peer: Peer, clientId = crypto.randomUUID()): Promise<Peer> {
   await peer.request("initialize", {
     channel: "ahp-root://",
     clientId,
@@ -132,4 +150,29 @@ export async function connectPeer(hostId: string, clientId = crypto.randomUUID()
   });
 
   return peer;
+}
+
+export async function connectPeer(hostId: string, clientId = crypto.randomUUID()): Promise<Peer> {
+  return await initialize(await openPeer(hostId), clientId);
+}
+
+export async function connectPeerAt(router: string): Promise<Peer> {
+  return await initialize(await openPeerAt(router));
+}
+
+export type CreatedSession = { sessionId: string; channel: string; chat: string };
+
+/** Creates a session, subscribes the peer to its session channel, and returns its chat. */
+export async function createSession(peer: Peer): Promise<CreatedSession> {
+  const sessionId = crypto.randomUUID();
+  const channel = `ahp-session:/${sessionId}`;
+  await peer.request("createSession", { channel, provider: "test" });
+  const subscribed = SubscribeResultSchema.parse(await peer.request("subscribe", { channel }));
+  const state = SessionStateSchema.parse(subscribed.snapshot?.state);
+
+  if (state.defaultChat === undefined) {
+    throw new Error("Session has no default chat");
+  }
+
+  return { sessionId, channel, chat: state.defaultChat };
 }

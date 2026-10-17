@@ -1,14 +1,16 @@
 # Basic example
 
-This Worker exports `AgentHost` and `AgentSession` Durable Objects. Each session
-subclass owns a Pi harness and durable workspace. The host routes AHP commands to
-that session and delivers its updates to clients.
+This Worker exports `AgentHost`, `AgentSession`, and `ConnectionRouter` Durable Objects.
+Each session subclass owns a Pi harness and durable workspace. Each client connection gets
+its own router. The router sends catalogue requests to the host and session requests to the
+session. The session pushes its updates directly to the routers of its subscribers.
 
-`AGENT_HOST` and `AGENT_SESSION` are this example's binding names. The library
-uses namespace accessors and does not require these names.
+`AGENT_HOST`, `AGENT_SESSION`, and `AGENT_ROUTER` are this example's binding names. The
+library calls `getStub` and does not require these names. [src/stubs.ts](src/stubs.ts)
+maps each kind of Durable Object to its binding.
 
-The Worker routes `/hosts/<host-uuid>/ahp` to a named host. Clients using the same
-host UUID share its catalogue and sessions. `GET /health` checks the Worker.
+The Worker routes `/hosts/<host-uuid>/ahp` to a new router for that host. Clients using
+the same host UUID share its catalogue and sessions. `GET /health` checks the Worker.
 These routes have no authentication.
 
 ## Run locally
@@ -39,8 +41,8 @@ The client initializes AHP, creates a ready session, subscribes to its default
 chat, and sends a text turn. It prints streamed text, then disposes the session.
 Use [client/prompt.ts](client/prompt.ts) as a starting point for a client.
 
-Tools run within Pi. This minimal AHP implementation only presents text output;
-it has no client-side tool approvals or structured questions.
+Tools run within Pi. This minimal AHP implementation presents only text output. It has
+no client-side tool approvals or structured questions.
 
 ## Checks
 

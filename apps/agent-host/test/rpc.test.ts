@@ -3,25 +3,22 @@ import { eq } from "drizzle-orm";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import {
+  AhpErrorCodes as AHPErrorCodes,
   SessionOriginKind as AHPSessionOriginKind,
   MessageKind as AHPMessageKind,
   ResponsePartKind as AHPResponsePartKind,
   TurnState as AHPTurnState,
 } from "@microsoft/agent-host-protocol";
-import type {
-  HostRPC,
-  SessionRPC,
-  SessionNamespace,
-  SessionCreateRequest,
-  SessionSnapshotResponse,
-} from "../src";
+import type { HostRPC, SessionRPC } from "../src";
+import type { SessionCreateRequest, SessionSubscribeResponse } from "../src/shared/rpc/session";
 import { buildSession, sessionSummary } from "../src/session/state";
 import { HostDatabase } from "../src/host/db/database";
 import { sessionsTable } from "../src/host/db/schema";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
 import { connectPeer } from "./peer";
-import { sessionDOName, sessionUri, chatUri } from "../src/shared/lookups";
+import { readState, storedTables } from "./storage";
+import { newRouterDOName, sessionDOName, sessionUri, chatUri } from "../src/shared/lookups";
 
 function request(): SessionCreateRequest {
   return {
@@ -33,8 +30,12 @@ function request(): SessionCreateRequest {
   };
 }
 
-function turnStart(turnId: string): Parameters<SessionRPC["dispatch"]>[0] {
+function turnStart(
+  req: SessionCreateRequest,
+  turnId: string,
+): Parameters<SessionRPC["dispatch"]>[0] {
   return {
+    channel: chatUri(req.sessionId, req.chatId),
     action: {
       type: "chat/turnStarted",
       turnId,
@@ -46,7 +47,7 @@ function turnStart(turnId: string): Parameters<SessionRPC["dispatch"]>[0] {
 }
 
 async function rpcError(
-  operation: () => Promise<void> | Promise<SessionSnapshotResponse>,
+  operation: () => Promise<void> | Promise<SessionSubscribeResponse>,
 ): Promise<Error> {
   try {
     await operation();
@@ -63,28 +64,28 @@ async function rpcError(
 
 it("returns typed snapshots and named errors through the session RPC contract", async () => {
   const req = request();
-  const sessions: SessionNamespace = env.CONVERSATIONS;
-  const stub: SessionRPC = sessions.getByName(sessionDOName(req.hostId, req.sessionId));
+  const stub: SessionRPC = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
+  const router = newRouterDOName(req.hostId);
   const channel = sessionUri(req.sessionId);
-  const chat = chatUri(req.chatId);
+  const chat = chatUri(req.sessionId, req.chatId);
 
   try {
     await expect(stub.create(req)).resolves.toBeUndefined();
-    const snapshot = await stub.snapshot({ channel: sessionUri(req.sessionId) });
-    expect(snapshot.state).toMatchObject({ lifecycle: "ready", defaultChat: chatUri(req.chatId) });
+    const snapshot = await stub.subscribe({ router, channel });
+    expect(snapshot.state).toMatchObject({ lifecycle: "ready", defaultChat: chat });
     expect(snapshot.revision).toBe(1);
-    await expect(stub.snapshot({ channel: chat })).resolves.toMatchObject({
-      state: { resource: chatUri(req.chatId), turns: [] },
+    await expect(stub.subscribe({ router, channel: chat })).resolves.toMatchObject({
+      state: { resource: chat, turns: [] },
     });
     const duplicate = await rpcError(() => stub.create(req));
     expect(duplicate).toMatchObject({
       name: "SessionCreateError",
       message: "Session already exists",
     });
-    const otherChat = chatUri(crypto.randomUUID());
-    const wrongChannel = await rpcError(() => stub.snapshot({ channel: otherChat }));
+    const otherChat = chatUri(req.sessionId, crypto.randomUUID());
+    const wrongChannel = await rpcError(() => stub.subscribe({ router, channel: otherChat }));
     expect(wrongChannel).toMatchObject({
-      name: "SessionSnapshotError",
+      name: "SessionSubscribeError",
       message: "Channel does not belong to this session",
     });
     const turnId = crypto.randomUUID();
@@ -92,6 +93,7 @@ it("returns typed snapshots and named errors through the session RPC contract", 
 
     const rejected = await rpcError(() =>
       stub.dispatch({
+        channel: chat,
         action: { type: "chat/turnCancelled", turnId, duration: 0 },
         origin: { clientId, clientSeq: 1 },
       }),
@@ -106,10 +108,11 @@ it("returns typed snapshots and named errors through the session RPC contract", 
   }
 
   await expect(stub.dispose()).resolves.toBeUndefined();
-  const missing = await rpcError(() => stub.snapshot({ channel }));
+  const missing = await rpcError(() => stub.subscribe({ router, channel }));
   expect(missing).toMatchObject({
-    name: "SessionSnapshotError",
+    name: "SessionSubscribeError",
     message: "Session does not exist",
+    code: AHPErrorCodes.SessionNotFound,
   });
 });
 
@@ -125,11 +128,13 @@ it("removes failed session setup and propagates its operation error over RPC", a
     message: "Agent setup failed",
   });
   const channel = sessionUri(req.sessionId);
-  const missing = await rpcError(() => session.snapshot({ channel }));
+  const router = newRouterDOName(req.hostId);
+  const missing = await rpcError(() => session.subscribe({ router, channel }));
   expect(missing).toMatchObject({
-    name: "SessionSnapshotError",
+    name: "SessionSubscribeError",
     message: "Session does not exist",
   });
+  expect(await storedTables(stub)).toEqual([]);
 });
 
 it("retains opaque AHP metadata in snapshots after reconstruction and subscription", async () => {
@@ -196,61 +201,32 @@ it("retains opaque AHP metadata in snapshots after reconstruction and subscripti
   }
 });
 
-it("validates host updates and ignores sessions absent from its catalogue", async () => {
+it("validates summary changes and ignores sessions absent from its catalogue", async () => {
   const req = request();
   const hosts: DurableObjectNamespace<HostRPC> = env.COORDINATORS;
   const stub = hosts.getByName(req.hostId);
 
   const update = {
     sessionId: req.sessionId,
+    defaultChat: chatUri(req.sessionId, req.chatId),
     revision: 1,
     summary: sessionSummary(buildSession(req, "/")),
-    actions: [],
   };
 
-  await expect(stub.sessionUpdate(update)).resolves.toBeUndefined();
-  const invalid = await rpcError(() => stub.sessionUpdate({ ...update, revision: Number.NaN }));
-  expect(invalid).toMatchObject({
-    name: "HostSessionUpdateError",
-  });
-});
-
-it("rejects host updates with two actions on one channel", async () => {
-  const req = request();
-  const stub = env.COORDINATORS.getByName(req.hostId);
-  const turnId = crypto.randomUUID();
-  const summary = sessionSummary(buildSession(req, "/"));
-
-  const action = {
-    channel: chatUri(req.chatId),
-    action: { type: "chat/turnCancelled" as const, turnId, duration: 0 },
-  };
-
-  const rejected = await rpcError(() =>
-    stub.sessionUpdate({
-      sessionId: req.sessionId,
-      revision: 1,
-      summary,
-      actions: [action, action],
-    }),
-  );
-
-  expect(rejected).toMatchObject({ name: "HostSessionUpdateError" });
-  expect(rejected.message).toContain("Expected at most one action per channel");
+  await expect(stub.summaryChanged(update)).resolves.toBeUndefined();
+  const invalid = await rpcError(() => stub.summaryChanged({ ...update, revision: Number.NaN }));
+  expect(invalid).toMatchObject({ name: "HostSummaryChangedError" });
 });
 
 it("retains the full AHP summary through host RPC and storage", async () => {
   const req = request();
   const stub = env.COORDINATORS.getByName(req.hostId);
+  const defaultChat = chatUri(req.sessionId, req.chatId);
   const original = sessionSummary(buildSession(req, "/"));
   await runInDurableObject(stub, async (_instance, ctx) => {
     new HostDatabase(ctx.storage).orm
       .insert(sessionsTable)
-      .values({
-        id: req.sessionId,
-        defaultChatId: req.chatId,
-        summary: original,
-      })
+      .values({ id: req.sessionId, defaultChat, summary: original })
       .run();
   });
 
@@ -265,7 +241,7 @@ it("retains the full AHP summary through host RPC and storage", async () => {
     _meta: { label: "retained" },
   };
 
-  await stub.sessionUpdate({ sessionId: req.sessionId, revision: 1, summary, actions: [] });
+  await stub.summaryChanged({ sessionId: req.sessionId, defaultChat, revision: 1, summary });
 
   const stored = await runInDurableObject(stub, async (_instance, ctx) => {
     const entry = new HostDatabase(ctx.storage).orm
@@ -284,7 +260,7 @@ it("retains the full AHP summary through host RPC and storage", async () => {
 it("rejects a second concurrent turn through the public dispatch method", async () => {
   const req = request();
   const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
-  const session: SessionRPC = stub;
+  const chat = chatUri(req.sessionId, req.chatId);
   await stub.create(req);
   const firstTurnId = crypto.randomUUID();
   const secondTurnId = crypto.randomUUID();
@@ -292,15 +268,7 @@ it("rejects a second concurrent turn through the public dispatch method", async 
   try {
     await runInDurableObject(stub, async (instance) => {
       const starts = [firstTurnId, secondTurnId].map(
-        (turnId): Parameters<SessionRPC["dispatch"]>[0] => ({
-          action: {
-            type: "chat/turnStarted",
-            turnId,
-            startedAt: new Date().toISOString(),
-            message: { text: "hold", origin: { kind: "user" } },
-          },
-          origin: { clientId: crypto.randomUUID(), clientSeq: 1 },
-        }),
+        (turnId): Parameters<SessionRPC["dispatch"]>[0] => turnStart(req, turnId),
       );
 
       const results = await Promise.allSettled(starts.map((start) => instance.dispatch(start)));
@@ -313,8 +281,9 @@ it("rejects a second concurrent turn through the public dispatch method", async 
       ]);
     });
 
-    const snapshot = await session.snapshot({ channel: chatUri(req.chatId) });
-    expect(snapshot.state).toMatchObject({ activeTurn: { id: firstTurnId } });
+    expect(await readState(stub, chat)).toMatchObject({
+      state: { activeTurn: { id: firstTurnId } },
+    });
   } finally {
     await stub.dispose();
   }
@@ -323,7 +292,7 @@ it("rejects a second concurrent turn through the public dispatch method", async 
 it("rejects a turn start when the session does not exist", async () => {
   const req = request();
   const session: SessionRPC = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
-  const start = turnStart(crypto.randomUUID());
+  const start = turnStart(req, crypto.randomUUID());
   const error = await rpcError(() => session.dispatch(start));
   expect(error).toMatchObject({ name: "SessionDispatchError", message: "Session does not exist" });
 });
@@ -332,20 +301,21 @@ it("does not cancel the agent when a cancellation targets another turn", async (
   const req = request();
   const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
   const session: SessionRPC = stub;
+  const chat = chatUri(req.sessionId, req.chatId);
   const turnId = crypto.randomUUID();
   await session.create(req);
 
   try {
-    await session.dispatch(turnStart(turnId));
+    await session.dispatch(turnStart(req, turnId));
     await vi.waitFor(async () => {
-      const snapshot = await session.snapshot({ channel: chatUri(req.chatId) });
-      expect(snapshot.state).toMatchObject({
-        activeTurn: { id: turnId, responseParts: [{ content: "hold" }] },
+      expect(await readState(stub, chat)).toMatchObject({
+        state: { activeTurn: { id: turnId, responseParts: [{ content: "hold" }] } },
       });
     });
 
     const rejected = await rpcError(() =>
       session.dispatch({
+        channel: chat,
         action: { type: "chat/turnCancelled", turnId: crypto.randomUUID(), duration: 0 },
         origin: { clientId: crypto.randomUUID(), clientSeq: 1 },
       }),
@@ -353,8 +323,9 @@ it("does not cancel the agent when a cancellation targets another turn", async (
 
     expect(rejected.message).toBe("No matching active turn to cancel");
     expect(await stub.cancellationCount()).toBe(0);
-    const snapshot = await session.snapshot({ channel: chatUri(req.chatId) });
-    expect(snapshot.state).toMatchObject({ activeTurn: { id: turnId } });
+    expect(await readState(stub, chat)).toMatchObject({
+      state: { activeTurn: { id: turnId } },
+    });
   } finally {
     await session.dispose();
   }
@@ -364,7 +335,7 @@ it("rejects a second concurrent session creation on the same object", async () =
   const first = request();
   const second = { ...request(), hostId: first.hostId };
   const stub = env.CONVERSATIONS.getByName(sessionDOName(first.hostId, first.sessionId));
-  const session: SessionRPC = stub;
+  const channel = sessionUri(first.sessionId);
 
   try {
     await runInDurableObject(stub, async (instance) => {
@@ -378,10 +349,8 @@ it("rejects a second concurrent session creation on the same object", async () =
       ]);
     });
 
-    const snapshot = await session.snapshot({ channel: sessionUri(first.sessionId) });
-    expect(snapshot.state).toMatchObject({
-      defaultChat: chatUri(first.chatId),
-      lifecycle: "ready",
+    expect(await readState(stub, channel)).toMatchObject({
+      state: { defaultChat: chatUri(first.sessionId, first.chatId), lifecycle: "ready" },
     });
   } finally {
     await stub.dispose();
@@ -398,22 +367,17 @@ it("rejects agent initialization after disposal and can recreate the session on 
 
   try {
     await vi.waitFor(async () => {
-      const snapshot = await session.snapshot({ channel });
-      expect(snapshot.state).toMatchObject({ lifecycle: "creating" });
+      expect(await readState(stub, channel)).toMatchObject({ state: { lifecycle: "creating" } });
     });
     await session.dispose();
     await stub.releaseInitialization(true);
     expect(await creation).toMatchObject({ name: "SessionCreateError" });
-    const missing = await rpcError(() => session.snapshot({ channel }));
-    expect(missing).toMatchObject({
-      name: "SessionSnapshotError",
-      message: "Session does not exist",
-    });
+    expect(await readState(stub, channel)).toBeUndefined();
 
     await session.create(req);
-    expect(await session.snapshot({ channel })).toMatchObject({
+    expect(await readState(stub, channel)).toMatchObject({
       revision: 1,
-      state: { lifecycle: "ready", defaultChat: chatUri(req.chatId) },
+      state: { lifecycle: "ready", defaultChat: chatUri(req.sessionId, req.chatId) },
     });
   } finally {
     await stub.releaseInitialization(true);

@@ -1,7 +1,7 @@
 import type { JsonRpcFailure, JsonRpcMessage } from "@experiments/protocol-schemas/ahp";
 import type { AHPError } from "../shared/protocol";
 
-/** The WebSocket close codes that the host uses. */
+/** The WebSocket close codes that the router uses. */
 export const CloseCode = { Normal: 1000, InternalError: 1011 } as const;
 
 /**

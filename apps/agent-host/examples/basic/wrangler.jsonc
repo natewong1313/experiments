@@ -4,52 +4,42 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-28",
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
   "vars": {
-    "WORKSPACE_DIR": "/workspace"
+    "WORKSPACE_DIR": "/workspace",
   },
   "durable_objects": {
     "bindings": [
       {
         "name": "AGENT_HOST",
-        "class_name": "AgentHost"
+        "class_name": "AgentHost",
       },
       {
         "name": "AGENT_SESSION",
-        "class_name": "AgentSession"
-      }
-    ]
+        "class_name": "AgentSession",
+      },
+      {
+        "name": "AGENT_ROUTER",
+        "class_name": "ConnectionRouter",
+      },
+    ],
   },
-  "exports": {
-    "AgentHost": {
-      "type": "durable-object",
-      "storage": "sqlite"
-    },
-    "AgentSession": {
-      "type": "durable-object",
-      "storage": "sqlite"
-    }
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "ai": {
     "binding": "AI",
-    "remote": true
+    "remote": true,
   },
   "worker_loaders": [
     {
-      "binding": "LOADER"
-    }
+      "binding": "LOADER",
+    },
   ],
   "rules": [
     {
       "type": "Text",
-      "globs": [
-        "**/*.sql"
-      ],
-      "fallthrough": true
-    }
-  ]
+      "globs": ["**/*.sql"],
+      "fallthrough": true,
+    },
+  ],
 }

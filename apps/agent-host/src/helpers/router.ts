@@ -1,26 +1,11 @@
-import type { AgentHost } from "../host/durable-object";
-import * as z from "zod";
+import type { ConnectionRouterRPC } from "../shared/rpc/router";
+import { newRouterDOName } from "../shared/lookups";
 
-const HOST_PATH = /^\/hosts\/([^/]+)\/ahp$/;
-const NOT_FOUND = 404;
-const UUIDSchema = z.uuid().transform((id) => id.toLowerCase());
+export function getHost<T extends ConnectionRouterRPC>(
+  doNamespace: DurableObjectNamespace<T>,
+  hostId: string,
+): DurableObjectStub<T> {
+  const doName = newRouterDOName(hostId);
 
-function hostIdFromRequest(request: Request): string | undefined {
-  const path = new URL(request.url).pathname;
-  const match = HOST_PATH.exec(path);
-  const parsed = UUIDSchema.safeParse(match?.[1]);
-
-  return parsed.success ? parsed.data : undefined;
-}
-
-type RouteOptions<Env> = { request: Request; namespace: DurableObjectNamespace<AgentHost<Env>> };
-
-export async function routeAgentHost<Env>(options: RouteOptions<Env>): Promise<Response> {
-  const hostId = hostIdFromRequest(options.request);
-
-  if (hostId === undefined) {
-    return new Response("Not found", { status: NOT_FOUND });
-  }
-
-  return await options.namespace.getByName(hostId).fetch(options.request);
+  return doNamespace.getByName(doName);
 }

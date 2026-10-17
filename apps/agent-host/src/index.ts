@@ -1,25 +1,15 @@
 export { AgentHost } from "./host/durable-object";
 
+export type { AgentInfo } from "./host/durable-object";
+
 export { AgentSession } from "./session/durable-object";
 
-export { routeAgentHost } from "./helpers/router";
+export { ConnectionRouter } from "./router/durable-object";
 
-export { HostSessionUpdateError } from "./shared/rpc/host";
+export type { StubFor, StubKind } from "./shared/stubs";
 
-export type { HostRPC, HostSessionUpdateRequest } from "./shared/rpc/host";
+export type { HostRPC } from "./shared/rpc/host";
 
-export {
-  SessionCreateError,
-  SessionDispatchError,
-  SessionSnapshotError,
-  SessionDisposeError,
-} from "./shared/rpc/session";
+export type { ConnectionRouterRPC } from "./shared/rpc/router";
 
-export type {
-  SessionRPC,
-  SessionNamespace,
-  SessionCreateRequest,
-  SessionDispatchRequest,
-  SessionSnapshotRequest,
-  SessionSnapshotResponse,
-} from "./shared/rpc/session";
+export type { SessionRPC } from "./shared/rpc/session";

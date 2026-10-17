@@ -16,7 +16,7 @@ import type {
   SessionSummary as AHPSessionSummary,
 } from "@microsoft/agent-host-protocol";
 import type { SessionCreateRequest } from "../shared/rpc/session";
-import type { HostSessionUpdateRequest } from "../shared/rpc/host";
+import type { SessionUpdate } from "../shared/rpc/router";
 import type { SessionRecord } from "./db/schema";
 import { chatUri, sessionUri } from "../shared/lookups";
 
@@ -27,7 +27,7 @@ export function buildSession(options: SessionCreateRequest, cwd: string): Sessio
     .join("/");
 
   const chat: AHPChatSummary = {
-    resource: chatUri(options.chatId),
+    resource: chatUri(options.sessionId, options.chatId),
     title: "New session",
     status: AHPSessionStatus.Idle,
     modifiedAt: options.createdAt,
@@ -74,12 +74,12 @@ export function sessionSummary(record: SessionRecord): AHPSessionSummary {
   };
 }
 
-// The apply functions advance the record in place and return the update to publish for it.
+// The apply functions advance the record in place and return the update to push for it.
 export function applyChat(
   record: SessionRecord,
   action: AHPChatAction,
   origin?: AHPActionOrigin,
-): HostSessionUpdateRequest {
+): SessionUpdate {
   record.chatState = ahpChatReducer(record.chatState, action);
   record.revision += 1;
   const chat = record.chatState;
@@ -99,9 +99,7 @@ export function applyChat(
   record.sessionState = ahpSessionReducer(record.sessionState, sessionAction);
 
   return {
-    sessionId: record.id,
     revision: record.revision,
-    summary: sessionSummary(record),
     actions: [
       { channel: chat.resource, action, origin },
       { channel: sessionUri(record.id), action: sessionAction },
@@ -109,17 +107,12 @@ export function applyChat(
   };
 }
 
-export function applySession(
-  record: SessionRecord,
-  action: AHPSessionAction,
-): HostSessionUpdateRequest {
+export function applySession(record: SessionRecord, action: AHPSessionAction): SessionUpdate {
   record.sessionState = ahpSessionReducer(record.sessionState, action);
   record.revision += 1;
 
   return {
-    sessionId: record.id,
     revision: record.revision,
-    summary: sessionSummary(record),
     actions: [{ channel: sessionUri(record.id), action }],
   };
 }

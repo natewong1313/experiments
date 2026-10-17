@@ -12,7 +12,9 @@ import {
   SubscribeResultSchema,
 } from "@experiments/protocol-schemas/ahp";
 import worker from "./worker";
-import { Peer, connectPeer } from "./peer";
+import { connectPeer, createSession as createPeerSession, openPeer } from "./peer";
+import type { CreatedSession, Peer } from "./peer";
+import { CloseCode } from "../src/router/websockets";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
 import {
@@ -21,29 +23,18 @@ import {
 } from "@microsoft/agent-host-protocol";
 import { sessionDOName } from "../src/shared/lookups";
 
-type CreatedSession = { sessionId: string; channel: string; chat: string };
-
 const NOT_FOUND = 404;
-const NORMAL_CLOSURE = 1000;
 
 const ChangesSchema = z.record(z.string(), z.json());
 const SummaryChangedSchema = z.object({ changes: ChangesSchema });
 const SessionAddedSchema = z.object({ summary: SessionSummarySchema });
 
-async function createSession(peer: Peer): Promise<CreatedSession> {
-  const sessionId = crypto.randomUUID();
-  const channel = `ahp-session:/${sessionId}`;
-  await peer.request("createSession", { channel, provider: "test" });
-  const subscribed = SubscribeResultSchema.parse(await peer.request("subscribe", { channel }));
-  const state = SessionStateSchema.parse(subscribed.snapshot?.state);
+/** Creates a session and subscribes the peer to its session channel and its chat. */
+async function createSubscribedSession(peer: Peer): Promise<CreatedSession> {
+  const created = await createPeerSession(peer);
+  await peer.request("subscribe", { channel: created.chat });
 
-  if (state.defaultChat === undefined) {
-    throw new Error("Session has no default chat");
-  }
-
-  await peer.request("subscribe", { channel: state.defaultChat });
-
-  return { sessionId, channel, chat: state.defaultChat };
+  return created;
 }
 
 function start(peer: Peer, chat: string, text: string): string {
@@ -75,16 +66,18 @@ it("routes UUID hosts and rejects an invalid host path", async () => {
 
 it("refuses a host that was not addressed by name", async () => {
   const stub = env.COORDINATORS.get(env.COORDINATORS.newUniqueId());
-  const upgrade = new Request("https://host/", { headers: { Upgrade: "websocket" } });
+  const channel = `ahp-session:/${crypto.randomUUID()}`;
 
-  await expect(stub.fetch(upgrade)).rejects.toThrow("AgentHost must be addressed by name");
+  await expect(stub.createSession({ channel, provider: "test" })).rejects.toThrow(
+    "AgentHost must be addressed by name",
+  );
 });
 
 it("rejects actions on a session channel and reports only changed summary fields", async () => {
   const peer = await connectPeer(crypto.randomUUID());
 
   try {
-    const session = await createSession(peer);
+    const session = await createSubscribedSession(peer);
     await peer.request("subscribe", { channel: "ahp-root://" });
 
     peer.notify("dispatchAction", {
@@ -135,7 +128,7 @@ it("streams the same turn to two clients and retains it after reconstruction", a
   const second = await connectPeer(hostId);
 
   try {
-    const session = await createSession(first);
+    const session = await createSubscribedSession(first);
     await second.request("subscribe", { channel: session.chat });
     const turnId = start(first, session.chat, "hello");
     await vi.waitFor(() => {
@@ -144,9 +137,20 @@ it("streams the same turn to two clients and retains it after reconstruction", a
     });
     const echoed = first.actions.find((item) => item.action.type === "chat/turnStarted");
     expect(echoed?.origin).toMatchObject({ clientSeq: 1 });
-    expect(first.actions.filter((item) => item.channel === session.chat)).toEqual(
-      second.actions.filter((item) => item.channel === session.chat),
+    // Each connection has its own `serverSeq`.
+    // Thus the test compares the actions without their sequences.
+    const firstChat = first.actions.filter((item) => item.channel === session.chat);
+    const secondChat = second.actions.filter((item) => item.channel === session.chat);
+    expect(firstChat.map(({ serverSeq: _seq, ...item }) => item)).toEqual(
+      secondChat.map(({ serverSeq: _seq, ...item }) => item),
     );
+
+    for (const peer of [first, second]) {
+      const sequences = peer.actions.map((item) => item.serverSeq);
+      expect(sequences).toEqual([...sequences].toSorted((a, b) => a - b));
+      expect(new Set(sequences).size).toBe(sequences.length);
+    }
+
     const before = await chatState(first, session.chat);
     expect(before.turns[0]).toMatchObject({
       id: turnId,
@@ -173,7 +177,7 @@ it("keeps every text update when the agent streams several at once", async () =>
   const peer = await connectPeer(crypto.randomUUID());
 
   try {
-    const session = await createSession(peer);
+    const session = await createSubscribedSession(peer);
     const turnId = start(peer, session.chat, "stream");
     await vi.waitFor(() => {
       expect(peer.actions.some((item) => item.action.type === "chat/turnComplete")).toBe(true);
@@ -194,8 +198,8 @@ it("runs another session while one is waiting and rejects a second active turn",
   const peer = await connectPeer(hostId);
 
   try {
-    const first = await createSession(peer);
-    const second = await createSession(peer);
+    const first = await createSubscribedSession(peer);
+    const second = await createSubscribedSession(peer);
     const held = start(peer, first.chat, "hold");
     await vi.waitFor(() => {
       expect(peer.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
@@ -234,7 +238,7 @@ it("runs another session while one is waiting and rejects a second active turn",
 it("continues a prompt without clients and removes history on explicit disposal", async () => {
   const hostId = crypto.randomUUID();
   const first = await connectPeer(hostId);
-  const session = await createSession(first);
+  const session = await createSubscribedSession(first);
   start(first, session.chat, "hold");
   await vi.waitFor(() => {
     expect(first.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
@@ -268,7 +272,7 @@ it("records an interrupted turn as an error on reconstruction", async () => {
   const peer = await connectPeer(hostId);
 
   try {
-    const session = await createSession(peer);
+    const session = await createSubscribedSession(peer);
     const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
 
     const interrupted = await runInDurableObject(stub, async (_instance, ctx) => {
@@ -311,7 +315,7 @@ it("sends ACP cancellation when disposing an active session", async () => {
   const peer = await connectPeer(hostId);
 
   try {
-    const session = await createSession(peer);
+    const session = await createSubscribedSession(peer);
     start(peer, session.chat, "hold");
     await vi.waitFor(() => {
       expect(peer.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
@@ -377,20 +381,11 @@ it.each([true, false])("notifies early subscribers when creation succeeds=%s", a
 it("holds root notifications for a client whose initial snapshots are still loading", async () => {
   const hostId = crypto.randomUUID();
   const creator = await connectPeer(hostId);
-  const session = await createSession(creator);
+  const session = await createSubscribedSession(creator);
   const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
-  await stub.holdSnapshots();
+  await stub.holdSubscribes();
 
-  const response = await worker.fetch(
-    new Request(`https://host/hosts/${hostId}/ahp`, { headers: { Upgrade: "websocket" } }),
-    env,
-  );
-
-  if (!response.webSocket) {
-    throw new Error("Host did not accept the WebSocket upgrade");
-  }
-
-  const observer = new Peer(response.webSocket);
+  const observer = await openPeer(hostId);
 
   try {
     const initialized = observer.request("initialize", {
@@ -401,13 +396,13 @@ it("holds root notifications for a client whose initial snapshots are still load
     });
 
     await vi.waitFor(async () => {
-      expect(await stub.heldSnapshotCount()).toBe(1);
+      expect(await stub.heldSubscribeCount()).toBe(1);
     });
 
     const added = `ahp-session:/${crypto.randomUUID()}`;
     await creator.request("createSession", { channel: added, provider: "test" });
     expect(observer.notifications).toEqual([]);
-    await stub.releaseSnapshots();
+    await stub.releaseSubscribes();
     await initialized;
 
     await vi.waitFor(() => {
@@ -429,21 +424,7 @@ it("holds root notifications for a client whose initial snapshots are still load
 });
 
 it("refuses an unsupported protocol version and closes the connection", async () => {
-  const upgrade = new Request(`https://host/hosts/${crypto.randomUUID()}/ahp`, {
-    headers: { Upgrade: "websocket" },
-  });
-
-  const response = await worker.fetch(upgrade, env);
-
-  if (!response.webSocket) {
-    throw new Error("Host did not accept the WebSocket upgrade");
-  }
-
-  const closed = Promise.withResolvers<number>();
-  response.webSocket.addEventListener("close", (event) => {
-    closed.resolve(event.code);
-  });
-  const peer = new Peer(response.webSocket);
+  const peer = await openPeer(crypto.randomUUID());
 
   const initialized = peer.request("initialize", {
     channel: "ahp-root://",
@@ -452,5 +433,5 @@ it("refuses an unsupported protocol version and closes the connection", async ()
   });
 
   await expect(initialized).rejects.toThrow("Unsupported protocol version");
-  expect(await closed.promise).toBe(NORMAL_CLOSURE);
+  expect(await peer.closed).toBe(CloseCode.Normal);
 });

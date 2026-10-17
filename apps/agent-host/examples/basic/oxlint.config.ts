@@ -4,13 +4,11 @@ import { defineConfig } from "oxlint";
 export default defineConfig({
   extends: [base],
   ignorePatterns: ["worker-configuration.d.ts"],
-  rules: {
-    "eslint/no-magic-numbers": [
-      "error",
-      {
-        ignore: [0, 1],
-        ignoreArrayIndexes: true,
-      },
-    ],
-  },
+  overrides: [
+    {
+      // The example co-locates the three Durable Objects in one file.
+      files: ["src/durable-objects.ts"],
+      rules: { "eslint/max-classes-per-file": "off" },
+    },
+  ],
 });

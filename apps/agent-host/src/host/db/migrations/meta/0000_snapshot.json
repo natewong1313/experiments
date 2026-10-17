@@ -1,11 +1,11 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b9b119e3-7d69-45d8-b8b2-4291d0b3dffa",
+  "id": "5b60158b-f9cd-4d27-957a-cbc127092347",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "host": {
-      "name": "host",
+    "root": {
+      "name": "root",
       "columns": {
         "id": {
           "name": "id",
@@ -14,8 +14,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "server_seq": {
-          "name": "server_seq",
+        "revision": {
+          "name": "revision",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -27,9 +27,9 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "host_singleton": {
-          "name": "host_singleton",
-          "value": "\"host\".\"id\" = 1"
+        "root_singleton": {
+          "name": "root_singleton",
+          "value": "\"root\".\"id\" = 1"
         }
       }
     },
@@ -43,8 +43,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "default_chat_id": {
-          "name": "default_chat_id",
+        "default_chat": {
+          "name": "default_chat",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -56,17 +56,81 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "subscriber_channels": {
+      "name": "subscriber_channels",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "router": {
+          "name": "router",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "sessions_defaultChatId_unique": {
-          "name": "sessions_defaultChatId_unique",
+        "subscriber_channels_router_channel": {
+          "name": "subscriber_channels_router_channel",
           "columns": [
-            "default_chat_id"
+            "router",
+            "channel"
           ],
           "isUnique": true
         }
       },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "subscriber_routers": {
+      "name": "subscriber_routers",
+      "columns": {
+        "router": {
+          "name": "router",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delivered_revision": {
+          "name": "delivered_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

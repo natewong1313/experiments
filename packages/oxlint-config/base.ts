@@ -126,7 +126,7 @@ export default defineConfig({
     "eslint/no-implicit-coercion": "error",
     "eslint/no-inline-comments": "error",
     "eslint/no-loop-func": "error",
-    "eslint/no-magic-numbers": "error",
+    "eslint/no-magic-numbers": ["error", { ignore: [0, 1], ignoreArrayIndexes: true }],
     "eslint/no-negated-condition": "error",
     "eslint/no-new-func": "error",
     "eslint/no-param-reassign": "error",

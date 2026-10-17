@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 import { ActionEnvelopeSchema } from "@experiments/protocol-schemas/ahp";
 import type { DispatchActionParams, JsonValue } from "@experiments/protocol-schemas/ahp";
@@ -93,4 +94,11 @@ it("sends service rejections only to the sender with increasing sequences", asyn
   expect(second.rejectionReason).toBe("Actions must target a chat channel");
   await observer.request("ping", { channel: "ahp-root://" });
   expect(observer.actions).toEqual([]);
+});
+
+it("refuses a router that was not addressed by name", async () => {
+  const stub = env.CONNECTIONS.get(env.CONNECTIONS.newUniqueId());
+  const upgrade = new Request("https://host/", { headers: { Upgrade: "websocket" } });
+
+  await expect(stub.fetch(upgrade)).rejects.toThrow("ConnectionRouter must be addressed by name");
 });

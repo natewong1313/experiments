@@ -8,6 +8,7 @@ import type {
   ChatState as AHPChatState,
   SessionState as AHPSessionState,
 } from "@microsoft/agent-host-protocol";
+import { CodedRpcError } from "./errors";
 
 export type SessionCreateRequest = {
   hostId: string;
@@ -18,13 +19,6 @@ export type SessionCreateRequest = {
   workingDirectory?: string;
 };
 
-export class SessionCreateError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SessionCreateError";
-  }
-}
-
 /** The client actions a session accepts through `dispatch`. */
 export const SessionDispatchActionSchema = z.discriminatedUnion("type", [
   AHPChatTurnStartedActionSchema,
@@ -32,46 +26,56 @@ export const SessionDispatchActionSchema = z.discriminatedUnion("type", [
 ]);
 
 export type SessionDispatchRequest = {
+  channel: string;
   action: z.output<typeof SessionDispatchActionSchema>;
   origin: AHPActionOrigin;
 };
 
-export class SessionDispatchError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SessionDispatchError";
-  }
-}
+export type SessionSubscribeRequest = { router: string; channel: string };
 
-export type SessionSnapshotRequest = { channel: string };
-
-export type SessionSnapshotResponse = {
+export type SessionSubscribeResponse = {
   revision: number;
   state: AHPSessionState | AHPChatState;
 };
 
-export class SessionSnapshotError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SessionSnapshotError";
+export type SessionUnsubscribeRequest = { router: string; channels: string[] };
+
+export class SessionCreateError extends CodedRpcError {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
+  constructor(cause: unknown) {
+    super(cause);
+    this.name = "SessionCreateError";
   }
 }
 
-export class SessionDisposeError extends Error {
-  constructor(message: string) {
-    super(message);
+export class SessionDispatchError extends CodedRpcError {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
+  constructor(cause: unknown) {
+    super(cause);
+    this.name = "SessionDispatchError";
+  }
+}
+
+export class SessionSubscribeError extends CodedRpcError {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
+  constructor(cause: unknown) {
+    super(cause);
+    this.name = "SessionSubscribeError";
+  }
+}
+
+export class SessionDisposeError extends CodedRpcError {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
+  constructor(cause: unknown) {
+    super(cause);
     this.name = "SessionDisposeError";
   }
 }
 
-export interface SessionRPC {
-  /** Retries retained host updates after a delivery failure is repaired. */
-  retryHostUpdates(): Promise<void>;
-
+export interface SessionRPC extends Rpc.DurableObjectBranded {
   /**
    * Creates persisted session state and opens its ACP connection.
-   * Resolves after storing the session-ready update for delivery to the host.
-   * Failed setup removes the newly created session state.
+   * Resolves after the session is ready. Failed setup removes the session state.
    *
    * @throws {SessionCreateError} If the session exists or setup fails.
    */
@@ -79,30 +83,31 @@ export interface SessionRPC {
 
   /**
    * Accepts a text turn or cancels the matching active turn.
-   * Starting a turn resolves after persistence and scheduling, before agent completion.
-   * Cancellation resolves after saving its host update and sending ACP cancellation.
-   * Publishes agent failures after acceptance as chat error actions.
+   * A turn start resolves after the session stores the turn, before the agent completes it.
+   * Subscribers receive accepted actions as pushes. Agent failures after acceptance arrive as
+   * chat error actions.
    *
    * @throws {SessionDispatchError} If the action is invalid, rejected, or cannot be applied.
    */
   dispatch(req: SessionDispatchRequest): Promise<void>;
 
   /**
-   * Returns the persisted state and revision for this session or its default chat.
+   * Subscribes a router to the session channel or to its default chat, and returns the state
+   * and revision of the channel. The router receives each revision after the returned one.
    *
-   * @throws {SessionSnapshotError} If the session is absent, the channel does not belong to it,
-   * or reading the persisted state fails.
+   * @throws {SessionSubscribeError} If the session is absent or the channel does not belong
+   * to it.
    */
-  snapshot(req: SessionSnapshotRequest): Promise<SessionSnapshotResponse>;
+  subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse>;
+
+  /** Removes subscriptions of a router. Succeeds if the session or subscription is absent. */
+  unsubscribe(req: SessionUnsubscribeRequest): Promise<void>;
 
   /**
-   * Stops the ACP connection and removes the session's persisted history.
+   * Stops the ACP connection, tells subscribed routers, and removes all session storage.
    * Calling this on an absent session succeeds.
-   * Cleanup still runs if ACP cancellation fails.
    *
    * @throws {SessionDisposeError} If cancellation or cleanup fails.
    */
   dispose(): Promise<void>;
 }
-
-export type SessionNamespace = DurableObjectNamespace<SessionRPC & Rpc.DurableObjectBranded>;

@@ -1,20 +1,41 @@
 import { Workspace } from "@cloudflare/computer";
 import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
 import { createGitClient } from "@cloudflare/computer/git";
-import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 import { Harness, createRegistry } from "@earendil-works/pi-durable";
 import { Lifecycle } from "agents/lifecycle";
 import { PiHarness } from "agents/harnesses/pi";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
-import { connectAcp } from "@experiments/pi-acp";
 
-import { AgentSession as BaseAgentSession } from "@experiments/agent-host";
+import {
+  AgentHost as BaseAgentHost,
+  AgentSession as BaseAgentSession,
+  ConnectionRouter as BaseConnectionRouter,
+} from "@experiments/agent-host";
+import type { AgentInfo } from "@experiments/agent-host";
+import { connectAcp } from "@experiments/pi-acp";
 import { websocketStream } from "@experiments/agent-host/helpers";
-import type { AgentHost } from "./agent-host";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 
-export class AgentSession extends BaseAgentSession<Env> {
+import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
+
+export class ConnectionRouter extends BaseConnectionRouter<Env, AgentHost, AgentSession> {
+  host = this.env.AGENT_HOST;
+  session = this.env.AGENT_SESSION;
+}
+
+export class AgentHost extends BaseAgentHost<Env, ConnectionRouter, AgentSession> {
+  router = this.env.AGENT_ROUTER;
+  session = this.env.AGENT_SESSION;
+  getAgentInfo(): AgentInfo {
+    return { provider: "pi", displayName: "Pi", description: "Pi coding agent", models: [] };
+  }
+}
+
+export class AgentSession extends BaseAgentSession<Env, ConnectionRouter, AgentHost> {
+  router = this.env.AGENT_ROUTER;
+  host = this.env.AGENT_HOST;
+
   workspace = new Workspace({
     storage: workspaceStorage(this.ctx.storage),
     git: createGitClient(),
@@ -65,10 +86,6 @@ export class AgentSession extends BaseAgentSession<Env> {
     },
   });
   lifecycle = Lifecycle.install(this).use(this.harness);
-
-  protected getHostNamespace(): DurableObjectNamespace<AgentHost> {
-    return this.env.AGENT_HOST;
-  }
 
   protected getWorkingDirectory(): string {
     return this.env.WORKSPACE_DIR;

@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1791896788370,
-      "tag": "0000_common_champions",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1791984489988,
-      "tag": "0001_session_cwd",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1792035073612,
-      "tag": "0002_mighty_adam_destine",
+      "when": 1792195115509,
+      "tag": "0000_session",
       "breakpoints": true
     }
   ]

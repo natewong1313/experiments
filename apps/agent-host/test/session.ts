@@ -10,22 +10,22 @@ import type {
   PromptResponse as ACPPromptResponse,
   Stream as ACPStream,
 } from "@agentclientprotocol/sdk";
-import type { SessionSnapshotRequest, SessionSnapshotResponse } from "../src";
-import type { TestEnv } from "./worker";
 import type { AgentHost } from "./host";
+import type { ConnectionRouter } from "./router";
+import type { SessionSubscribeRequest, SessionSubscribeResponse } from "../src/shared/rpc/session";
+import type { TestEnv } from "./worker";
 
 const INTERNAL_ERROR = -32_603;
 
-export class AgentSession extends BaseSession<TestEnv> {
+export class AgentSession extends BaseSession<TestEnv, ConnectionRouter, AgentHost> {
   private cancellations = 0;
   private setup?: ReturnType<typeof Promise.withResolvers<boolean>>;
   private pending?: ReturnType<typeof Promise.withResolvers<ACPPromptResponse>>;
-  private snapshotGate?: ReturnType<typeof Promise.withResolvers<null>>;
-  private heldSnapshots = 0;
+  private subscribeGate?: ReturnType<typeof Promise.withResolvers<null>>;
+  private heldSubscribes = 0;
 
-  protected getHostNamespace(): DurableObjectNamespace<AgentHost> {
-    return this.env.COORDINATORS;
-  }
+  router = this.env.CONNECTIONS;
+  host = this.env.COORDINATORS;
 
   protected async connectAgent(): Promise<ACPStream> {
     const requests: TransformStream<ACPAnyMessage, ACPAnyMessage> = new TransformStream();
@@ -78,26 +78,26 @@ export class AgentSession extends BaseSession<TestEnv> {
     return { readable: responses.readable, writable: requests.writable };
   }
 
-  async snapshot(req: SessionSnapshotRequest): Promise<SessionSnapshotResponse> {
-    if (this.snapshotGate) {
-      this.heldSnapshots += 1;
-      await this.snapshotGate.promise;
+  async subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse> {
+    if (this.subscribeGate) {
+      this.heldSubscribes += 1;
+      await this.subscribeGate.promise;
     }
 
-    return await super.snapshot(req);
+    return await super.subscribe(req);
   }
 
-  holdSnapshots(): void {
-    this.snapshotGate = Promise.withResolvers<null>();
+  holdSubscribes(): void {
+    this.subscribeGate = Promise.withResolvers<null>();
   }
 
-  heldSnapshotCount(): number {
-    return this.heldSnapshots;
+  heldSubscribeCount(): number {
+    return this.heldSubscribes;
   }
 
-  releaseSnapshots(): void {
-    this.snapshotGate?.resolve(null);
-    this.snapshotGate = undefined;
+  releaseSubscribes(): void {
+    this.subscribeGate?.resolve(null);
+    this.subscribeGate = undefined;
   }
 
   holdInitialization(): void {
@@ -110,21 +110,6 @@ export class AgentSession extends BaseSession<TestEnv> {
 
   cancellationCount(): number {
     return this.cancellations;
-  }
-
-  failDeliveryScheduling(): void {
-    const setAlarm = this.db.setAlarm.bind(this.db);
-    let saved = false;
-
-    this.db.setAlarm = async (time): Promise<void> => {
-      if (saved) {
-        this.db.setAlarm = setAlarm;
-        throw new Error("Delivery scheduling failed");
-      }
-
-      saved = true;
-      await setAlarm(time);
-    };
   }
 
   finishPrompt(): void {
