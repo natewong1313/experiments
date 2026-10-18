@@ -17,7 +17,7 @@ export class SessionDatabase implements DurableObjectDatabase<typeof schema> {
   }
 
   /** Returns true if the session table exists. Reads without writing. */
-  hasTables(): boolean {
+  hasMigrated(): boolean {
     const tables = this.orm.all(
       sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`,
     );

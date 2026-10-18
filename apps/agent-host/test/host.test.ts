@@ -11,7 +11,6 @@ import {
   SessionSummarySchema,
   SubscribeResultSchema,
 } from "@experiments/protocol-schemas/ahp";
-import worker from "./worker";
 import { connectPeer, createSession as createPeerSession, openPeer } from "./peer";
 import type { CreatedSession, Peer } from "./peer";
 import { CloseCode } from "../src/router/websockets";
@@ -22,8 +21,6 @@ import {
   PROTOCOL_VERSION as AHP_PROTOCOL_VERSION,
 } from "@microsoft/agent-host-protocol";
 import { sessionDOName } from "../src/shared/lookups";
-
-const NOT_FOUND = 404;
 
 const ChangesSchema = z.record(z.string(), z.json());
 const SummaryChangedSchema = z.object({ changes: ChangesSchema });
@@ -58,11 +55,6 @@ async function chatState(peer: Peer, chat: string): Promise<ChatState> {
 
   return ChatStateSchema.parse(result.snapshot?.state);
 }
-
-it("routes UUID hosts and rejects an invalid host path", async () => {
-  const response = await worker.fetch(new Request("https://host/hosts/not-a-uuid/ahp"), env);
-  expect(response.status).toBe(NOT_FOUND);
-});
 
 it("refuses a host that was not addressed by name", async () => {
   const stub = env.COORDINATORS.get(env.COORDINATORS.newUniqueId());

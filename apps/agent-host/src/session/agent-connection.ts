@@ -21,7 +21,7 @@ type OpenOptions = {
 
 type TextHandler = (text: string) => Promise<void>;
 
-type AgentSession = {
+type ConnectedSession = {
   connection: ACPClientConnection;
   sessionId: string;
   /**
@@ -35,20 +35,20 @@ type AgentSession = {
  * The caller must run one prompt at a time.
  */
 export class AgentConnection {
-  private current?: AgentSession;
-  private opening?: Promise<AgentSession>;
+  private current?: ConnectedSession;
+  private opening?: Promise<ConnectedSession>;
   private closing = new AbortController();
 
   /**
-   * Returns the live session ID or opens a connection and creates or loads an ACP session.
+   * Returns the connected session ID or opens a connection and creates or loads an ACP session.
    * Concurrent calls share the pending connection attempt and its options.
    * If close is called during the attempt, the pending calls fail.
    */
   async open(options: OpenOptions): Promise<string> {
-    const live = this.live();
+    const session = this.connected();
 
-    if (live) {
-      return live.sessionId;
+    if (session) {
+      return session.sessionId;
     }
 
     const { signal } = this.closing;
@@ -71,37 +71,37 @@ export class AgentConnection {
    * Sends a text prompt and forwards its text updates until the request settles.
    * The caller must wait for this request to settle before starting another prompt.
    *
-   * @throws {Error} If no live connection is available.
+   * @throws {Error} If no connection is available.
    */
   async prompt(text: string, onText: TextHandler): Promise<ACPPromptResponse> {
-    const live = this.live();
+    const session = this.connected();
 
-    if (!live) {
+    if (!session) {
       throw new Error("Agent is not connected");
     }
 
-    live.onText = onText;
+    session.onText = onText;
 
     try {
-      return await live.connection.agent.request(acpMethods.agent.session.prompt, {
-        sessionId: live.sessionId,
+      return await session.connection.agent.request(acpMethods.agent.session.prompt, {
+        sessionId: session.sessionId,
         prompt: [{ type: "text", text }],
       });
     } finally {
-      live.onText = undefined;
+      session.onText = undefined;
     }
   }
 
   /**
-   * Sends a cancellation notification if a live connection exists.
+   * Sends a cancellation notification if a connection exists.
    * This method does not wait for the active prompt to finish.
    */
   async cancel(): Promise<void> {
-    const live = this.live();
+    const session = this.connected();
 
-    if (live) {
-      await live.connection.agent.notify(acpMethods.agent.session.cancel, {
-        sessionId: live.sessionId,
+    if (session) {
+      await session.connection.agent.notify(acpMethods.agent.session.cancel, {
+        sessionId: session.sessionId,
       });
     }
   }
@@ -120,7 +120,7 @@ export class AgentConnection {
   /**
    * Excludes connections whose abort signal indicates that they have closed.
    */
-  private live(): AgentSession | undefined {
+  private connected(): ConnectedSession | undefined {
     return this.current && !this.current.connection.signal.aborted ? this.current : undefined;
   }
 
@@ -128,9 +128,9 @@ export class AgentConnection {
    * Opens the stream and initializes the ACP session before making the connection available to callers.
    * Initialization failure or cancellation closes the connection.
    */
-  private async connect(options: OpenOptions, signal: AbortSignal): Promise<AgentSession> {
+  private async connect(options: OpenOptions, signal: AbortSignal): Promise<ConnectedSession> {
     const stream = await options.stream();
-    let opened: AgentSession | undefined;
+    let opened: ConnectedSession | undefined;
 
     const connection = acpClient({ name: "agent-host" })
       .onNotification(acpMethods.client.session.update, async ({ params }) => {
@@ -199,7 +199,7 @@ export class AgentConnection {
    * Updates received before initialization or outside a prompt are ignored.
    */
   private async receive(
-    session: AgentSession | undefined,
+    session: ConnectedSession | undefined,
     notification: ACPSessionNotification,
   ): Promise<void> {
     const { update } = notification;

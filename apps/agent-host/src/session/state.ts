@@ -61,7 +61,7 @@ export function buildSession(options: SessionCreateRequest, cwd: string): Sessio
   };
 }
 
-// The catalogue summary follows the default chat's status and modification time.
+// The catalog summary follows the default chat's status and modification time.
 export function sessionSummary(record: SessionRecord): AHPSessionSummary {
   return {
     resource: sessionUri(record.id),

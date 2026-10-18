@@ -63,7 +63,7 @@ export async function readState(
 ): Promise<SessionSubscribeResponse | undefined> {
   return await runInDurableObject(stub, (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
-    const record = db.hasTables() ? db.orm.select().from(sessionTable).get() : undefined;
+    const record = db.hasMigrated() ? db.orm.select().from(sessionTable).get() : undefined;
 
     if (!record) {
       return;

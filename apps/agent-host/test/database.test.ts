@@ -74,9 +74,9 @@ it("commits and rolls back session writes and creates no tables before a session
 
   await runInDurableObject(stub, async (_instance, ctx) => {
     const database = new SessionDatabase(ctx.storage);
-    expect(database.hasTables()).toBe(false);
+    expect(database.hasMigrated()).toBe(false);
     await database.migrate();
-    expect(database.hasTables()).toBe(true);
+    expect(database.hasMigrated()).toBe(true);
     const { orm } = database;
     expect(orm.select().from(sessionTable).get()).toBeUndefined();
 
@@ -100,7 +100,7 @@ it("commits and rolls back session writes and creates no tables before a session
     expect(orm.select().from(sessionTable).get()).toEqual(session);
 
     await database.deleteAll();
-    expect(database.hasTables()).toBe(false);
+    expect(database.hasMigrated()).toBe(false);
   });
 });
 
