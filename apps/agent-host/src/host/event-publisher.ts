@@ -5,7 +5,7 @@ import type {
 import { RouterFanout } from "../shared/fanout";
 import type { HostDatabase } from "./db/database";
 import type { StubFor } from "../shared/stubs";
-import type { ConnectionRouterRPC, RouterPushResponse } from "../shared/rpc/router";
+import type { AgentHostConnectionRouterRPC, RouterPushResponse } from "../shared/rpc/router";
 import { ROOT_CHANNEL } from "../shared/protocol";
 
 /** One change on the root channel. */
@@ -19,7 +19,7 @@ export type RootEventWithRevision = RootEvent & { revision: number };
 
 type RouterStub = StubFor<"router">;
 
-type EventsPublisherOptions<Router extends ConnectionRouterRPC> = {
+type EventsPublisherOptions<Router extends AgentHostConnectionRouterRPC> = {
   db: HostDatabase;
   router(): DurableObjectNamespace<Router>;
   /* We flush the current revision */
@@ -29,7 +29,9 @@ type EventsPublisherOptions<Router extends ConnectionRouterRPC> = {
 /**
  * Handles sending events to any dependent AgentHostRouter connections.
  */
-export class EventsPublisher<Router extends ConnectionRouterRPC = ConnectionRouterRPC> {
+export class EventsPublisher<
+  Router extends AgentHostConnectionRouterRPC = AgentHostConnectionRouterRPC,
+> {
   private fanout: RouterFanout<RootEventWithRevision>;
 
   constructor(options: EventsPublisherOptions<Router>) {

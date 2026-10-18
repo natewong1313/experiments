@@ -28,7 +28,7 @@ import type {
   HostSummaryChangedRequest,
   HostUnsubscribeRootRequest,
 } from "../shared/rpc/host";
-import type { ConnectionRouterRPC } from "../shared/rpc/router";
+import type { AgentHostConnectionRouterRPC } from "../shared/rpc/router";
 import type { SessionRPC } from "../shared/rpc/session";
 import { chatUri, parseChannel, requireName, sessionDOName, sessionUri } from "../shared/lookups";
 import { AHPError } from "../shared/protocol";
@@ -50,11 +50,11 @@ type ValidatedCreateSession = {
 
 /**
  * Owns the session catalog and the root channel of one host.
- * Client connections reach the host through their `ConnectionRouter`.
+ * Client connections reach the host through their `AgentHostConnectionRouter`.
  */
 export abstract class AgentHost<
   Env = unknown,
-  Router extends ConnectionRouterRPC = ConnectionRouterRPC,
+  Router extends AgentHostConnectionRouterRPC = AgentHostConnectionRouterRPC,
   Session extends SessionRPC = SessionRPC,
 >
   extends DurableObject<Env>

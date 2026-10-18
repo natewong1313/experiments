@@ -6,7 +6,7 @@ interface __BaseEnv_Env {
   WORKSPACE_DIR: string;
   AGENT_HOST: DurableObjectNamespace<import("./src/index").AgentHost>;
   AGENT_SESSION: DurableObjectNamespace<import("./src/index").AgentSession>;
-  AGENT_ROUTER: DurableObjectNamespace<import("./src/index").ConnectionRouter>;
+  AGENT_ROUTER: DurableObjectNamespace<import("./src/index").AgentHostConnectionRouter>;
 }
 declare namespace Cloudflare {
   interface GlobalProps {

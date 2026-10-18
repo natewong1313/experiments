@@ -11,13 +11,13 @@ import type {
   Stream as ACPStream,
 } from "@agentclientprotocol/sdk";
 import type { AgentHost } from "./host";
-import type { ConnectionRouter } from "./router";
+import type { AgentHostConnectionRouter } from "./router";
 import type { SessionSubscribeRequest, SessionSubscribeResponse } from "../src/shared/rpc/session";
 import type { TestEnv } from "./worker";
 
 const INTERNAL_ERROR = -32_603;
 
-export class AgentSession extends BaseSession<TestEnv, ConnectionRouter, AgentHost> {
+export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter, AgentHost> {
   private cancellations = 0;
   private setup?: ReturnType<typeof Promise.withResolvers<boolean>>;
   private pending?: ReturnType<typeof Promise.withResolvers<ACPPromptResponse>>;

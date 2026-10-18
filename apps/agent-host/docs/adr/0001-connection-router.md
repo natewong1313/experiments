@@ -1,6 +1,6 @@
 # Route client connections through a per-connection router
 
-The host Durable Object owned every client WebSocket and relayed every session update, including each streamed `chat/delta`. One object therefore limited the throughput of all sessions in a host, and an eviction or out-of-memory failure of that object disconnected every client. We put a `ConnectionRouter` Durable Object in front of each WebSocket. The router sends catalogue requests to the host and session requests directly to the session. Sessions push their actions directly to the routers that subscribe to them. The host owns only the session catalogue and the root channel.
+The host Durable Object owned every client WebSocket and relayed every session update, including each streamed `chat/delta`. One object therefore limited the throughput of all sessions in a host, and an eviction or out-of-memory failure of that object disconnected every client. We put an `AgentHostConnectionRouter` Durable Object in front of each WebSocket. The router sends catalogue requests to the host and session requests directly to the session. Sessions push their actions directly to the routers that subscribe to them. The host owns only the session catalogue and the root channel.
 
 ## Decisions
 

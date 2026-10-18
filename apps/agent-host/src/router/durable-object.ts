@@ -6,7 +6,7 @@ import type {
 import { ROOT_SENDER, hostIdFromRouterName, requireName, sessionDOName } from "../shared/lookups";
 import { ROOT_CHANNEL } from "../shared/protocol";
 import type {
-  ConnectionRouterRPC,
+  AgentHostConnectionRouterRPC,
   RouterPushResponse,
   RouterRootActionsRequest,
   RouterSessionActionsRequest,
@@ -43,13 +43,13 @@ type Deliver<Item> = (socket: WebSocket, items: Item[]) => void;
  * router. The router adds the `serverSeq` of the connection and forwards the updates to the
  * client.
  */
-export abstract class ConnectionRouter<
+export abstract class AgentHostConnectionRouter<
   Env = unknown,
   Host extends HostRPC = HostRPC,
   Session extends SessionRPC = SessionRPC,
 >
   extends DurableObject<Env>
-  implements ConnectionRouterRPC
+  implements AgentHostConnectionRouterRPC
 {
   /** The host Durable Object namespace. The router sends catalogue requests to the host. */
   abstract host: DurableObjectNamespace<Host>;
@@ -312,6 +312,6 @@ export abstract class ConnectionRouter<
   }
 
   private routerName(): string {
-    return requireName(this.ctx, "ConnectionRouter");
+    return requireName(this.ctx, "AgentHostConnectionRouter");
   }
 }

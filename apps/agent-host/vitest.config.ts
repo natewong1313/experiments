@@ -27,7 +27,7 @@ export default defineConfig({
         durableObjects: {
           COORDINATORS: { className: "AgentHost", useSQLite: true },
           CONVERSATIONS: { className: "AgentSession", useSQLite: true },
-          CONNECTIONS: { className: "ConnectionRouter", useSQLite: true },
+          CONNECTIONS: { className: "AgentHostConnectionRouter", useSQLite: true },
         },
       },
     }),

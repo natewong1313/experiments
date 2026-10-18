@@ -57,7 +57,7 @@ export type RouterSessionSummaryChangedRequest = RootPosition & {
  * revisions that it already has. A router that finds a gap closes its WebSocket, because the
  * senders keep no history to fill the gap.
  */
-export interface ConnectionRouterRPC extends Rpc.DurableObjectBranded {
+export interface AgentHostConnectionRouterRPC extends Rpc.DurableObjectBranded {
   /** Forwards session and chat actions to the client. */
   sessionActions(req: RouterSessionActionsRequest): Promise<RouterPushResponse>;
 

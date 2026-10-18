@@ -100,5 +100,7 @@ it("refuses a router that was not addressed by name", async () => {
   const stub = env.CONNECTIONS.get(env.CONNECTIONS.newUniqueId());
   const upgrade = new Request("https://host/", { headers: { Upgrade: "websocket" } });
 
-  await expect(stub.fetch(upgrade)).rejects.toThrow("ConnectionRouter must be addressed by name");
+  await expect(stub.fetch(upgrade)).rejects.toThrow(
+    "AgentHostConnectionRouter must be addressed by name",
+  );
 });

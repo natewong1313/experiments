@@ -1,11 +1,11 @@
 import type { HostRPC } from "./rpc/host";
-import type { ConnectionRouterRPC } from "./rpc/router";
+import type { AgentHostConnectionRouterRPC } from "./rpc/router";
 import type { SessionRPC } from "./rpc/session";
 
 type StubContracts = {
   host: HostRPC;
   session: SessionRPC;
-  router: ConnectionRouterRPC;
+  router: AgentHostConnectionRouterRPC;
 };
 
 /** The kinds of Durable Object that the agent host classes call. */

@@ -1,6 +1,6 @@
 # Basic example
 
-This Worker exports `AgentHost`, `AgentSession`, and `ConnectionRouter` Durable Objects.
+This Worker exports `AgentHost`, `AgentSession`, and `AgentHostConnectionRouter` Durable Objects.
 Each session subclass owns a Pi harness and durable workspace. Each client connection gets
 its own router. The router sends catalogue requests to the host and session requests to the
 session. The session pushes its updates directly to the routers of its subscribers.

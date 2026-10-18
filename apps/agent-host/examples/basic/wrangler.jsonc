@@ -21,7 +21,7 @@
       },
       {
         "name": "AGENT_ROUTER",
-        "class_name": "ConnectionRouter",
+        "class_name": "AgentHostConnectionRouter",
       },
     ],
   },

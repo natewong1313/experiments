@@ -15,7 +15,7 @@ import type {
   SessionUnsubscribeRequest,
 } from "../shared/rpc/session";
 import type { HostRPC } from "../shared/rpc/host";
-import type { ConnectionRouterRPC } from "../shared/rpc/router";
+import type { AgentHostConnectionRouterRPC } from "../shared/rpc/router";
 import type { StubFor } from "../shared/stubs";
 import { requireName, sessionIdFromDOName } from "../shared/lookups";
 import { SessionDatabase } from "./db/database";
@@ -28,7 +28,7 @@ import { SessionStore } from "./service/store";
  */
 export abstract class AgentSession<
   Env = unknown,
-  Router extends ConnectionRouterRPC = ConnectionRouterRPC,
+  Router extends AgentHostConnectionRouterRPC = AgentHostConnectionRouterRPC,
   Host extends HostRPC = HostRPC,
 >
   extends DurableObject<Env>

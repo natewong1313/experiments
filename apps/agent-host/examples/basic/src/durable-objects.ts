@@ -10,7 +10,7 @@ import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 import {
   AgentHost as BaseAgentHost,
   AgentSession as BaseAgentSession,
-  ConnectionRouter as BaseConnectionRouter,
+  AgentHostConnectionRouter as BaseConnectionRouter,
 } from "@experiments/agent-host";
 import type { AgentInfo } from "@experiments/agent-host";
 import { connectAcp } from "@experiments/pi-acp";
@@ -19,12 +19,12 @@ import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 
 import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 
-export class ConnectionRouter extends BaseConnectionRouter<Env, AgentHost, AgentSession> {
+export class AgentHostConnectionRouter extends BaseConnectionRouter<Env, AgentHost, AgentSession> {
   host = this.env.AGENT_HOST;
   session = this.env.AGENT_SESSION;
 }
 
-export class AgentHost extends BaseAgentHost<Env, ConnectionRouter, AgentSession> {
+export class AgentHost extends BaseAgentHost<Env, AgentHostConnectionRouter, AgentSession> {
   router = this.env.AGENT_ROUTER;
   session = this.env.AGENT_SESSION;
   getAgentInfo(): AgentInfo {
@@ -32,7 +32,7 @@ export class AgentHost extends BaseAgentHost<Env, ConnectionRouter, AgentSession
   }
 }
 
-export class AgentSession extends BaseAgentSession<Env, ConnectionRouter, AgentHost> {
+export class AgentSession extends BaseAgentSession<Env, AgentHostConnectionRouter, AgentHost> {
   router = this.env.AGENT_ROUTER;
   host = this.env.AGENT_HOST;
 

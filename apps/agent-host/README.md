@@ -3,7 +3,7 @@
 A minimal AHP 0.9 host built from three kinds of Durable Object.
 Each session has one default chat and accepts one active text turn at a time.
 
-- A `ConnectionRouter` owns one client WebSocket. The Worker creates a new router for each
+- An `AgentHostConnectionRouter` owns one client WebSocket. The Worker creates a new router for each
   connection. The router answers `initialize` and `ping`, and counts the `serverSeq` of
   its connection.
 - The `AgentHost` owns the session catalogue and the root channel.
@@ -18,7 +18,7 @@ than `modifiedAt` changes. Closing a client socket does not cancel a turn.
 
 ```mermaid
 flowchart LR
-  Client <-->|AHP WebSocket| Router[ConnectionRouter DO]
+  Client <-->|AHP WebSocket| Router[AgentHostConnectionRouter DO]
   Router -->|catalogue and root RPC| Host[AgentHost DO]
   Router -->|subscribe and dispatch RPC| Session[AgentSession DO]
   Host -->|create and dispose RPC| Session
