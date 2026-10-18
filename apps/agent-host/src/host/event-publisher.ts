@@ -1,21 +1,8 @@
-import type {
-  RootAction as AHPRootAction,
-  SessionSummary as AHPSessionSummary,
-} from "@experiments/protocol-schemas/ahp";
 import { RouterFanout } from "../shared/fanout";
 import type { HostDatabase } from "./db/database";
 import type { StubFor } from "../shared/stubs";
-import type { AgentHostConnectionRouterRPC, RouterPushResponse } from "../shared/rpc/router";
+import type { AgentHostConnectionRouterRPC, RootUpdate } from "../shared/rpc/router";
 import { ROOT_CHANNEL } from "../shared/protocol";
-
-/** One change on the root channel. */
-export type RootEvent =
-  | { kind: "action"; action: AHPRootAction }
-  | { kind: "sessionAdded"; summary: AHPSessionSummary }
-  | { kind: "sessionRemoved"; session: string }
-  | { kind: "sessionSummaryChanged"; session: string; changes: Partial<AHPSessionSummary> };
-
-export type RootEventWithRevision = RootEvent & { revision: number };
 
 type RouterStub = StubFor<"router">;
 
@@ -32,16 +19,17 @@ type EventsPublisherOptions<Router extends AgentHostConnectionRouterRPC> = {
 export class EventsPublisher<
   Router extends AgentHostConnectionRouterRPC = AgentHostConnectionRouterRPC,
 > {
-  private fanout: RouterFanout<RootEventWithRevision>;
+  private fanout: RouterFanout<RootUpdate>;
 
   constructor(options: EventsPublisherOptions<Router>) {
-    this.fanout = new RouterFanout<RootEventWithRevision>({
+    this.fanout = new RouterFanout<RootUpdate>({
       database: options.db,
       router: (name): RouterStub => options.router().getByName(name),
       sender: {
-        send: async (stub, items): Promise<string[]> => await this.send(stub, items),
+        send: async (stub, updates, channels): Promise<string[]> =>
+          await this.send(stub, updates, channels),
         gap: async (stub, revision): Promise<string[]> => {
-          const result = await stub.rootActions({ after: revision, revision, actions: [] });
+          const result = await stub.rootUpdate({ after: revision, updates: [] });
 
           return result.subscribed;
         },
@@ -58,7 +46,7 @@ export class EventsPublisher<
     this.fanout.unsubscribe(router, [ROOT_CHANNEL]);
   }
 
-  async publish(items: RootEventWithRevision[]): Promise<void> {
+  async publish(items: RootUpdate[]): Promise<void> {
     await this.fanout.publish(items);
   }
 
@@ -70,49 +58,20 @@ export class EventsPublisher<
     await this.fanout.flush(revision);
   }
 
-  private async send(stub: RouterStub, items: RootEventWithRevision[]): Promise<string[]> {
-    let subscribed: string[] = [];
-
-    for (const item of items) {
-      // The host sends root changes to a router one at a time, in revision order.
-      // oxlint-disable-next-line eslint/no-await-in-loop
-      const result = await this.sendItem(stub, item);
-      ({ subscribed } = result);
-
-      if (subscribed.length === 0) {
-        break;
-      }
-    }
-
-    return subscribed;
-  }
-
-  private async sendItem(
+  /** Sends consecutive root revisions to a router in one push. */
+  private async send(
     stub: RouterStub,
-    item: RootEventWithRevision,
-  ): Promise<RouterPushResponse> {
-    const position = { after: item.revision - 1, revision: item.revision };
+    updates: RootUpdate[],
+    channels: ReadonlySet<string>,
+  ): Promise<string[]> {
+    const [first] = updates;
 
-    switch (item.kind) {
-      case "action": {
-        return await stub.rootActions({ ...position, actions: [item.action] });
-      }
-
-      case "sessionAdded": {
-        return await stub.sessionAdded({ ...position, summary: item.summary });
-      }
-
-      case "sessionRemoved": {
-        return await stub.sessionRemoved({ ...position, session: item.session });
-      }
-
-      case "sessionSummaryChanged": {
-        return await stub.sessionSummaryChanged({
-          ...position,
-          session: item.session,
-          changes: item.changes,
-        });
-      }
+    if (first === undefined) {
+      return [...channels];
     }
+
+    const result = await stub.rootUpdate({ after: first.revision - 1, updates });
+
+    return result.subscribed;
   }
 }

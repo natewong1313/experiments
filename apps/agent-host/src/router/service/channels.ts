@@ -17,34 +17,25 @@ type Receipt<Item> =
  * Stores the subscriptions of one client connection and the last revision that the router
  * received from each sender. It also allocates the `serverSeq` of the connection.
  *
- * Storage exists only while the connection is open. A router without storage answers pushes
- * as unsubscribed and writes nothing.
+ * Storage exists only while the connection is open. `RouterConnection` decides whether the
+ * connection is open.
  */
 export class RouterChannels {
   private db: RouterDatabase;
-  private opened = false;
   private seq?: number;
 
   constructor(db: RouterDatabase) {
     this.db = db;
   }
 
-  /** Opens existing storage after a restart. Writes nothing if the router has no storage. */
-  async load(): Promise<void> {
-    if (this.db.hasTables()) {
-      await this.open();
-    }
+  /** Returns true if the router has storage. */
+  exists(): boolean {
+    return this.db.hasTables();
   }
 
-  /** Creates or migrates the storage for a new connection. */
+  /** Creates or migrates the storage for a connection. */
   async open(): Promise<void> {
     await this.db.migrate();
-    this.opened = true;
-  }
-
-  /** Returns true while the router has storage for an open connection. */
-  isOpen(): boolean {
-    return this.opened;
   }
 
   /** Returns the last `serverSeq` sent to the client, or 0 before the first. */
@@ -214,7 +205,6 @@ export class RouterChannels {
 
   /** Deletes all storage of the router. */
   async clear(): Promise<void> {
-    this.opened = false;
     this.seq = undefined;
     await this.db.deleteAll();
   }

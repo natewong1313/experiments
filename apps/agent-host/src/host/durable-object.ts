@@ -28,7 +28,7 @@ import type {
   HostSummaryChangedRequest,
   HostUnsubscribeRootRequest,
 } from "../shared/rpc/host";
-import type { AgentHostConnectionRouterRPC } from "../shared/rpc/router";
+import type { AgentHostConnectionRouterRPC, RootEvent, RootUpdate } from "../shared/rpc/router";
 import type { SessionRPC } from "../shared/rpc/session";
 import { chatUri, parseChannel, requireName, sessionDOName, sessionUri } from "../shared/lookups";
 import { AHPError } from "../shared/protocol";
@@ -36,7 +36,7 @@ import { callDoRpc } from "../shared/do-rpc";
 import { HostDatabase } from "./db/database";
 import { rootTable, type SessionEntry, sessionsTable } from "./db/schema";
 import { count, eq } from "drizzle-orm";
-import { EventsPublisher, type RootEvent, type RootEventWithRevision } from "./event-publisher";
+import { EventsPublisher } from "./event-publisher";
 
 // The getAgentInfo method makes callers return this, so we export the type
 export type { AgentInfo } from "@microsoft/agent-host-protocol";
@@ -308,7 +308,7 @@ export abstract class AgentHost<
    * Given new events, update root's current revision based on # of events.
    * Then, update each event's revision and return the mutated array.
    */
-  private updateRevision(events: RootEvent[]): RootEventWithRevision[] {
+  private updateRevision(events: RootEvent[]): RootUpdate[] {
     const first = this.getRevision() + 1;
     const newRevision = first + events.length - 1;
 

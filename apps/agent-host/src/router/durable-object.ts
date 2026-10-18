@@ -1,19 +1,14 @@
 import { DurableObject } from "cloudflare:workers";
-import type {
-  JsonRpcMessage,
-  RootAction as AHPRootAction,
-} from "@experiments/protocol-schemas/ahp";
+import type { JsonRpcMessage } from "@experiments/protocol-schemas/ahp";
 import { ROOT_SENDER, hostIdFromRouterName, requireName, sessionDOName } from "../shared/lookups";
 import { ROOT_CHANNEL } from "../shared/protocol";
 import type {
   AgentHostConnectionRouterRPC,
+  RootEvent,
   RouterPushResponse,
-  RouterRootActionsRequest,
+  RouterRootUpdateRequest,
   RouterSessionActionsRequest,
-  RouterSessionAddedRequest,
   RouterSessionDisposedRequest,
-  RouterSessionRemovedRequest,
-  RouterSessionSummaryChangedRequest,
   SessionEnvelope,
 } from "../shared/rpc/router";
 import type { HostRPC } from "../shared/rpc/host";
@@ -22,15 +17,16 @@ import type { StubFor } from "../shared/stubs";
 import { RouterDatabase } from "./db/database";
 import { RouterChannels } from "./service/channels";
 import type { SenderRevision } from "./service/channels";
-import { SenderGate } from "./service/gate";
+import { RouterConnection } from "./service/connection";
 import { ClientRequests } from "./service/requests";
 import { Senders } from "./service/senders";
 import { CloseCode, send } from "./websockets";
 
-/** An item of a root revision. It is a root action or a notification without a `serverSeq`. */
-type RootItem =
-  | { channel: string; action: AHPRootAction }
-  | { channel: string; message: JsonRpcMessage };
+/** A root event as an item of its root revision. */
+type RootItem = { channel: string; event: RootEvent };
+
+/** A root event that the router sends without a `serverSeq`. */
+type RootNotification = Exclude<RootEvent, { kind: "action" }>;
 
 /** Sends the accepted items of a push to the client. */
 type Deliver<Item> = (socket: WebSocket, items: Item[]) => void;
@@ -59,7 +55,6 @@ export abstract class AgentHostConnectionRouter<
 
   private db = new RouterDatabase(this.ctx.storage);
   private channels = new RouterChannels(this.db);
-  private gate = new SenderGate();
 
   /** Builds the stubs that the senders and the client requests use for the host and the sessions. */
   private stubs = {
@@ -74,15 +69,22 @@ export abstract class AgentHostConnectionRouter<
 
   private requests = new ClientRequests({
     channels: this.channels,
-    gate: this.gate,
     senders: this.senders,
     ...this.stubs,
+  });
+
+  private connection = new RouterConnection({
+    channels: this.channels,
+    senders: this.senders,
+    handleFrame: async (socket, raw, frame): Promise<void> => {
+      await this.requests.handleFrame(socket, raw, frame);
+    },
   });
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(async () => {
-      await this.channels.load();
+      await this.connection.load();
     });
   }
 
@@ -99,7 +101,7 @@ export abstract class AgentHostConnectionRouter<
       return new Response("Router already has a connection", { status: 409 });
     }
 
-    await this.channels.open();
+    await this.connection.open();
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({});
@@ -109,21 +111,19 @@ export abstract class AgentHostConnectionRouter<
 
   /** Handles JSON-RPC messages from the client. Ignores frames after a disconnect. */
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    if (this.channels.isOpen()) {
-      await this.requests.handleMessage(socket, message);
-    }
+    await this.connection.handleMessage(socket, message);
   }
 
   /** Completes the close handshake, then removes the subscriptions of the connection. */
   async webSocketClose(socket: WebSocket): Promise<void> {
     socket.close(CloseCode.Normal, "Connection closed");
-    await this.disconnect();
+    await this.connection.close();
   }
 
   /** Closes the socket after a connection error, then removes its subscriptions. */
   async webSocketError(socket: WebSocket): Promise<void> {
     socket.close(CloseCode.InternalError, "Connection error");
-    await this.disconnect();
+    await this.connection.close();
   }
 
   async sessionActions(req: RouterSessionActionsRequest): Promise<RouterPushResponse> {
@@ -135,74 +135,19 @@ export abstract class AgentHostConnectionRouter<
   }
 
   async sessionDisposed(req: RouterSessionDisposedRequest): Promise<void> {
-    await this.gate.settled(req.sessionId);
-
-    if (this.channels.isOpen()) {
+    if (await this.connection.admitPush(req.sessionId)) {
       this.channels.removeSender(req.sessionId);
     }
   }
 
-  async rootActions(req: RouterRootActionsRequest): Promise<RouterPushResponse> {
-    const items = req.actions.map((action) => ({ channel: ROOT_CHANNEL, action }));
+  async rootUpdate(req: RouterRootUpdateRequest): Promise<RouterPushResponse> {
+    const revisions = req.updates.map((update) => ({
+      revision: update.revision,
+      items: [{ channel: ROOT_CHANNEL, event: update }],
+    }));
 
-    return await this.receiveRoot(req.after, { revision: req.revision, items });
-  }
-
-  async sessionAdded(req: RouterSessionAddedRequest): Promise<RouterPushResponse> {
-    const params = { channel: ROOT_CHANNEL, summary: req.summary };
-    const message: JsonRpcMessage = { jsonrpc: "2.0", method: "root/sessionAdded", params };
-
-    return await this.receiveRoot(req.after, {
-      revision: req.revision,
-      items: [{ channel: ROOT_CHANNEL, message }],
-    });
-  }
-
-  async sessionRemoved(req: RouterSessionRemovedRequest): Promise<RouterPushResponse> {
-    const params = { channel: ROOT_CHANNEL, session: req.session };
-    const message: JsonRpcMessage = { jsonrpc: "2.0", method: "root/sessionRemoved", params };
-
-    return await this.receiveRoot(req.after, {
-      revision: req.revision,
-      items: [{ channel: ROOT_CHANNEL, message }],
-    });
-  }
-
-  async sessionSummaryChanged(
-    req: RouterSessionSummaryChangedRequest,
-  ): Promise<RouterPushResponse> {
-    const params = { channel: ROOT_CHANNEL, session: req.session, changes: req.changes };
-
-    const message: JsonRpcMessage = {
-      jsonrpc: "2.0",
-      method: "root/sessionSummaryChanged",
-      params,
-    };
-
-    return await this.receiveRoot(req.after, {
-      revision: req.revision,
-      items: [{ channel: ROOT_CHANNEL, message }],
-    });
-  }
-
-  /** Applies one root revision. Root actions get a `serverSeq`; notifications do not. */
-  private async receiveRoot(
-    after: number,
-    revision: SenderRevision<RootItem>,
-  ): Promise<RouterPushResponse> {
-    return await this.receive(ROOT_SENDER, after, [revision], (socket, items) => {
-      const actions = items.flatMap((item) => ("action" in item ? [item] : []));
-      let serverSeq = this.channels.allocate(actions.length);
-
-      for (const item of items) {
-        if ("action" in item) {
-          const params = { channel: item.channel, action: item.action, serverSeq };
-          send(socket, { jsonrpc: "2.0", method: "action", params });
-          serverSeq += 1;
-        } else {
-          send(socket, item.message);
-        }
-      }
+    return await this.receive(ROOT_SENDER, req.after, revisions, (socket, items) => {
+      this.sendRootEvents(socket, items);
     });
   }
 
@@ -216,7 +161,10 @@ export abstract class AgentHostConnectionRouter<
     revisions: SenderRevision<Item>[],
     deliver: Deliver<Item>,
   ): Promise<RouterPushResponse> {
-    await this.gate.settled(sender);
+    if (!(await this.connection.admitPush(sender))) {
+      return { subscribed: [] };
+    }
+
     const socket = await this.connectedSocket();
 
     if (!socket) {
@@ -244,6 +192,25 @@ export abstract class AgentHostConnectionRouter<
     }
   }
 
+  /** Sends root actions with consecutive `serverSeq` values, and root notifications without. */
+  private sendRootEvents(socket: WebSocket, items: RootItem[]): void {
+    const actions = items.filter((item) => item.event.kind === "action").length;
+    let serverSeq = this.channels.allocate(actions);
+
+    for (const { channel, event } of items) {
+      if (event.kind === "action") {
+        send(socket, {
+          jsonrpc: "2.0",
+          method: "action",
+          params: { channel, action: event.action, serverSeq },
+        });
+        serverSeq += 1;
+      } else {
+        send(socket, rootNotification(channel, event));
+      }
+    }
+  }
+
   /** Sends session and chat actions with consecutive `serverSeq` values. */
   private sendActions(socket: WebSocket, envelopes: SessionEnvelope[]): void {
     const firstSeq = this.channels.allocate(envelopes.length);
@@ -255,18 +222,14 @@ export abstract class AgentHostConnectionRouter<
   }
 
   /**
-   * Returns the socket of an open connection. A router without a socket removes its
-   * subscriptions and returns undefined.
+   * Returns the socket of the connection. A connection without a socket closes and returns
+   * undefined.
    */
   private async connectedSocket(): Promise<WebSocket | undefined> {
-    if (!this.channels.isOpen()) {
-      return undefined;
-    }
-
     const [socket] = this.ctx.getWebSockets();
 
     if (!socket) {
-      await this.disconnect();
+      await this.connection.close();
     }
 
     return socket;
@@ -278,26 +241,7 @@ export abstract class AgentHostConnectionRouter<
    */
   private async closeAfterGap(socket: WebSocket): Promise<void> {
     socket.close(CloseCode.InternalError, "Missed updates");
-    await this.disconnect();
-  }
-
-  /**
-   * Deletes the router storage and tells each sender to stop its pushes. The unsubscribe calls
-   * are best effort. A sender also stops after a push to this router reports no subscriptions.
-   */
-  private async disconnect(): Promise<void> {
-    if (!this.channels.isOpen()) {
-      return;
-    }
-
-    const senders = this.channels.senders();
-    await this.channels.clear();
-
-    await Promise.allSettled(
-      [...senders].map(async ([sender, channels]) => {
-        await this.senders.unsubscribe(sender, channels);
-      }),
-    );
+    await this.connection.close();
   }
 
   private sessionStub(sessionId: string): StubFor<"session"> {
@@ -313,5 +257,32 @@ export abstract class AgentHostConnectionRouter<
 
   private routerName(): string {
     return requireName(this.ctx, "AgentHostConnectionRouter");
+  }
+}
+
+/** Encodes a root event without a `serverSeq` as a JSON-RPC notification. */
+function rootNotification(channel: string, event: RootNotification): JsonRpcMessage {
+  switch (event.kind) {
+    case "sessionAdded": {
+      return {
+        jsonrpc: "2.0",
+        method: "root/sessionAdded",
+        params: { channel, summary: event.summary },
+      };
+    }
+
+    case "sessionRemoved": {
+      return {
+        jsonrpc: "2.0",
+        method: "root/sessionRemoved",
+        params: { channel, session: event.session },
+      };
+    }
+
+    case "sessionSummaryChanged": {
+      const params = { channel, session: event.session, changes: event.changes };
+
+      return { jsonrpc: "2.0", method: "root/sessionSummaryChanged", params };
+    }
   }
 }

@@ -101,8 +101,8 @@ it("answers pushes without writing storage when a router has no connection", asy
   expect(await stub.sessionActions({ sessionId, after: 0, updates: [] })).toEqual({
     subscribed: [],
   });
-  const removed = { after: 0, revision: 1, session: sessionUri(sessionId) };
-  expect(await stub.sessionRemoved(removed)).toEqual({ subscribed: [] });
+  const removed = { revision: 1, kind: "sessionRemoved", session: sessionUri(sessionId) } as const;
+  expect(await stub.rootUpdate({ after: 0, updates: [removed] })).toEqual({ subscribed: [] });
   expect(await storedTables(stub)).toEqual([]);
 });
 

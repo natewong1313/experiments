@@ -1,40 +1,27 @@
 /**
  * Holds pushes from a sender while a client frame subscribes to the channels of that sender.
- * The pushes wait until the router sends the reply to the frame. Thus the client receives
- * each snapshot before the later actions of its channel.
+ * The pushes wait until the frame releases the hold after its reply. Thus the client receives
+ * each snapshot before the later actions of its channel. Pushes from other senders do not wait.
  */
 export class SenderGate {
-  private pending: Map<string, Promise<void>> = new Map();
+  private holds: Map<string, Promise<null>> = new Map();
 
-  /** Holds pushes from the senders until `until` settles. */
-  hold(senders: string[], until: Promise<void>): void {
-    const settled = settle(until);
+  /** Holds pushes from the sender. Call the returned function to release the hold. */
+  hold(sender: string): () => void {
+    const { promise, resolve } = Promise.withResolvers<null>();
+    this.holds.set(sender, promise);
 
-    for (const sender of senders) {
-      this.pending.set(sender, settled);
-    }
-
-    void this.release(senders, settled);
-  }
-
-  /** Resolves after the holds on a sender end. */
-  async settled(sender: string): Promise<void> {
-    await this.pending.get(sender);
-  }
-
-  /** Removes the holds of the senders after `settled`, unless a later hold replaced them. */
-  private async release(senders: string[], settled: Promise<void>): Promise<void> {
-    await settled;
-
-    for (const sender of senders) {
-      if (this.pending.get(sender) === settled) {
-        this.pending.delete(sender);
+    return (): void => {
+      if (this.holds.get(sender) === promise) {
+        this.holds.delete(sender);
       }
-    }
-  }
-}
 
-/** Resolves after `promise` settles, whether it resolves or rejects. */
-async function settle(promise: Promise<void>): Promise<void> {
-  await Promise.allSettled([promise]);
+      resolve(null);
+    };
+  }
+
+  /** Resolves after the hold on a sender ends. */
+  async settled(sender: string): Promise<void> {
+    await this.holds.get(sender);
+  }
 }

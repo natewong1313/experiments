@@ -33,22 +33,21 @@ export type RouterPushResponse = { subscribed: string[] };
 
 export type RouterSessionDisposedRequest = { sessionId: string };
 
+/** One change on the root channel. Actions get a `serverSeq`; the other events do not. */
+export type RootEvent =
+  | { kind: "action"; action: AHPRootAction }
+  | { kind: "sessionAdded"; summary: AHPSessionSummary }
+  | { kind: "sessionRemoved"; session: string }
+  | { kind: "sessionSummaryChanged"; session: string; changes: Partial<AHPSessionSummary> };
+
+/** The event of one root revision. */
+export type RootUpdate = RootEvent & { revision: number };
+
 /**
- * One root revision. `after` is the revision before it. A `rootActions` request with
- * `after` equal to `revision` and no actions tells the router that the host is at `revision`.
+ * Consecutive root revisions that start after revision `after`. A request without updates
+ * tells the router that the host is at revision `after`.
  */
-export type RootPosition = { after: number; revision: number };
-
-export type RouterRootActionsRequest = RootPosition & { actions: AHPRootAction[] };
-
-export type RouterSessionAddedRequest = RootPosition & { summary: AHPSessionSummary };
-
-export type RouterSessionRemovedRequest = RootPosition & { session: string };
-
-export type RouterSessionSummaryChangedRequest = RootPosition & {
-  session: string;
-  changes: Partial<AHPSessionSummary>;
-};
+export type RouterRootUpdateRequest = { after: number; updates: RootUpdate[] };
 
 /**
  * The methods that hosts and sessions call to push updates to one client connection.
@@ -64,15 +63,6 @@ export interface AgentHostConnectionRouterRPC extends Rpc.DurableObjectBranded {
   /** Removes the subscriptions of a disposed session without a message to the client. */
   sessionDisposed(req: RouterSessionDisposedRequest): Promise<void>;
 
-  /** Forwards root actions to the client. */
-  rootActions(req: RouterRootActionsRequest): Promise<RouterPushResponse>;
-
-  /** Sends `root/sessionAdded` to the client. */
-  sessionAdded(req: RouterSessionAddedRequest): Promise<RouterPushResponse>;
-
-  /** Sends `root/sessionRemoved` to the client. */
-  sessionRemoved(req: RouterSessionRemovedRequest): Promise<RouterPushResponse>;
-
-  /** Sends `root/sessionSummaryChanged` to the client. */
-  sessionSummaryChanged(req: RouterSessionSummaryChangedRequest): Promise<RouterPushResponse>;
+  /** Forwards root actions and root notifications to the client. */
+  rootUpdate(req: RouterRootUpdateRequest): Promise<RouterPushResponse>;
 }
