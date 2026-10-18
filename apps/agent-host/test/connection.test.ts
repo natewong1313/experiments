@@ -3,39 +3,28 @@ import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { RouterDatabase } from "../src/router/db/database";
-import { RouterChannels } from "../src/router/service/channels";
-import { RouterConnection } from "../src/router/service/connection";
-import type { FrameHandler } from "../src/router/service/connection";
-import { ClientRequests } from "../src/router/service/requests";
-import { Senders } from "../src/router/service/senders";
-import type { ParsedChannel, SenderSnapshot } from "../src/router/service/senders";
-import { channelSender, newRouterDOName } from "../src/shared/lookups";
+import type { HostSubscribeRootResponse } from "../src/shared/rpc/host";
+import { newRouterDOName } from "../src/shared/lookups";
 import { ROOT_CHANNEL } from "../src/shared/protocol";
+import type { AgentHostConnectionRouter } from "./router";
 
-/** Senders that hold each subscription until the test releases it. */
-class HeldSenders extends Senders {
+/** A host that holds each root subscription until the test releases it. */
+class HeldHost {
   readonly started = Promise.withResolvers<null>();
   readonly released = Promise.withResolvers<null>();
   readonly unsubscribed: string[] = [];
+  subscriptions = 0;
 
-  constructor() {
-    super({
-      routerName: () => "router",
-      host: noHost,
-      session: noHost,
-    });
-  }
-
-  override async subscribe({ channel, parsed }: ParsedChannel): Promise<SenderSnapshot> {
+  async subscribeRoot(): Promise<HostSubscribeRootResponse> {
+    this.subscriptions += 1;
     this.started.resolve(null);
     await this.released.promise;
-    const state = { agents: [], activeSessions: 0 };
 
-    return { channel, sender: channelSender(parsed), revision: 0, state };
+    return { revision: 0, state: { agents: [], activeSessions: 0 } };
   }
 
-  override async unsubscribe(_sender: string, channels: string[]): Promise<void> {
-    this.unsubscribed.push(...channels);
+  async unsubscribeRoot(): Promise<void> {
+    this.unsubscribed.push(ROOT_CHANNEL);
     await Promise.resolve();
   }
 }
@@ -46,87 +35,76 @@ function routerStub(): ReturnType<typeof env.CONNECTIONS.getByName> {
   return env.CONNECTIONS.getByName(name);
 }
 
-function noHost(): never {
-  throw new Error("The test has no host");
+/** Replaces the host namespace of the router with one that returns `host`. */
+function useHost(router: AgentHostConnectionRouter, host: HeldHost): void {
+  Object.assign(router, { host: { getByName: (): HeldHost => host } });
 }
 
-/** Returns the server side of a new, accepted WebSocket pair. */
-function serverSocket(): WebSocket {
-  const { 1: server } = new WebSocketPair();
-  server.accept();
+/** Opens the client connection and returns the server side of its WebSocket. */
+async function connect(
+  router: AgentHostConnectionRouter,
+  ctx: DurableObjectState,
+): Promise<WebSocket> {
+  const upgrade = new Request("https://router/", { headers: { Upgrade: "websocket" } });
+  await router.fetch(upgrade);
+  const [socket] = ctx.getWebSockets();
 
-  return server;
+  if (!socket) {
+    throw new Error("The router did not accept the WebSocket");
+  }
+
+  return socket;
+}
+
+function initialize(id: string): string {
+  return JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    method: "initialize",
+    params: {
+      channel: ROOT_CHANNEL,
+      clientId: crypto.randomUUID(),
+      protocolVersions: [AHP_PROTOCOL_VERSION],
+      initialSubscriptions: [ROOT_CHANNEL],
+    },
+  });
 }
 
 it("does not run frames that wait behind a frame when the connection closes", async () => {
-  const handled = await runInDurableObject(routerStub(), async (_instance, ctx) => {
-    const channels = new RouterChannels(new RouterDatabase(ctx.storage));
-    const started = Promise.withResolvers<null>();
-    const first = Promise.withResolvers<null>();
-    const frames: (string | ArrayBuffer)[] = [];
+  const subscriptions = await runInDurableObject(routerStub(), async (router, ctx) => {
+    const host = new HeldHost();
+    useHost(router, host);
+    const socket = await connect(router, ctx);
 
-    async function handleFrame(...[, raw]: Parameters<FrameHandler>): Promise<void> {
-      frames.push(raw);
-      started.resolve(null);
-      await first.promise;
-    }
-
-    const connection = new RouterConnection({
-      channels,
-      senders: new HeldSenders(),
-      handleFrame,
-    });
-
-    await connection.open();
-    const socket = serverSocket();
-    const running = connection.handleMessage(socket, "first");
-    const queued = connection.handleMessage(socket, "second");
-    await started.promise;
-    await connection.close();
-    first.resolve(null);
+    const running = router.webSocketMessage(socket, initialize("first"));
+    const queued = router.webSocketMessage(socket, initialize("second"));
+    await host.started.promise;
+    await router.webSocketClose(socket);
+    host.released.resolve(null);
     await Promise.all([running, queued]);
 
-    return frames;
+    return host.subscriptions;
   });
 
-  expect(handled).toEqual(["first"]);
+  expect(subscriptions).toBe(1);
 });
 
 it("stops a subscription that its sender accepts after the connection closes", async () => {
-  const result = await runInDurableObject(routerStub(), async (_instance, ctx) => {
-    const channels = new RouterChannels(new RouterDatabase(ctx.storage));
-    const senders = new HeldSenders();
-    const requests = new ClientRequests({ channels, senders, host: noHost, session: noHost });
+  const result = await runInDurableObject(routerStub(), async (router, ctx) => {
+    const host = new HeldHost();
+    useHost(router, host);
+    const socket = await connect(router, ctx);
 
-    const connection = new RouterConnection({
-      channels,
-      senders,
-      handleFrame: async (socket, raw, frame): Promise<void> => {
-        await requests.handleFrame(socket, raw, frame);
-      },
-    });
-
-    await connection.open();
-
-    const initialize = JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        channel: ROOT_CHANNEL,
-        clientId: crypto.randomUUID(),
-        protocolVersions: [AHP_PROTOCOL_VERSION],
-        initialSubscriptions: [ROOT_CHANNEL],
-      },
-    });
-
-    const running = connection.handleMessage(serverSocket(), initialize);
-    await senders.started.promise;
-    await connection.close();
-    senders.released.resolve(null);
+    const running = router.webSocketMessage(socket, initialize("first"));
+    await host.started.promise;
+    await router.webSocketClose(socket);
+    host.released.resolve(null);
     await running;
 
-    return { unsubscribed: senders.unsubscribed, stored: channels.exists() };
+    return {
+      unsubscribed: host.unsubscribed,
+      stored: new RouterDatabase(ctx.storage).hasMigrated(),
+    };
   });
 
   expect(result).toEqual({ unsubscribed: [ROOT_CHANNEL], stored: false });

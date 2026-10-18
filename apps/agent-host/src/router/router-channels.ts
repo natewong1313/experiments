@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
-import type { RouterDatabase } from "../db/database";
-import { connectionTable, sendersTable, subscriptionsTable } from "../db/schema";
+import type { RouterDatabase } from "./db/database";
+import { connectionTable, sendersTable, subscriptionsTable } from "./db/schema";
 
 type Subscription = { channel: string; sender: string; revision: number };
 
@@ -17,8 +17,8 @@ type Receipt<Item> =
  * Stores the subscriptions of one client connection and the last revision that the router
  * received from each sender. It also allocates the `serverSeq` of the connection.
  *
- * Storage exists only while the connection is open. `RouterConnection` decides whether the
- * connection is open.
+ * Storage exists only while the connection is open. The router opens and closes the
+ * connection.
  */
 export class RouterChannels {
   private db: RouterDatabase;
@@ -26,16 +26,6 @@ export class RouterChannels {
 
   constructor(db: RouterDatabase) {
     this.db = db;
-  }
-
-  /** Returns true if the router has storage. */
-  exists(): boolean {
-    return this.db.hasTables();
-  }
-
-  /** Creates or migrates the storage for a connection. */
-  async open(): Promise<void> {
-    await this.db.migrate();
   }
 
   /** Returns the last `serverSeq` sent to the client, or 0 before the first. */

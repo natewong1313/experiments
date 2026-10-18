@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/durable-sqlite";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { RouterDatabase } from "../src/router/db/database";
-import { RouterChannels } from "../src/router/service/channels";
+import { RouterChannels } from "../src/router/router-channels";
 import { SessionDatabase } from "../src/session/db/database";
 import { subscriberChannelsTable } from "../src/shared/db/fanout-schema";
 import { RouterFanout } from "../src/shared/fanout";
@@ -112,8 +112,9 @@ it("starts a new sender at the lowest snapshot revision of its channels", async 
   const stub = routerStub();
 
   const receipt = await runInDurableObject(stub, async (_instance, ctx) => {
-    const channels = new RouterChannels(new RouterDatabase(ctx.storage));
-    await channels.open();
+    const db = new RouterDatabase(ctx.storage);
+    await db.migrate();
+    const channels = new RouterChannels(db);
     channels.subscribe({ channel: "chat", sender: "session", revision: CHAT_REVISION });
     channels.subscribe({ channel: "session", sender: "session", revision: SESSION_REVISION });
 
@@ -130,8 +131,9 @@ it("starts again when a sender with the same ID returns a lower snapshot revisio
   const stub = routerStub();
 
   const receipt = await runInDurableObject(stub, async (_instance, ctx) => {
-    const channels = new RouterChannels(new RouterDatabase(ctx.storage));
-    await channels.open();
+    const db = new RouterDatabase(ctx.storage);
+    await db.migrate();
+    const channels = new RouterChannels(db);
     channels.subscribe({ channel: "old", sender: "session", revision: OLD_REVISION });
     channels.subscribe({ channel: "new", sender: "session", revision: NEW_REVISION });
 

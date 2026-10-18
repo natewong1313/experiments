@@ -50,7 +50,7 @@ export async function routerSenders(stub: DurableObjectStub): Promise<string[]> 
   const rows = await runInDurableObject(stub, (_instance, ctx) => {
     const db = new RouterDatabase(ctx.storage);
 
-    return db.hasTables() ? db.orm.select().from(sendersTable).all() : [];
+    return db.hasMigrated() ? db.orm.select().from(sendersTable).all() : [];
   });
 
   return rows.map((row) => row.id);
