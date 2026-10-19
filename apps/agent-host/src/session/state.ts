@@ -15,12 +15,23 @@ import type {
   SessionAction as AHPSessionAction,
   SessionSummary as AHPSessionSummary,
 } from "@microsoft/agent-host-protocol";
-import type { SessionCreateRequest } from "../shared/rpc/session";
 import type { SessionUpdate } from "../shared/rpc/router";
 import type { SessionRecord } from "./db/schema";
 import { chatUri, sessionUri } from "../shared/lookups";
 
-export function buildSession(options: SessionCreateRequest, cwd: string): SessionRecord {
+/** The values that a new session record starts from. */
+export type NewSession = {
+  sessionId: string;
+  chatId: string;
+  provider: string;
+  createdAt: string;
+  // The absolute path that the ACP session runs in.
+  cwd: string;
+};
+
+export function buildSession(options: NewSession): SessionRecord {
+  const { cwd } = options;
+
   const path = cwd
     .split("/")
     .map((segment) => encodeURIComponent(segment))
@@ -51,11 +62,13 @@ export function buildSession(options: SessionCreateRequest, cwd: string): Sessio
 
   return {
     id: options.sessionId,
-    hostId: options.hostId,
     acpSessionId: null,
     cwd,
     createdAt: options.createdAt,
     revision: 0,
+    syncedRevision: 0,
+    creationAttempts: 0,
+    disposing: false,
     chatState,
     sessionState,
   };

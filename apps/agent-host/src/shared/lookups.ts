@@ -27,15 +27,26 @@ export function sessionDOName(hostId: string, sessionId: string): string {
   return `${hostId}/${sessionId}`;
 }
 
-/** Returns the session ID from a session Durable Object name. */
-export function sessionIdFromDOName(name: string): string {
-  const [, sessionId] = name.split("/");
+/** The host and session that a session Durable Object name identifies. */
+export type SessionDOName = { hostId: string; sessionId: string };
 
-  if (sessionId === undefined) {
-    throw new Error("Session name must end with a session UUID");
+/**
+ * Parses a session Durable Object name from `sessionDOName`.
+ *
+ * @throws {Error} If the name is not a host UUID and a session UUID.
+ */
+export function parseSessionDOName(name: string): SessionDOName {
+  const [hostId = "", sessionId = "", ...rest] = name.split("/");
+
+  if (
+    !UUIDSchema.safeParse(hostId).success ||
+    !UUIDSchema.safeParse(sessionId).success ||
+    rest.length > 0
+  ) {
+    throw new Error("Session name must be a host UUID and a session UUID");
   }
 
-  return sessionId;
+  return { hostId, sessionId };
 }
 
 /** Returns a new router name. Each WebSocket connection has its own router. */

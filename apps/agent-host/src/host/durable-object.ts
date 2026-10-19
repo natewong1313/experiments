@@ -1,61 +1,48 @@
-/* oxlint-disable import/max-dependencies -- The host owns session creation and its RPC error handling. */
 import { DurableObject } from "cloudflare:workers";
 import { DurabilityAlarms } from "durability";
-import {
-  AhpErrorCodes as AHPErrorCodes,
-  SessionStatus as AHPSessionStatus,
-} from "@microsoft/agent-host-protocol";
 import type { AgentInfo as AHPAgentInfo } from "@microsoft/agent-host-protocol";
-import {
-  type CreateSessionParams as AHPCreateSessionParams,
-  type ListSessionsResult as AHPListSessionsResult,
-  type SessionSummary as AHPSessionSummary,
-  CreateSessionParamsSchema as AHPCreateSessionParamsSchema,
+import type {
+  ListSessionsResult as AHPListSessionsResult,
+  SessionSummary as AHPSessionSummary,
 } from "@experiments/protocol-schemas/ahp";
 import {
-  HostCreateSessionError,
-  HostDisposeSessionError,
   HostListSessionsError,
+  HostSessionCreatedError,
+  HostSessionEntrySchema,
+  HostSessionRemovedError,
   HostSubscribeRootError,
   HostSummaryChangedError,
-  HostSummaryChangedRequestSchema,
 } from "../shared/rpc/host";
 import type {
-  HostDisposeSessionRequest,
   HostRPC,
+  HostOrphanRemovedRequest,
+  HostRemovedResponse,
+  HostSessionEntry,
+  HostSessionRemovedRequest,
   HostSubscribeRootRequest,
   HostSubscribeRootResponse,
-  HostSummaryChangedRequest,
   HostUnsubscribeRootRequest,
 } from "../shared/rpc/host";
 import type { AgentHostConnectionRouterRPC, RootEvent, RootUpdate } from "../shared/rpc/router";
-import type { SessionRPC } from "../shared/rpc/session";
-import { chatUri, parseChannel, requireName, sessionDOName, sessionUri } from "../shared/lookups";
-import { AHPError } from "../shared/protocol";
-import { callDoRpc } from "../shared/do-rpc";
+import { sessionUri } from "../shared/lookups";
+import { sessionAlreadyExists } from "../shared/protocol";
 import { HostDatabase } from "./db/database";
 import { rootTable, type SessionEntry, sessionsTable } from "./db/schema";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { EventsPublisher } from "./event-publisher";
 
 // The getAgentInfo method makes callers return this, so we export the type
 export type { AgentInfo } from "@microsoft/agent-host-protocol";
 
-type ValidatedCreateSession = {
-  params: AHPCreateSessionParams;
-  provider: string;
-  id: string;
-  workingDirectory: string | undefined;
-};
-
 /**
  * Owns the session catalog and the root channel of one host.
  * Client connections reach the host through their `AgentHostConnectionRouter`.
+ * Sessions add, update, and remove their own catalog entries. The host never calls a session.
  */
 export abstract class AgentHost<
   Env = unknown,
   Router extends AgentHostConnectionRouterRPC = AgentHostConnectionRouterRPC,
-  Session extends SessionRPC = SessionRPC,
 >
   extends DurableObject<Env>
   implements HostRPC
@@ -90,12 +77,7 @@ export abstract class AgentHost<
   /** The router Durable Object namespace. The host pushes root changes to the routers. */
   abstract router: DurableObjectNamespace<Router>;
 
-  /** The session Durable Object namespace. The host creates and disposes sessions. */
-  abstract session: DurableObjectNamespace<Session>;
-
-  /**
-   * Returns the agent metadata for the root snapshot and the provider used to create sessions.
-   */
+  /** Returns the agent metadata for the root snapshot. */
   protected abstract getAgentInfo(): AHPAgentInfo;
 
   async alarm(info?: AlarmInvocationInfo): Promise<void> {
@@ -138,83 +120,45 @@ export abstract class AgentHost<
     }
   }
 
-  async createSession(input: AHPCreateSessionParams): Promise<void> {
+  async sessionCreated(req: HostSessionEntry): Promise<void> {
     try {
-      const { params, provider, id, workingDirectory } = this.validateCreateSession(input);
-
-      const hostId = this.hostName();
-      const now = new Date().toISOString();
-      const chatId = crypto.randomUUID();
-
-      const newSession: SessionEntry = {
-        id,
-        revision: 0,
-        defaultChat: chatUri(id, chatId),
-        summary: {
-          resource: params.channel,
-          provider,
-          title: "New session",
-          status: AHPSessionStatus.Idle,
-          createdAt: now,
-          modifiedAt: now,
-        },
-      };
+      const entry = HostSessionEntrySchema.parse(req);
 
       const eventsWithRevisions = this.db.transactionSync(() => {
-        this.db.orm.insert(sessionsTable).values(newSession).run();
+        const existing = this.getSession(entry.sessionId);
 
-        const events = [
-          { kind: "sessionAdded", summary: newSession.summary },
-          {
-            kind: "action",
-            action: {
-              type: "root/activeSessionsChanged",
-              activeSessions: this.countActiveSessions(),
-            },
-          },
-        ] satisfies RootEvent[];
+        if (existing) {
+          if (existing.defaultChat === entry.defaultChat) {
+            return [];
+          }
 
-        return this.updateRevision(events);
+          throw sessionAlreadyExists();
+        }
+
+        this.db.orm
+          .insert(sessionsTable)
+          .values({
+            id: entry.sessionId,
+            defaultChat: entry.defaultChat,
+            revision: entry.revision,
+            summary: entry.summary,
+          })
+          .run();
+
+        return this.updateRevision(
+          this.membershipEvents({ kind: "sessionAdded", summary: entry.summary }),
+        );
       });
 
       await this.eventPublisher.publish(eventsWithRevisions);
-
-      const doName = sessionDOName(hostId, id);
-      await callDoRpc(
-        () => this.session.getByName(doName),
-        (session) =>
-          session.create({
-            hostId,
-            sessionId: id,
-            chatId,
-            provider,
-            createdAt: now,
-            workingDirectory,
-          }),
-      ).catch(async (error) => {
-        await this.removeSession(id).catch(() => null);
-        throw error;
-      });
     } catch (error) {
-      throw new HostCreateSessionError(error);
+      throw new HostSessionCreatedError(error);
     }
   }
 
-  async disposeSession({ sessionId }: HostDisposeSessionRequest): Promise<void> {
+  async summaryChanged(req: HostSessionEntry): Promise<void> {
     try {
-      if (!this.getSession(sessionId)) {
-        throw new AHPError("Session does not exist", AHPErrorCodes.SessionNotFound);
-      }
-
-      await this.removeSession(sessionId);
-    } catch (error) {
-      throw new HostDisposeSessionError(error);
-    }
-  }
-
-  async summaryChanged(req: HostSummaryChangedRequest): Promise<void> {
-    try {
-      const update = HostSummaryChangedRequestSchema.parse(req);
+      const update = HostSessionEntrySchema.parse(req);
 
       const eventsWithRevisions = this.db.transactionSync(() => {
         const entry = this.getSession(update.sessionId);
@@ -249,8 +193,58 @@ export abstract class AgentHost<
     }
   }
 
-  private hostName(): string {
-    return requireName(this.ctx, "AgentHost");
+  async sessionRemoved(req: HostSessionRemovedRequest): Promise<HostRemovedResponse> {
+    const matches = and(
+      eq(sessionsTable.id, req.sessionId),
+      eq(sessionsTable.defaultChat, req.defaultChat),
+    );
+
+    return await this.removeEntry(req.sessionId, matches);
+  }
+
+  async orphanRemoved(req: HostOrphanRemovedRequest): Promise<HostRemovedResponse> {
+    return await this.removeEntry(req.sessionId, eq(sessionsTable.id, req.sessionId));
+  }
+
+  /** Removes the entry that `matches` selects and tells root subscribers. */
+  private async removeEntry(
+    sessionId: string,
+    matches: SQL | undefined,
+  ): Promise<HostRemovedResponse> {
+    try {
+      const eventsWithRevisions = this.db.transactionSync(() => {
+        const removed = this.db.orm
+          .delete(sessionsTable)
+          .where(matches)
+          .returning({ id: sessionsTable.id })
+          .get();
+
+        if (!removed) {
+          return [];
+        }
+
+        const event = { kind: "sessionRemoved", session: sessionUri(sessionId) } as const;
+
+        return this.updateRevision(this.membershipEvents(event));
+      });
+
+      await this.eventPublisher.publish(eventsWithRevisions);
+
+      return { removed: eventsWithRevisions.length > 0 };
+    } catch (error) {
+      throw new HostSessionRemovedError(error);
+    }
+  }
+
+  /** Returns a catalogue membership event and the new count of active sessions. */
+  private membershipEvents(event: RootEvent): RootEvent[] {
+    return [
+      event,
+      {
+        kind: "action",
+        action: { type: "root/activeSessionsChanged", activeSessions: this.countActiveSessions() },
+      },
+    ];
   }
 
   private getRevision(): number {
@@ -265,43 +259,6 @@ export abstract class AgentHost<
 
   private getSession(id: string): SessionEntry | undefined {
     return this.db.orm.select().from(sessionsTable).where(eq(sessionsTable.id, id)).get();
-  }
-
-  private async removeSession(id: string): Promise<void> {
-    const hostId = this.hostName();
-    const doName = sessionDOName(hostId, id);
-
-    await callDoRpc(
-      () => this.session.getByName(doName),
-      (session) => session.dispose(),
-    );
-
-    const eventsWithRevisions = this.db.transactionSync(() => {
-      const removed = this.db.orm
-        .delete(sessionsTable)
-        .where(eq(sessionsTable.id, id))
-        .returning({ id: sessionsTable.id })
-        .get();
-
-      if (!removed) {
-        return [];
-      }
-
-      const events = [
-        { kind: "sessionRemoved", session: sessionUri(id) },
-        {
-          kind: "action",
-          action: {
-            type: "root/activeSessionsChanged",
-            activeSessions: this.countActiveSessions(),
-          },
-        },
-      ] satisfies RootEvent[];
-
-      return this.updateRevision(events);
-    });
-
-    await this.eventPublisher.publish(eventsWithRevisions);
   }
 
   /**
@@ -322,51 +279,6 @@ export abstract class AgentHost<
 
     return events.map((event, index) => ({ ...event, revision: first + index }));
   }
-
-  private validateCreateSession(input: AHPCreateSessionParams): ValidatedCreateSession {
-    const params = AHPCreateSessionParamsSchema.parse(input);
-    const { provider } = this.getAgentInfo();
-    const channel = parseChannel(params.channel);
-
-    if (channel.kind !== "session") {
-      throw new AHPError("Expected an ahp-session channel");
-    }
-
-    if (params.provider !== undefined && params.provider !== provider) {
-      throw new AHPError("Agent provider does not exist", AHPErrorCodes.ProviderNotFound);
-    }
-
-    if (params.config || params.activeClient || (params.workingDirectories?.length ?? 0) > 1) {
-      throw new AHPError(
-        "Session configuration and multiple working directories are not supported",
-      );
-    }
-
-    const directory = params.workingDirectories?.[0];
-    const workingDirectory = directory === undefined ? undefined : localPath(directory);
-    const id = channel.sessionId;
-
-    if (this.getSession(id)) {
-      throw new AHPError("Session already exists", AHPErrorCodes.SessionAlreadyExists);
-    }
-
-    return { params, provider, id, workingDirectory };
-  }
-}
-
-/**
- * Converts a local `file:` URI to a file system path.
- *
- * @throws {AHPError} If the URI is not a local file URI.
- */
-function localPath(directory: string): string {
-  const url = new URL(directory);
-
-  if (url.protocol !== "file:" || url.hostname || url.search || url.hash) {
-    throw new AHPError("Expected a local file working directory");
-  }
-
-  return decodeURIComponent(url.pathname);
 }
 
 /**

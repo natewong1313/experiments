@@ -4,6 +4,8 @@ export type { AgentInfo } from "./host/durable-object";
 
 export { AgentSession } from "./session/durable-object";
 
+export type { SessionLifecyclePolicy } from "./session/durable-object";
+
 export { AgentHostConnectionRouter } from "./router/durable-object";
 
 export type { StubFor, StubKind } from "./shared/stubs";

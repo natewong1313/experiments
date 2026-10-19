@@ -3,6 +3,7 @@ import {
   ChatTurnCancelledActionSchema as AHPChatTurnCancelledActionSchema,
   ChatTurnStartedActionSchema as AHPChatTurnStartedActionSchema,
 } from "@experiments/protocol-schemas/ahp";
+import type { CreateSessionParams as AHPCreateSessionParams } from "@experiments/protocol-schemas/ahp";
 import type {
   ActionOrigin as AHPActionOrigin,
   ChatState as AHPChatState,
@@ -10,14 +11,8 @@ import type {
 } from "@microsoft/agent-host-protocol";
 import { CodedRpcError } from "./errors";
 
-export type SessionCreateRequest = {
-  hostId: string;
-  sessionId: string;
-  chatId: string;
-  provider: string;
-  createdAt: string;
-  workingDirectory?: string;
-};
+/** The AHP `createSession` parameters. The channel must be the session channel of the object. */
+export type SessionCreateRequest = AHPCreateSessionParams;
 
 /** The client actions a session accepts through `dispatch`. */
 export const SessionDispatchActionSchema = z.discriminatedUnion("type", [
@@ -74,10 +69,15 @@ export class SessionDisposeError extends CodedRpcError {
 
 export interface SessionRPC extends Rpc.DurableObjectBranded {
   /**
-   * Creates persisted session state and opens its ACP connection.
-   * Resolves after the session is ready. Failed setup removes the session state.
+   * Creates the session, adds it to the host catalogue, and opens its ACP connection. Resolves
+   * after the session is ready. A repeated call with the same provider and working directory
+   * waits for the same creation, so a caller can retry it.
    *
-   * @throws {SessionCreateError} If the session exists or setup fails.
+   * A transient failure rejects the call, and a `finishCreate` alarm continues the creation. An
+   * agent error response disposes the session before the call rejects.
+   *
+   * @throws {SessionCreateError} If the parameters are not valid, the session exists with other
+   * parameters, or setup fails.
    */
   create(req: SessionCreateRequest): Promise<void>;
 
@@ -104,10 +104,14 @@ export interface SessionRPC extends Rpc.DurableObjectBranded {
   unsubscribe(req: SessionUnsubscribeRequest): Promise<void>;
 
   /**
-   * Stops the ACP connection, tells subscribed routers, and removes all session storage.
-   * Calling this on an absent session succeeds.
+   * Stops the ACP connection, tells subscribed routers, removes the session from the host
+   * catalogue, and then deletes all session storage. The dispose commits before these steps. After
+   * the commit, a failure leaves the session disposing, and a `finishDispose` alarm completes it.
    *
-   * @throws {SessionDisposeError} If cancellation or cleanup fails.
+   * For an absent session, removes any catalogue entry with the session ID.
+   *
+   * @throws {SessionDisposeError} If the session and its catalogue entry are absent, with the
+   * `SessionNotFound` code, or if the host does not acknowledge the removal.
    */
   dispose(): Promise<void>;
 }

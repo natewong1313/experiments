@@ -24,17 +24,27 @@ export class AgentHostConnectionRouter extends BaseConnectionRouter<Env, AgentHo
   session = this.env.AGENT_SESSION;
 }
 
-export class AgentHost extends BaseAgentHost<Env, AgentHostConnectionRouter, AgentSession> {
+const PI_AGENT: AgentInfo = {
+  provider: "pi",
+  displayName: "Pi",
+  description: "Pi coding agent",
+  models: [],
+};
+
+export class AgentHost extends BaseAgentHost<Env, AgentHostConnectionRouter> {
   router = this.env.AGENT_ROUTER;
-  session = this.env.AGENT_SESSION;
   getAgentInfo(): AgentInfo {
-    return { provider: "pi", displayName: "Pi", description: "Pi coding agent", models: [] };
+    return PI_AGENT;
   }
 }
 
 export class AgentSession extends BaseAgentSession<Env, AgentHostConnectionRouter, AgentHost> {
   router = this.env.AGENT_ROUTER;
   host = this.env.AGENT_HOST;
+
+  getAgentInfo(): AgentInfo {
+    return PI_AGENT;
+  }
 
   workspace = new Workspace({
     storage: workspaceStorage(this.ctx.storage),

@@ -10,25 +10,31 @@ Each session has one default chat and accepts one active text turn at a time.
 - An `AgentSession` owns one session: its ACP connection, its persisted conversation state,
   and the routers that subscribe to it.
 
-The router sends `listSessions`, `createSession`, `disposeSession`, and root subscriptions
-to the host. It sends session and chat subscriptions and `dispatchAction` directly to the
-session. Sessions push their actions directly to the subscribed routers, so streamed text
-does not pass through the host. A session tells the host only when a summary field other
-than `modifiedAt` changes. Closing a client socket does not cancel a turn.
+The router sends `listSessions` and root subscriptions to the host. It sends
+`createSession`, `disposeSession`, session and chat subscriptions, and `dispatchAction`
+directly to the session. Sessions push their actions directly to the subscribed routers, so
+streamed text does not pass through the host. Closing a client socket does not cancel a turn.
+
+Each session keeps its own entry in the host catalogue. It calls `sessionCreated` before it
+opens the agent connection, `summaryChanged` when a summary field other than `modifiedAt`
+changes, and `sessionRemoved` before it deletes its storage. `createSession` and
+`disposeSession` resolve after the host acknowledges the change, so `listSessions` is
+correct when they resolve. The host never calls a session.
 
 ```mermaid
 flowchart LR
   Client <-->|AHP WebSocket| Router[AgentHostConnectionRouter DO]
-  Router -->|catalogue and root RPC| Host[AgentHost DO]
-  Router -->|subscribe and dispatch RPC| Session[AgentSession DO]
-  Host -->|create and dispose RPC| Session
+  Router -->|listSessions and root RPC| Host[AgentHost DO]
+  Router -->|create, dispose, subscribe, and dispatch RPC| Session[AgentSession DO]
   Host -->|root pushes| Router
   Session -->|session and chat pushes| Router
-  Session -->|summaryChanged RPC| Host
+  Session -->|sessionCreated, summaryChanged, and sessionRemoved RPC| Host
   Session <-->|ACP stream| Backend[Agent backend]
 ```
 
 [ADR 0001](docs/adr/0001-connection-router.md) records why the host uses this shape.
+[ADR 0002](docs/adr/0002-session-first-lifecycle.md) records why sessions own their creation
+and disposal.
 
 ### Pushes
 
@@ -69,11 +75,17 @@ require any binding names.
   }
   ```
 
-- Override `AgentHost.getAgentInfo()` to describe the single agent backend.
+- Override `AgentHost.getAgentInfo()` and `AgentSession.getAgentInfo()` to describe the
+  single agent backend. Return the same value from both. The session checks the provider of
+  a create request against it.
 - Override `AgentSession.connectAgent(sessionId)` to return an ACP `Stream`.
 - Override `AgentSession.getWorkingDirectory()` when `/` is not the default.
+- Override `AgentSession.getLifecyclePolicy()` to change the timing of the alarms that
+  complete a creation or a dispose.
 
-All three classes require SQLite-backed Durable Object storage. Import generated SQL
+All three classes require SQLite-backed Durable Object storage.
+The migrations do not upgrade storage from earlier versions of this package. Delete local
+`.wrangler` state after an upgrade. Import generated SQL
 migrations as text in your Worker configuration. The [basic example](examples/basic)
 provides concrete classes, bindings, and SQL import rules.
 
@@ -81,13 +93,20 @@ Use `routeAgentHost({ request, namespace })` in your Worker to route
 `/hosts/<host-uuid>/ahp`. Pass the router namespace. Hosts and sessions use application
 UUIDs. Session Durable Object names combine the host UUID and the session UUID. Router
 Durable Object names combine the host UUID and a random UUID. Chat URIs have the form
-`ahp-chat:/<session>/<chat>`, so a router finds the session of a chat from its URI. The host
-assigns a chat UUID when it creates a session.
+`ahp-chat:/<session>/<chat>`, so a router finds the session of a chat from its URI. The
+session assigns a chat UUID when it is created.
 
 ## Supported behavior
 
 The host supports `initialize`, `ping`, `listSessions`, `createSession`,
 `disposeSession`, `subscribe`, and `unsubscribe`. Creation waits for ACP setup.
+
+A repeated `createSession` with the same session ID, provider, and working directory waits
+for the same creation, so a client can retry it. If a restart or a transient error stops a
+creation, the request fails, and the session continues the creation in the background. A
+client can retry, or watch the root channel for the result. An error response from the agent
+fails the creation at once. A dispose that the host does not acknowledge fails, and the
+session completes it in the background.
 Clients dispatch `chat/turnStarted` and `chat/turnCancelled`. Agent text becomes
 markdown response parts and deltas, followed by completion or error actions.
 

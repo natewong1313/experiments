@@ -8,26 +8,13 @@ import { RouterDatabase } from "../src/router/db/database";
 import { connectionTable, sendersTable, subscriptionsTable } from "../src/router/db/schema";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
-import { buildSession, sessionSummary } from "../src/session/state";
-import type { SessionRecord } from "../src/session/db/schema";
+import { sessionSummary } from "../src/session/state";
+import { newRecord } from "./fixtures";
 import { newRouterDOName, sessionDOName } from "../src/shared/lookups";
-
-function record(hostId: string): SessionRecord {
-  return buildSession(
-    {
-      hostId,
-      sessionId: crypto.randomUUID(),
-      chatId: crypto.randomUUID(),
-      provider: "test",
-      createdAt: new Date().toISOString(),
-    },
-    "/",
-  );
-}
 
 it("commits and rolls back host writes", async () => {
   const hostId = crypto.randomUUID();
-  const session = record(hostId);
+  const session = newRecord();
 
   await runInDurableObject(env.COORDINATORS.getByName(hostId), async (_instance, ctx) => {
     const database = new HostDatabase(ctx.storage);
@@ -69,7 +56,7 @@ it("commits and rolls back host writes", async () => {
 
 it("commits and rolls back session writes and creates no tables before a session exists", async () => {
   const hostId = crypto.randomUUID();
-  const session = record(hostId);
+  const session = newRecord();
   const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.id));
 
   await runInDurableObject(stub, async (_instance, ctx) => {

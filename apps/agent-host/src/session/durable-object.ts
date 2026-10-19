@@ -1,23 +1,15 @@
-/* oxlint-disable import/max-dependencies -- beefy boi intentionally. */
+/* oxlint-disable import/max-dependencies -- The session owns its record, its agent connection, its subscribers, and its catalog entry. */
 import { DurableObject, waitUntil } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
-import { DurabilityAlarms } from "durability";
+import type { DurableAlarmInfo } from "durability";
+import { RequestError as ACPRequestError } from "@agentclientprotocol/sdk";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 import {
   ActionType as AHPActionType,
-  MessageKind as AHPMessageKind,
+  AhpErrorCodes as AHPErrorCodes,
+  JsonRpcErrorCodes as AHPJsonRpcErrorCodes,
   ResponsePartKind as AHPResponsePartKind,
-  SessionLifecycle as AHPSessionLifecycle,
 } from "@microsoft/agent-host-protocol";
-import type {
-  ActionOrigin as AHPActionOrigin,
-  ChatAction as AHPChatAction,
-  ChatTurnStartedAction as AHPChatTurnStartedAction,
-} from "@microsoft/agent-host-protocol";
-import type {
-  ChatTurnCancelledAction as TurnCancelledRequest,
-  ChatTurnStartedAction as TurnStartedRequest,
-} from "@experiments/protocol-schemas/ahp";
+import type { AgentInfo as AHPAgentInfo } from "@microsoft/agent-host-protocol";
 import {
   SessionCreateError,
   SessionDispatchError,
@@ -35,38 +27,39 @@ import type {
 import type { HostRPC } from "../shared/rpc/host";
 import type { AgentHostConnectionRouterRPC, SessionUpdate } from "../shared/rpc/router";
 import { toAHPError } from "../shared/rpc/errors";
+import type { StubFor } from "../shared/stubs";
 import { errorMessage } from "../shared/errors";
-import { chatUri, requireName, sessionIdFromDOName, sessionUri } from "../shared/lookups";
-import { AHPError, sessionNotFound } from "../shared/protocol";
+import { parseSessionDOName, requireName, sessionUri } from "../shared/lookups";
+import type { SessionDOName } from "../shared/lookups";
+import { AHPError, sessionAlreadyExists, sessionNotFound } from "../shared/protocol";
+import { SingleFlight } from "../shared/single-flight";
 import { SessionDatabase } from "./db/database";
-import { sessionTable } from "./db/schema";
 import type { SessionRecord } from "./db/schema";
-import { applyChat, applySession, buildSession, sessionSummary } from "./state";
+import { applyChat, applySession, buildSession } from "./state";
 import { AgentConnection } from "./agent-connection";
 import { UpdatesPublisher } from "./update-publisher";
+import { validateCreateRequest } from "./create-request";
+import type { CreateTarget } from "./create-request";
+import { HostCatalog } from "./host-catalog";
+import { DEFAULT_LIFECYCLE_POLICY, retryDelay } from "./lifecycle-policy";
+import type { SessionLifecyclePolicy } from "./lifecycle-policy";
+import { defaultChatOf, phaseOf } from "./records";
+import type { SessionChange } from "./records";
+import { SessionStorage } from "./storage";
+import { SessionTurns } from "./turns";
 
-type SessionDurability = DurabilityAlarms<"syncCatalog" | "flushSubscribers">;
-
-/**
- * The session has storage only between creation and removal. Without storage, reads return
- * nothing and writes do nothing. This prevents a request for an absent session from creating
- * storage. The `durability` helpers run their own migrations, so they exist only while the
- * storage is open.
- */
-type StorageState =
-  | { kind: "absent" }
-  | { kind: "open"; durability: SessionDurability }
-  | { kind: "removing"; removed: Promise<void> };
-
-/** Changes the record in place and returns the update to push, or undefined to skip. */
-type SessionChange = (record: SessionRecord) => SessionUpdate | undefined;
-
-const CATALOG_SYNC_TIMEOUT_MS = 30_000;
+export type { SessionLifecyclePolicy } from "./lifecycle-policy";
 
 /**
  * Owns one session: its persisted state, its ACP connection, and the routers that subscribe
- * to it. The session pushes its updates directly to those routers and syncs its summary to
- * the host catalog.
+ * to it. The session pushes its updates directly to those routers.
+ *
+ * The session also owns its entry in the host catalog. It calls `sessionCreated` before the
+ * agent connection opens, `summaryChanged` when the summary changes, and `sessionRemoved`
+ * before it deletes its storage.
+ *
+ * A dispose commits when the session marks its record as disposing. From then on, the session
+ * rejects requests, and the only next step is deletion.
  */
 export abstract class AgentSession<
   Env = unknown,
@@ -77,19 +70,55 @@ export abstract class AgentSession<
   implements SessionRPC
 {
   private db = new SessionDatabase(this.ctx.storage);
-  private storage: StorageState = { kind: "absent" };
+  private storage = new SessionStorage({
+    ctx: this.ctx,
+    db: this.db,
+    policy: (): SessionLifecyclePolicy => this.getLifecyclePolicy(),
+    handlers: {
+      syncCatalog: async (): Promise<void> => {
+        await this.sendSummary();
+      },
+      flushSubscribers: async (): Promise<void> => {
+        const session = this.storage.session();
+
+        if (session) {
+          await this.publisher.flush(session.revision);
+        }
+      },
+      finishCreate: async (info: DurableAlarmInfo): Promise<void> => {
+        await this.finishCreate(info);
+      },
+      finishDispose: (): void => {
+        // The disposal deletes all storage, which includes the table of the named alarms.
+        // It runs after this handler returns, so `durability` records the run first.
+        // The disposal schedules a new run if it fails.
+        waitUntil(this.retryDisposal());
+      },
+    },
+  });
   private publisher: UpdatesPublisher<Router> = new UpdatesPublisher({
     db: this.db,
     router: (): DurableObjectNamespace<Router> => this.router,
-    sessionId: (): string => this.sessionId(),
+    sessionId: (): string => this.name().sessionId,
     scheduleFlush: async (time): Promise<void> => {
-      await this.durability()?.flushSubscribers(time);
+      await this.storage.alarms()?.flushSubscribers(time);
     },
   });
+  private catalog = new HostCatalog((): StubFor<"host"> => this.host.getByName(this.name().hostId));
   private agent = new AgentConnection();
-  // True for the whole prompt run of a turn.
-  // The run can continue after a cancellation ends the active turn.
-  private promptRunning = false;
+  private turns = new SessionTurns({
+    agent: this.agent,
+    openAgent: async (): Promise<void> => {
+      await this.openAgent();
+    },
+    applyChange: async (change): Promise<boolean> => await this.applyChange(change),
+  });
+  // The creation and the disposal that run now, keyed by default chat.
+  // Callers for the same creation wait for them.
+  private creation = new SingleFlight();
+  private disposal = new SingleFlight();
+  // Failed disposal runs since the last success. They set the next `finishDispose` delay.
+  private disposalFailures = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -101,45 +130,51 @@ export abstract class AgentSession<
   /** The router Durable Object namespace. The session pushes its updates to the routers. */
   abstract router: DurableObjectNamespace<Router>;
 
-  /** The host Durable Object namespace. The session syncs its summary to the host. */
+  /** The host Durable Object namespace. The session keeps its catalog entry at the host. */
   abstract host: DurableObjectNamespace<Host>;
 
   protected abstract connectAgent(sessionId: string): Promise<ACPStream>;
+
+  /** Returns the agent backend. A create request must name its provider or no provider. */
+  protected abstract getAgentInfo(): AHPAgentInfo;
 
   protected getWorkingDirectory(): string {
     return "/";
   }
 
-  /** Runs due named alarms. A session without storage has none. */
-  async alarm(info?: AlarmInvocationInfo): Promise<void> {
-    await this.durability()?.alarm(info);
+  /** Returns the timing of the creation and dispose alarms. The storage reads it when it opens. */
+  protected getLifecyclePolicy(): SessionLifecyclePolicy {
+    return DEFAULT_LIFECYCLE_POLICY;
   }
 
-  /**
-   * Creates the session record and opens the agent connection. On failure, records a
-   * creation error, removes the session, and rethrows.
-   */
+  /** Runs due named alarms. A session without storage has none. */
+  async alarm(info?: AlarmInvocationInfo): Promise<void> {
+    await this.storage.alarms()?.alarm(info);
+  }
+
   async create(req: SessionCreateRequest): Promise<void> {
     try {
-      const cwd = req.workingDirectory ?? this.getWorkingDirectory();
+      const target = validateCreateRequest(req, {
+        sessionId: this.name().sessionId,
+        provider: this.getAgentInfo().provider,
+        defaultCwd: this.getWorkingDirectory(),
+      });
 
-      if (!cwd.startsWith("/")) {
-        throw new Error("Working directory must be an absolute path");
+      const session = await this.findOrInsertSession(target);
+
+      if (phaseOf(session) === "ready") {
+        return;
       }
 
-      await this.insertSession(buildSession(req, cwd));
-      const defaultChat = chatUri(req.sessionId, req.chatId);
-
       try {
-        await this.openAgent();
-        await this.applyExistingChange((record) =>
-          applySession(record, { type: AHPActionType.SessionReady }),
-        );
-        // The first summary from the host does not have the working directories. This sync adds them.
-        await this.durability()?.syncCatalog(Date.now());
+        await this.runCreation(defaultChatOf(session));
       } catch (error) {
-        await this.handleCreationFailed(error, defaultChat);
-        throw error;
+        // A failed creation can commit a dispose. Then the caller gets the error after deletion.
+        // If the deletion fails, the `finishDispose` alarm deletes the storage later.
+        await this.completeDisposal().catch(logFailure("Session deletion failed"));
+
+        // An error that is not an AHP error is transient, and `finishCreate` continues.
+        throw toAHPError(error, AHPJsonRpcErrorCodes.InternalError);
       }
     } catch (error) {
       throw new SessionCreateError(error);
@@ -155,10 +190,10 @@ export abstract class AgentSession<
   async subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse> {
     try {
       return this.db.transactionSync(() => {
-        const session = this.requireSession();
+        const session = this.storage.requireSession();
         const sessionChannel = sessionUri(session.id);
 
-        if (req.channel !== sessionChannel && req.channel !== session.sessionState.defaultChat) {
+        if (req.channel !== sessionChannel && req.channel !== defaultChatOf(session)) {
           throw new AHPError("Channel does not belong to this session");
         }
 
@@ -176,7 +211,7 @@ export abstract class AgentSession<
 
   /** Removes subscriptions of a router. Does nothing for an absent session. */
   async unsubscribe(req: SessionUnsubscribeRequest): Promise<void> {
-    if (this.storage.kind === "open") {
+    if (this.storage.isOpen()) {
       this.publisher.unsubscribe(req.router, req.channels);
     }
   }
@@ -184,60 +219,93 @@ export abstract class AgentSession<
   /** Routes a dispatched action to turn start or cancellation. */
   async dispatch({ channel, action, origin }: SessionDispatchRequest): Promise<void> {
     try {
-      const session = this.requireSession();
+      const session = this.storage.requireSession();
 
-      if (channel !== session.sessionState.defaultChat) {
-        throw new Error("Channel does not belong to this session");
+      if (channel !== defaultChatOf(session)) {
+        throw new AHPError("Channel does not belong to this session");
       }
 
       await (action.type === "chat/turnStarted"
-        ? this.startTurn(action, origin)
-        : this.cancelTurn(action, origin));
+        ? this.turns.start(action, origin)
+        : this.turns.cancel(action, origin));
     } catch (error) {
       throw new SessionDispatchError(error);
     }
   }
 
-  /** Removes the session and cancels and closes the agent connection. */
   async dispose(): Promise<void> {
     try {
-      // `removeStorage` stops new changes before it waits.
-      // This prevents the cancellation from adding a revision.
-      // This method reports the first failure only after both steps finish.
-      const results = await Promise.allSettled([this.removeStorage(), this.agent.cancel()]);
-      const failure = results.find((result) => result.status === "rejected");
+      await this.storage.settled();
+      const record = this.storage.record();
 
-      if (failure) {
-        throw toAHPError(failure.reason);
+      if (!record) {
+        await this.removeOrphanedEntry();
+
+        return;
       }
+
+      const { policy } = this.storage.requireOpen();
+      const defaultChat = defaultChatOf(record);
+      await this.commitDispose(defaultChat, Date.now() + policy.disposeFallbackMs);
+
+      // A create can finish the disposal while the dispose commits.
+      // The connection that the create opens belongs to the new creation.
+      if (this.isDisposing(defaultChat)) {
+        await this.agent.stop();
+      }
+
+      await this.completeDisposal();
     } catch (error) {
-      throw new SessionDisposeError(error);
-    } finally {
-      this.agent.close();
+      throw new SessionDisposeError(toAHPError(error, AHPJsonRpcErrorCodes.InternalError));
     }
   }
 
   /**
-   * Opens existing storage after a restart and records an error for any active turn. The
-   * session does not store the agent connection. Thus a running turn cannot resume. Then
-   * schedules a check for routers that missed updates, because a restart loses the pushes in
-   * flight. Writes nothing if the session has no storage.
+   * Opens existing storage after a restart and schedules the alarm that continues the phase
+   * it finds. The session does not store the agent connection. Thus a running turn cannot
+   * resume, and the session records an error for it. Writes nothing if the session has no
+   * storage. This method runs in `blockConcurrencyWhile`, so it does not call the host.
    *
    * TODO: support resuming turns
    */
   private async restoreAfterRestart(): Promise<void> {
-    if (!this.db.hasMigrated()) {
+    if (!this.storage.hasTables()) {
       return;
     }
 
-    await this.openStorage();
+    await this.storage.open();
+    const { alarms } = this.storage.requireOpen();
 
-    await this.applyChange((record) => {
-      const turn = record.chatState.activeTurn;
+    switch (phaseOf(this.storage.record())) {
+      case "absent": {
+        // A create stopped after it scheduled its alarm and before it inserted the record.
+        await this.storage.remove();
+
+        return;
+      }
+
+      case "disposing": {
+        await alarms.finishDispose(Date.now());
+
+        return;
+      }
+
+      case "creating": {
+        await alarms.finishCreate(Date.now());
+        break;
+      }
+
+      case "ready": {
+        break;
+      }
+    }
+
+    await this.applyChange((session) => {
+      const turn = session.chatState.activeTurn;
 
       return (
         turn &&
-        applyChat(record, {
+        applyChat(session, {
           type: AHPActionType.ChatError,
           turnId: turn.id,
           duration: 0,
@@ -249,115 +317,230 @@ export abstract class AgentSession<
       );
     });
 
-    const session = this.getSession();
+    const session = this.storage.requireSession();
 
-    if (session) {
-      await this.publisher.recover(session.revision);
+    if (session.revision > session.syncedRevision) {
+      await alarms.syncCatalog(Date.now());
     }
+
+    await this.publisher.recover(session.revision);
   }
 
-  /** Creates or migrates the session tables and the named alarms. */
-  private async openStorage(): Promise<void> {
-    // The host can create a session ID again while `removeStorage` deletes the old storage.
-    if (this.storage.kind === "removing") {
-      await this.storage.removed;
+  /**
+   * Returns the stored session for a create request, and inserts a new session if none is
+   * stored. Finishes the deletion of a disposing session first.
+   *
+   * @throws {AHPError} If the stored session has a different provider or working directory, or
+   * if a disposing session cannot finish its deletion.
+   */
+  private async findOrInsertSession(target: CreateTarget): Promise<SessionRecord> {
+    await this.storage.open();
+
+    if (phaseOf(this.storage.record()) === "disposing") {
+      try {
+        await this.completeDisposal();
+      } catch {
+        throw sessionAlreadyExists();
+      }
+
+      await this.storage.open();
     }
 
-    if (this.storage.kind === "open") {
+    if (!this.storage.record()) {
+      // The session schedules the alarm before the record. An alarm without a record does nothing.
+      // A record without an alarm cannot finish after a restart.
+      const { alarms, policy } = this.storage.requireOpen();
+      await alarms.finishCreate(Date.now() + policy.createDeadlineMs);
+    }
+
+    const session = this.storage.records.insertIfAbsent(() =>
+      buildSession({
+        ...target,
+        sessionId: this.name().sessionId,
+        chatId: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    if (
+      phaseOf(session) === "disposing" ||
+      session.sessionState.provider !== target.provider ||
+      session.cwd !== target.cwd
+    ) {
+      throw sessionAlreadyExists();
+    }
+
+    return session;
+  }
+
+  /** Runs the steps of the creation with `defaultChat`, or waits for the steps that run now. */
+  private async runCreation(defaultChat: string): Promise<void> {
+    await this.creation.run(defaultChat, async () => {
+      await this.creationSteps(defaultChat);
+    });
+  }
+
+  /**
+   * Adds the session to the host catalog, opens the agent connection, and marks the session
+   * ready. Each step can run again after a failure. A permanent failure commits a dispose.
+   *
+   * @throws {AHPError} With the `SessionNotFound` code if a dispose starts during the steps.
+   */
+  private async creationSteps(defaultChat: string): Promise<void> {
+    const session = this.storage.session();
+
+    if (!session || defaultChatOf(session) !== defaultChat) {
+      throw sessionNotFound();
+    }
+
+    if (phaseOf(session) !== "creating") {
       return;
     }
 
-    await this.db.migrate();
+    try {
+      await this.catalog.created(session);
+      this.storage.records.markSynced(defaultChat, session.revision);
+      await this.openAgent();
 
-    const durability = new DurabilityAlarms({
-      context: this.ctx,
-      handlers: {
-        syncCatalog: async (): Promise<void> => {
-          await this.sendSummary();
-        },
-        flushSubscribers: async (): Promise<void> => {
-          const session = this.getSession();
-
-          if (session) {
-            await this.publisher.flush(session.revision);
-          }
-        },
-      },
-      methods: {
-        // The host ignores repeated summaries, so a timed-out sync can run again.
-        syncCatalog: { attemptTimeoutMs: CATALOG_SYNC_TIMEOUT_MS, retryTimeouts: true },
-      },
-    });
-
-    this.storage = { kind: "open", durability };
-  }
-
-  /**
-   * Creates the storage and inserts a new record.
-   *
-   * @throws {Error} If a session exists.
-   */
-  private async insertSession(record: SessionRecord): Promise<void> {
-    await this.openStorage();
-
-    this.db.transactionSync(() => {
-      if (this.db.orm.select({ id: sessionTable.id }).from(sessionTable).get()) {
-        throw new Error("Session already exists");
+      await this.applyChange((record) =>
+        phaseOf(record) === "creating"
+          ? applySession(record, { type: AHPActionType.SessionReady })
+          : undefined,
+      );
+    } catch (error) {
+      if (!this.isCurrent(defaultChat)) {
+        throw sessionNotFound();
       }
 
-      this.db.orm.insert(sessionTable).values(record).run();
-    });
+      if (isPermanentCreationFailure(error)) {
+        await this.failCreation(defaultChat, error);
+      }
+
+      throw error;
+    }
   }
 
   /**
-   * Closes the agent, records a creation-failed action, and removes the session. Does nothing
-   * if the host removed the session and created it again.
+   * Runs the `finishCreate` alarm. Continues a creation that a restart or a transient error
+   * stopped. A timeout closes the agent connection, which stops the attempt. The record counts
+   * the attempts, so a restart does not reset them. After the last attempt, fails the creation.
+   */
+  private async finishCreate({ signal }: DurableAlarmInfo): Promise<void> {
+    const session = this.storage.session();
+
+    if (!session || phaseOf(session) !== "creating") {
+      return;
+    }
+
+    const defaultChat = defaultChatOf(session);
+    const attempts = this.storage.records.countCreationAttempt(defaultChat);
+
+    const stop = (): void => {
+      this.agent.close();
+    };
+
+    signal.addEventListener("abort", stop);
+
+    try {
+      await this.runCreation(defaultChat);
+    } catch (error) {
+      // No creation remains to retry if the attempt failed it or a dispose started.
+      if (!this.isCurrent(defaultChat)) {
+        return;
+      }
+
+      if (attempts < this.storage.requireOpen().policy.createAttempts) {
+        throw error;
+      }
+
+      await this.failCreation(defaultChat, error);
+    } finally {
+      signal.removeEventListener("abort", stop);
+    }
+  }
+
+  /**
+   * Closes the agent connection, records a creation-failed action, and commits a dispose. The
+   * `finishDispose` alarm deletes the session.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- error comes from a catch binding
-  private async handleCreationFailed(error: unknown, defaultChat: string): Promise<void> {
-    if (!this.isCurrent(defaultChat)) {
-      return;
-    }
-
+  private async failCreation(defaultChat: string, error: unknown): Promise<void> {
     this.agent.close();
 
-    try {
-      await this.applyChange((record) =>
-        applySession(record, {
-          type: AHPActionType.SessionCreationFailed,
-          error: { errorType: "agent", message: errorMessage(error) },
-        }),
-      );
-    } finally {
-      await this.removeStorage();
+    await this.commitDispose(defaultChat, Date.now(), (record) =>
+      applySession(record, {
+        type: AHPActionType.SessionCreationFailed,
+        error: { errorType: "agent", message: errorMessage(error) },
+      }),
+    );
+  }
+
+  /**
+   * Commits a dispose of the creation with `defaultChat`, with the optional final `change`.
+   * Schedules `finishDispose` at `at` first, so the dispose finishes after a restart. An alarm
+   * without a disposing record does nothing.
+   */
+  private async commitDispose(
+    defaultChat: string,
+    at: number,
+    change?: (record: SessionRecord) => SessionUpdate,
+  ): Promise<void> {
+    await this.storage.requireOpen().alarms.finishDispose(at);
+    const committed = this.storage.records.commitDispose(defaultChat, change);
+
+    if (committed?.update) {
+      await this.publisher.publish([committed.update]);
     }
   }
 
   /**
-   * Waits for the queued updates, tells the subscribed routers that the session is disposed,
-   * then deletes all storage. `applyChange` writes nothing after this method starts.
+   * Closes the agent connection, tells the subscribed routers, removes the catalog entry, and
+   * then deletes all storage. Does nothing unless a dispose committed. Callers for the same
+   * creation wait for the steps that run now. Each step can run again after a failure.
+   *
+   * The `finishDispose` alarm and a create can run these steps while `dispose` still waits for
+   * the agent. A connection that stays open after the deletion goes to the next creation.
    */
-  private async removeStorage(): Promise<void> {
-    if (this.storage.kind !== "open") {
-      // Another call may be removing the storage now.
-      if (this.storage.kind === "removing") {
-        await this.storage.removed;
-      }
+  private async completeDisposal(): Promise<void> {
+    const record = this.storage.record();
 
+    if (!record || phaseOf(record) !== "disposing") {
       return;
     }
 
-    const removed = (async (): Promise<void> => {
+    await this.disposal.run(defaultChatOf(record), async () => {
+      this.agent.close();
       await this.publisher.dispose();
-      await this.db.deleteAll();
-    })();
+      await this.catalog.removed(record.id, defaultChatOf(record));
+      await this.storage.remove();
+    });
+  }
 
-    this.storage = { kind: "removing", removed };
-
+  /** Runs the disposal for the `finishDispose` alarm, and schedules a new run if it fails. */
+  private async retryDisposal(): Promise<void> {
     try {
-      await removed;
-    } finally {
-      this.storage = { kind: "absent" };
+      await this.completeDisposal();
+      this.disposalFailures = 0;
+    } catch (error) {
+      logFailure("Session deletion failed")(error);
+      this.disposalFailures += 1;
+      const open = this.storage.opened();
+
+      if (open) {
+        const delay = retryDelay(open.policy, this.disposalFailures);
+        await open.alarms.finishDispose(Date.now() + delay);
+      }
+    }
+  }
+
+  /**
+   * Removes a catalog entry with the session ID of this object, which has no session.
+   *
+   * @throws {AHPError} With the `SessionNotFound` code if the catalog has no entry.
+   */
+  private async removeOrphanedEntry(): Promise<void> {
+    if (!(await this.catalog.orphanRemoved(this.name().sessionId))) {
+      throw sessionNotFound();
     }
   }
 
@@ -365,8 +548,8 @@ export abstract class AgentSession<
    * Opens the agent connection and stores the ACP session ID if the agent assigns a new one.
    */
   private async openAgent(): Promise<void> {
-    const session = this.requireSession();
-    const { defaultChat } = session.sessionState;
+    const session = this.storage.requireSession();
+    const defaultChat = defaultChatOf(session);
 
     const acpSessionId = await this.agent.open({
       stream: (): Promise<ACPStream> => this.connectAgent(session.id),
@@ -374,192 +557,24 @@ export abstract class AgentSession<
       sessionId: session.acpSessionId,
     });
 
-    // The host can dispose the session while the agent connection opens.
+    // A dispose can start while the agent connection opens.
     if (!this.isCurrent(defaultChat)) {
       throw sessionNotFound();
     }
 
     if (acpSessionId !== session.acpSessionId) {
-      this.db.orm
-        .update(sessionTable)
-        .set({ acpSessionId })
-        .where(eq(sessionTable.id, session.id))
-        .run();
+      this.storage.records.setAcpSessionId(defaultChat, acpSessionId);
     }
-  }
-
-  /**
-   * Validates a user text message, records the turn, and starts the prompt in the background.
-   */
-  private async startTurn(request: TurnStartedRequest, origin: AHPActionOrigin): Promise<void> {
-    const { message } = request;
-
-    if (
-      message.origin.kind !== "user" ||
-      (message.attachments?.length ?? 0) > 0 ||
-      message.model ||
-      message.agent
-    ) {
-      throw new Error("Only user text messages are supported");
-    }
-
-    const action: AHPChatTurnStartedAction = {
-      type: AHPActionType.ChatTurnStarted,
-      turnId: request.turnId,
-      startedAt: request.startedAt,
-      message: { text: message.text, origin: { kind: AHPMessageKind.User } },
-    };
-
-    if (this.promptRunning) {
-      throw new Error("A turn is already running");
-    }
-
-    this.promptRunning = true;
-
-    try {
-      await this.applyExistingChange((record) => {
-        if (record.sessionState.lifecycle !== AHPSessionLifecycle.Ready) {
-          throw new Error("Session is not ready");
-        }
-
-        if (record.chatState.activeTurn) {
-          throw new Error("A turn is already running");
-        }
-
-        if (record.chatState.turns.some((turn) => turn.id === action.turnId)) {
-          throw new Error("Turn ID already exists");
-        }
-
-        return applyChat(record, action, origin);
-      });
-    } catch (error) {
-      this.promptRunning = false;
-      throw error;
-    }
-
-    waitUntil(this.runPrompt(action));
-  }
-
-  /** Cancels the active turn and notifies the agent to stop the in-flight prompt. */
-  private async cancelTurn(request: TurnCancelledRequest, origin: AHPActionOrigin): Promise<void> {
-    await this.applyExistingChange((record) => {
-      if (record.sessionState.lifecycle !== AHPSessionLifecycle.Ready) {
-        throw new Error("Session is not ready");
-      }
-
-      if (record.chatState.activeTurn?.id !== request.turnId) {
-        throw new Error("No matching active turn to cancel");
-      }
-
-      return applyChat(record, { ...request, type: AHPActionType.ChatTurnCancelled }, origin);
-    });
-
-    await this.agent.cancel();
-  }
-
-  /**
-   * Runs the agent prompt for a started turn and applies its response parts, completion, and
-   * errors. Clears `promptRunning` when the prompt run ends.
-   */
-  private async runPrompt(action: AHPChatTurnStartedAction): Promise<void> {
-    const { turnId } = action;
-    const startedAt = Date.now();
-
-    try {
-      await this.openAgent();
-
-      const responding = await this.applyActionToTurn(turnId, {
-        type: AHPActionType.ChatResponsePart,
-        turnId,
-        part: { kind: AHPResponsePartKind.Markdown, id: turnId, content: "" },
-      });
-
-      if (!responding) {
-        return;
-      }
-
-      const response = await this.agent.prompt(action.message.text, async (content) => {
-        await this.applyActionToTurn(turnId, {
-          type: AHPActionType.ChatDelta,
-          turnId,
-          partId: turnId,
-          content,
-        });
-      });
-
-      await this.applyActionToTurn(turnId, {
-        type:
-          response.stopReason === "cancelled"
-            ? AHPActionType.ChatTurnCancelled
-            : AHPActionType.ChatTurnComplete,
-        turnId,
-        duration: Date.now() - startedAt,
-      });
-    } catch (error) {
-      await this.applyActionToTurn(turnId, {
-        type: AHPActionType.ChatError,
-        turnId,
-        duration: Date.now() - startedAt,
-        part: {
-          kind: AHPResponsePartKind.Error,
-          error: { errorType: "agent", message: errorMessage(error) },
-        },
-      });
-    } finally {
-      this.promptRunning = false;
-    }
-  }
-
-  /** Returns the session record, or undefined if the session has no storage. */
-  private getSession(): SessionRecord | undefined {
-    return this.storage.kind === "open" ? this.db.orm.select().from(sessionTable).get() : undefined;
-  }
-
-  /**
-   * Returns the session record.
-   *
-   * @throws {AHPError} If the session does not exist.
-   */
-  private requireSession(): SessionRecord {
-    const session = this.getSession();
-
-    if (!session) {
-      throw sessionNotFound();
-    }
-
-    return session;
   }
 
   /**
    * Saves the changed record, then queues its update for the subscribed routers. Schedules a
    * catalog sync when a summary field other than `modifiedAt` changes.
-   * Returns false when the session does not exist or the change is skipped.
+   * Returns false when the session is absent or disposing, or the change is skipped.
    */
   private async applyChange(change: SessionChange): Promise<boolean> {
-    const durability = this.durability();
-
-    if (!durability) {
-      return false;
-    }
-
-    const saved = this.db.transactionSync(() => {
-      const session = this.getSession();
-
-      if (!session) {
-        return;
-      }
-
-      const before = catalogFields(session);
-      const update = change(session);
-
-      if (!update) {
-        return;
-      }
-
-      this.db.orm.update(sessionTable).set(session).where(eq(sessionTable.id, session.id)).run();
-
-      return { update, summaryChanged: before !== catalogFields(session) };
-    });
+    const alarms = this.storage.alarms();
+    const saved = alarms && this.storage.records.save(change);
 
     if (!saved) {
       return false;
@@ -568,75 +583,70 @@ export abstract class AgentSession<
     await this.publisher.publish([saved.update]);
 
     if (saved.summaryChanged) {
-      await durability.syncCatalog(Date.now());
+      await alarms.syncCatalog(Date.now());
     }
 
     return true;
   }
 
-  /** Applies a change and pushes it. Throws when the session is absent. */
-  private async applyExistingChange(
-    change: (record: SessionRecord) => SessionUpdate,
-  ): Promise<void> {
-    const saved = await this.applyChange(change);
+  /**
+   * Returns true if the creation with `defaultChat` is stored and not disposing. A session
+   * that was disposed and created again during an `await` has a different default chat.
+   */
+  private isCurrent(defaultChat: string): boolean {
+    const session = this.storage.session();
 
-    if (!saved) {
-      throw sessionNotFound();
-    }
+    return session !== undefined && defaultChatOf(session) === defaultChat;
   }
 
-  /**
-   * Applies `action` while `turnId` is the active turn. Returns false after the turn stops being
-   * active, for example after a cancellation.
-   */
-  private applyActionToTurn(turnId: string, action: AHPChatAction): Promise<boolean> {
-    return this.applyChange((record) =>
-      record.chatState.activeTurn?.id === turnId ? applyChat(record, action) : undefined,
+  /** Returns true if the creation with `defaultChat` committed a dispose and is stored. */
+  private isDisposing(defaultChat: string): boolean {
+    const record = this.storage.record();
+
+    return (
+      record !== undefined &&
+      phaseOf(record) === "disposing" &&
+      defaultChatOf(record) === defaultChat
     );
   }
 
   /**
-   * Returns true if the stored session has the default chat `defaultChat`. Each creation makes
-   * a new chat ID. Thus a session that the host removed and created again during an `await`
-   * has a different `defaultChat`.
+   * Sends the latest summary to the host. Until the session is ready, `sessionCreated` carries
+   * the summary, so this method sends nothing.
    */
-  private isCurrent(defaultChat: string | undefined): boolean {
-    return this.getSession()?.sessionState.defaultChat === defaultChat;
-  }
-
-  /** Sends the latest summary to the host. The host ignores old revisions. */
   private async sendSummary(): Promise<void> {
-    const session = this.getSession();
+    const session = this.storage.session();
 
-    if (!session) {
+    if (!session || phaseOf(session) !== "ready") {
       return;
     }
 
-    await this.host.getByName(session.hostId).summaryChanged({
-      sessionId: session.id,
-      defaultChat: session.chatState.resource,
-      revision: session.revision,
-      summary: sessionSummary(session),
-    });
+    await this.catalog.summaryChanged(session);
+    this.storage.records.markSynced(defaultChatOf(session), session.revision);
   }
 
-  /** Returns the named alarms while the session has storage. */
-  private durability(): SessionDurability | undefined {
-    return this.storage.kind === "open" ? this.storage.durability : undefined;
-  }
-
-  /** Returns the session ID from the Durable Object name. */
-  private sessionId(): string {
-    return sessionIdFromDOName(requireName(this.ctx, "AgentSession"));
+  /** Returns the host ID and session ID from the Durable Object name. */
+  private name(): SessionDOName {
+    return parseSessionDOName(requireName(this.ctx, "AgentSession"));
   }
 }
 
 /**
- * Returns the summary fields that the host stores, without `modifiedAt`, as JSON. A change to
- * `modifiedAt` alone does not schedule a catalog sync.
+ * Returns true if a creation cannot succeed when it runs again: the agent answered with an
+ * error, or the host catalog has another session with the session ID.
  */
-function catalogFields(record: SessionRecord): string {
-  const { modifiedAt: _modifiedAt, ...fields } = sessionSummary(record);
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- error comes from a catch binding
+function isPermanentCreationFailure(error: unknown): boolean {
+  return (
+    error instanceof ACPRequestError ||
+    toAHPError(error).code === AHPErrorCodes.SessionAlreadyExists
+  );
+}
 
-  return JSON.stringify(fields);
+/** Returns a handler that logs a failure that no caller receives. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- error comes from a catch binding
+function logFailure(message: string): (error: unknown) => void {
+  return (error) => {
+    console.error(message, { error: errorMessage(error) });
+  };
 }

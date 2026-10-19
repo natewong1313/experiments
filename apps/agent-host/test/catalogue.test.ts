@@ -2,7 +2,16 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
-import { SessionStatus as AHPSessionStatus } from "@microsoft/agent-host-protocol";
+import {
+  AhpErrorCodes as AHPErrorCodes,
+  SessionOriginKind as AHPSessionOriginKind,
+  SessionStatus as AHPSessionStatus,
+} from "@microsoft/agent-host-protocol";
+import type { SessionSummary as AHPSessionSummary } from "@experiments/protocol-schemas/ahp";
+import type { HostRPC } from "../src";
+import { sessionSummary } from "../src/session/state";
+import { failure, newRecord } from "./fixtures";
+import { chatUri, sessionUri } from "../src/shared/lookups";
 import { HostDatabase } from "../src/host/db/database";
 import { sessionsTable } from "../src/host/db/schema";
 import { ROOT_CHANNEL } from "../src/shared/protocol";
@@ -80,4 +89,87 @@ it("syncs summary changes to the host and ignores old revisions and replaced ses
   );
 
   expect(catalogue.items).toEqual([entry.summary]);
+});
+
+type Entry = { host: HostRPC; sessionId: string; defaultChat: string; summary: AHPSessionSummary };
+
+/** Returns a host and a catalogue entry for a new session ID, without storing the entry. */
+function newEntry(): Entry {
+  const record = newRecord();
+
+  return {
+    host: env.COORDINATORS.getByName(crypto.randomUUID()),
+    sessionId: record.id,
+    defaultChat: record.chatState.resource,
+    summary: sessionSummary(record),
+  };
+}
+
+async function listed(host: HostRPC): Promise<AHPSessionSummary[]> {
+  const { items } = await host.listSessions();
+
+  return items;
+}
+
+it("validates summary changes and ignores sessions absent from the catalogue", async () => {
+  const { host, sessionId, defaultChat, summary } = newEntry();
+  const update = { sessionId, defaultChat, revision: 1, summary };
+
+  await host.summaryChanged(update);
+  expect(await listed(host)).toEqual([]);
+
+  const invalid = await failure(host.summaryChanged({ ...update, revision: Number.NaN }));
+  expect(invalid).toMatchObject({ name: "HostSummaryChangedError" });
+});
+
+it("fences catalogue entries by their default chat", async () => {
+  const { host, sessionId, defaultChat, summary } = newEntry();
+  const otherChat = chatUri(sessionId, crypto.randomUUID());
+  const entry = { sessionId, defaultChat, revision: 0, summary };
+
+  await host.sessionCreated(entry);
+
+  // A repeated create of the same session changes nothing.
+  await host.sessionCreated(entry);
+  expect(await listed(host)).toEqual([summary]);
+
+  const replaced = await failure(host.sessionCreated({ ...entry, defaultChat: otherChat }));
+  expect(replaced).toMatchObject({
+    name: "HostSessionCreatedError",
+    code: AHPErrorCodes.SessionAlreadyExists,
+  });
+
+  // A removal from another creation of the session ID leaves the entry.
+  expect(await host.sessionRemoved({ sessionId, defaultChat: otherChat })).toEqual({
+    removed: false,
+  });
+  expect(await listed(host)).toEqual([summary]);
+  expect(await host.sessionRemoved({ sessionId, defaultChat })).toEqual({ removed: true });
+
+  // A late summary does not add the removed session again.
+  const late = { ...summary, title: "Late" };
+  await host.summaryChanged({ sessionId, defaultChat, revision: 5, summary: late });
+  expect(await listed(host)).toEqual([]);
+  expect(await host.orphanRemoved({ sessionId })).toEqual({ removed: false });
+});
+
+it("retains the full AHP summary through host RPC and storage", async () => {
+  const { host, sessionId, defaultChat, summary: original } = newEntry();
+  await host.sessionCreated({ sessionId, defaultChat, revision: 0, summary: original });
+
+  const summary = {
+    ...original,
+    title: "Updated summary",
+    origin: {
+      kind: AHPSessionOriginKind.Automation,
+      automation: "ahp-automation:/scheduled-task",
+      run: "ahp-automation-run:/scheduled-run",
+    },
+    _meta: { label: "retained" },
+  };
+
+  await host.summaryChanged({ sessionId, defaultChat, revision: 1, summary });
+
+  expect(await listed(host)).toEqual([summary]);
+  expect(summary.resource).toBe(sessionUri(sessionId));
 });

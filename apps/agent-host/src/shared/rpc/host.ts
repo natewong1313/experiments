@@ -1,9 +1,6 @@
 import * as z from "zod";
 import { SessionSummarySchema as AHPSessionSummarySchema } from "@experiments/protocol-schemas/ahp";
-import type {
-  CreateSessionParams as AHPCreateSessionParams,
-  ListSessionsResult as AHPListSessionsResult,
-} from "@experiments/protocol-schemas/ahp";
+import type { ListSessionsResult as AHPListSessionsResult } from "@experiments/protocol-schemas/ahp";
 import type { RootState as AHPRootState } from "@microsoft/agent-host-protocol";
 import { CodedRpcError } from "./errors";
 
@@ -13,9 +10,11 @@ export type HostSubscribeRootResponse = { revision: number; state: AHPRootState 
 
 export type HostUnsubscribeRootRequest = { router: string };
 
-export type HostDisposeSessionRequest = { sessionId: string };
-
-export const HostSummaryChangedRequestSchema = z.object({
+/**
+ * The catalogue entry of a session at one session revision. `sessionCreated` and
+ * `summaryChanged` send it.
+ */
+export const HostSessionEntrySchema = z.object({
   sessionId: z.string(),
   /** A session that reuses the ID of a disposed session has a new default chat URI. */
   defaultChat: z.string(),
@@ -23,7 +22,13 @@ export const HostSummaryChangedRequestSchema = z.object({
   summary: AHPSessionSummarySchema,
 });
 
-export type HostSummaryChangedRequest = z.input<typeof HostSummaryChangedRequestSchema>;
+export type HostSessionEntry = z.input<typeof HostSessionEntrySchema>;
+
+export type HostSessionRemovedRequest = { sessionId: string; defaultChat: string };
+
+export type HostOrphanRemovedRequest = { sessionId: string };
+
+export type HostRemovedResponse = { removed: boolean };
 
 export class HostSubscribeRootError extends CodedRpcError {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
@@ -41,19 +46,19 @@ export class HostListSessionsError extends CodedRpcError {
   }
 }
 
-export class HostCreateSessionError extends CodedRpcError {
+export class HostSessionCreatedError extends CodedRpcError {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
   constructor(cause: unknown) {
     super(cause);
-    this.name = "HostCreateSessionError";
+    this.name = "HostSessionCreatedError";
   }
 }
 
-export class HostDisposeSessionError extends CodedRpcError {
+export class HostSessionRemovedError extends CodedRpcError {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
   constructor(cause: unknown) {
     super(cause);
-    this.name = "HostDisposeSessionError";
+    this.name = "HostSessionRemovedError";
   }
 }
 
@@ -85,20 +90,13 @@ export interface HostRPC extends Rpc.DurableObjectBranded {
   listSessions(): Promise<AHPListSessionsResult>;
 
   /**
-   * Adds a session to the catalogue and creates its session Durable Object.
-   * Resolves after the session is ready. Root subscribers see the session while it is creating.
+   * Adds a session to the catalogue and tells root subscribers. Does nothing if the catalogue
+   * has the session with the same default chat.
    *
-   * @throws {HostCreateSessionError} If the parameters are not valid, the session exists, or
-   * agent setup fails. The error has the AHP error `code` for the client.
+   * @throws {HostSessionCreatedError} If validation or storage fails, or if the catalogue has
+   * the session ID with a different default chat.
    */
-  createSession(params: AHPCreateSessionParams): Promise<void>;
-
-  /**
-   * Disposes the session Durable Object and removes the session from the catalogue.
-   *
-   * @throws {HostDisposeSessionError} If the session does not exist or disposal fails.
-   */
-  disposeSession(req: HostDisposeSessionRequest): Promise<void>;
+  sessionCreated(req: HostSessionEntry): Promise<void>;
 
   /**
    * Stores the latest summary of a session and tells root subscribers which fields changed.
@@ -106,5 +104,21 @@ export interface HostRPC extends Rpc.DurableObjectBranded {
    *
    * @throws {HostSummaryChangedError} If validation or storage fails.
    */
-  summaryChanged(req: HostSummaryChangedRequest): Promise<void>;
+  summaryChanged(req: HostSessionEntry): Promise<void>;
+
+  /**
+   * Removes a session from the catalogue and tells root subscribers. Ignores an entry with a
+   * different default chat. Returns whether the host removed an entry.
+   *
+   * @throws {HostSessionRemovedError} If storage fails.
+   */
+  sessionRemoved(req: HostSessionRemovedRequest): Promise<HostRemovedResponse>;
+
+  /**
+   * Removes the catalogue entry with the session ID, whatever its default chat. Only a session
+   * object without a session sends this request. Returns whether the host removed an entry.
+   *
+   * @throws {HostSessionRemovedError} If storage fails.
+   */
+  orphanRemoved(req: HostOrphanRemovedRequest): Promise<HostRemovedResponse>;
 }

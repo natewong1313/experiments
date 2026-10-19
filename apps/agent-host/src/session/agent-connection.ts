@@ -107,6 +107,24 @@ export class AgentConnection {
   }
 
   /**
+   * Sends a cancellation notification, then closes the connection. Returns without a close if
+   * another `close` call runs first since a later `open` call can own the new connection.
+   */
+  async stop(): Promise<void> {
+    const { signal } = this.closing;
+
+    try {
+      await untilAborted(this.cancel(), signal);
+    } catch {
+      // Closing the connection stops the prompt.
+    } finally {
+      if (!signal.aborted) {
+        this.close();
+      }
+    }
+  }
+
+  /**
    * Closes the current connection and invalidates pending connection attempts.
    */
   close(): void {
@@ -129,7 +147,7 @@ export class AgentConnection {
    * Initialization failure or cancellation closes the connection.
    */
   private async connect(options: OpenOptions, signal: AbortSignal): Promise<ConnectedSession> {
-    const stream = await options.stream();
+    const stream = await openStream(options, signal);
     let opened: ConnectedSession | undefined;
 
     const connection = acpClient({ name: "agent-host" })
@@ -212,5 +230,55 @@ export class AgentConnection {
     ) {
       await session.onText(update.content.text);
     }
+  }
+}
+
+/**
+ * Opens the stream, or rejects when `signal` aborts first. A stream that opens after the abort
+ * has no connection that can close it, so this function closes it.
+ */
+async function openStream(options: OpenOptions, signal: AbortSignal): Promise<ACPStream> {
+  signal.throwIfAborted();
+  const opening = options.stream();
+
+  try {
+    return await untilAborted(opening, signal);
+  } catch (error) {
+    if (signal.aborted) {
+      void closeLateStream(opening);
+    }
+
+    throw error;
+  }
+}
+
+/** Settles as `promise` does, or rejects with the abort reason when `signal` aborts first. */
+async function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  const aborted = Promise.withResolvers<never>();
+
+  function abort(): void {
+    aborted.reject(signal.reason);
+  }
+
+  if (signal.aborted) {
+    abort();
+  } else {
+    signal.addEventListener("abort", abort, { once: true });
+  }
+
+  try {
+    return await Promise.race([promise, aborted.promise]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+
+/** Closes the stream of a connection attempt that stopped before the stream opened. */
+async function closeLateStream(opening: Promise<ACPStream>): Promise<void> {
+  try {
+    const stream = await opening;
+    await Promise.allSettled([stream.readable.cancel(), stream.writable.abort()]);
+  } catch {
+    // The stream did not open, so nothing remains to close.
   }
 }

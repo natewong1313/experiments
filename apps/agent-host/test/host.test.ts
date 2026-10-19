@@ -56,13 +56,19 @@ async function chatState(peer: Peer, chat: string): Promise<ChatState> {
   return ChatStateSchema.parse(result.snapshot?.state);
 }
 
-it("refuses a host that was not addressed by name", async () => {
-  const stub = env.COORDINATORS.get(env.COORDINATORS.newUniqueId());
+it("refuses a session that was not addressed by name", async () => {
+  const stub = env.CONVERSATIONS.get(env.CONVERSATIONS.newUniqueId());
   const channel = `ahp-session:/${crypto.randomUUID()}`;
 
-  await expect(stub.createSession({ channel, provider: "test" })).rejects.toThrow(
-    "AgentHost must be addressed by name",
-  );
+  let failure: Error | undefined;
+
+  try {
+    await stub.create({ channel, provider: "test" });
+  } catch (error) {
+    failure = error instanceof Error ? error : undefined;
+  }
+
+  expect(failure).toMatchObject({ message: "AgentSession must be addressed by name" });
 });
 
 it("rejects actions on a session channel and reports only changed summary fields", async () => {

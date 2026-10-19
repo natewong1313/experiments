@@ -23,19 +23,19 @@ export type DoRpcRetryOptions = {
 /**
  * Calls a Durable Object RPC and retries on failures.
  *
- * Each attempt gets a new stub from `stub`.
- * Only errors that the Durable Object marks as retryable cause a retry.
+ * Each attempt gets a new stub from `stub`. `call` also receives the attempt number, which
+ * starts at 1. Only errors that the Durable Object marks as retryable cause a retry.
  */
 export async function callDoRpc<S, T>(
   stub: () => S,
-  call: (stub: S) => Promise<T>,
+  call: (stub: S, attempt: number) => Promise<T>,
   options: DoRpcRetryOptions = {},
 ): Promise<T> {
   const attempts = options.attempts ?? DEFAULT_ATTEMPTS;
   const baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
   const maxDelayMs = options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
 
-  return tryN<T>(attempts, () => call(stub()), {
+  return tryN<T>(attempts, (attempt) => call(stub(), attempt), {
     isRetryable: (error) => isRetryable(error),
     baseDelayMs,
     maxDelayMs,

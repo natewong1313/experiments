@@ -55,6 +55,7 @@ import { RouterDatabase } from "./db/database";
 import { RouterChannels } from "./router-channels";
 import type { SenderRevision } from "./router-channels";
 import { SenderGate } from "./sender-gate";
+import { createSession, disposeSession } from "./session-requests";
 import { CloseCode, rootNotification, send, sendError } from "./websockets";
 
 const AttachmentSchema = z.object({ clientId: z.string().optional() }).nullable();
@@ -95,8 +96,9 @@ type RequestResult = AHPInitializeResult | AHPListSessionsResult | AHPSubscribeR
 /**
  * Owns one client WebSocket. The Worker creates one router for each connection.
  *
- * The router answers `initialize` and `ping`, sends catalogue requests to the host, and sends
- * session requests directly to the sessions. The host and the sessions push updates to the
+ * The router answers `initialize` and `ping`, sends `listSessions` and root subscriptions to
+ * the host, and sends all session requests, including `createSession` and `disposeSession`,
+ * directly to the sessions. The host and the sessions push updates to the
  * router. The router adds the `serverSeq` of the connection and forwards the updates to the
  * client.
  *
@@ -153,21 +155,6 @@ export abstract class AgentHostConnectionRouter<
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  /**
-   * Runs a client frame after all earlier frames. Ignores frames after a disconnect.
-   */
-  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    const { connection } = this;
-
-    if (connection.kind !== "open") {
-      return;
-    }
-
-    const frame = this.runFrame(connection, this.lastFrame, socket, message);
-    this.lastFrame = frame;
-    await frame;
-  }
-
   /** Completes the close handshake, then removes the subscriptions of the connection. */
   async webSocketClose(socket: WebSocket): Promise<void> {
     socket.close(CloseCode.Normal, "Connection closed");
@@ -178,31 +165,6 @@ export abstract class AgentHostConnectionRouter<
   async webSocketError(socket: WebSocket): Promise<void> {
     socket.close(CloseCode.InternalError, "Connection error");
     await this.closeConnection();
-  }
-
-  async sessionActions(req: RouterSessionActionsRequest): Promise<RouterPushResponse> {
-    const revisions = req.updates.map(({ revision, actions }) => ({ revision, items: actions }));
-
-    return await this.receivePush(req.sessionId, req.after, revisions, (socket, envelopes) => {
-      this.sendActions(socket, envelopes);
-    });
-  }
-
-  async sessionDisposed(req: RouterSessionDisposedRequest): Promise<void> {
-    if (await this.admitPush(req.sessionId)) {
-      this.channels.removeSender(req.sessionId);
-    }
-  }
-
-  async rootUpdate(req: RouterRootUpdateRequest): Promise<RouterPushResponse> {
-    const revisions = req.updates.map((update) => ({
-      revision: update.revision,
-      items: [{ channel: ROOT_CHANNEL, event: update }],
-    }));
-
-    return await this.receivePush(ROOT_SENDER, req.after, revisions, (socket, items) => {
-      this.sendRootEvents(socket, items);
-    });
   }
 
   /** Resumes the connection after a restart if the router has storage. */
@@ -254,16 +216,24 @@ export abstract class AgentHostConnectionRouter<
     }
   }
 
-  /** Resolves when pushes from the sender may continue. Returns false if the connection closed. */
-  private async admitPush(sender: string): Promise<boolean> {
-    await this.gate.settled(sender);
-
-    return this.connection.kind === "open";
-  }
-
   /** Returns false after the connection of the frame closes. */
   private isCurrent(frame: Frame): boolean {
     return this.connection === frame.connection;
+  }
+
+  /**
+   * Runs a client frame after all earlier frames. Ignores frames after a disconnect.
+   */
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const { connection } = this;
+
+    if (connection.kind !== "open") {
+      return;
+    }
+
+    const frame = this.runFrame(connection, this.lastFrame, socket, message);
+    this.lastFrame = frame;
+    await frame;
   }
 
   /**
@@ -340,33 +310,6 @@ export abstract class AgentHostConnectionRouter<
     }
   }
 
-  private async handleNotification(
-    socket: WebSocket,
-    { method, params }: JsonRpcCall,
-    frame: Frame,
-  ): Promise<void> {
-    try {
-      switch (method) {
-        case "dispatchAction": {
-          await this.dispatchAction(socket, params, frame);
-          break;
-        }
-
-        case "unsubscribe": {
-          this.requireClientId(socket);
-          await this.unsubscribeChannel(AHPChannelParamsSchema.parse(params).channel);
-          break;
-        }
-
-        default: {
-          break;
-        }
-      }
-    } catch {
-      // A JSON-RPC notification has no reply, so the router ignores a failed notification.
-    }
-  }
-
   /** Runs the handler for an AHP request and returns its result. */
   private async runRequest(
     socket: WebSocket,
@@ -408,13 +351,15 @@ export abstract class AgentHostConnectionRouter<
       }
 
       case "createSession": {
-        await this.hostStub().createSession(AHPCreateSessionParamsSchema.parse(params));
+        const create = AHPCreateSessionParamsSchema.parse(params);
+        await createSession((id) => this.sessionStub(id), create);
 
         return null;
       }
 
       case "disposeSession": {
-        await this.disposeSession(AHPChannelParamsSchema.parse(params).channel);
+        const { channel } = AHPChannelParamsSchema.parse(params);
+        await disposeSession((id) => this.sessionStub(id), channel);
 
         return null;
       }
@@ -427,6 +372,33 @@ export abstract class AgentHostConnectionRouter<
       default: {
         throw new AHPError("Method is not supported", AHPJsonRpcErrorCodes.MethodNotFound);
       }
+    }
+  }
+
+  private async handleNotification(
+    socket: WebSocket,
+    { method, params }: JsonRpcCall,
+    frame: Frame,
+  ): Promise<void> {
+    try {
+      switch (method) {
+        case "dispatchAction": {
+          await this.dispatchAction(socket, params, frame);
+          break;
+        }
+
+        case "unsubscribe": {
+          this.requireClientId(socket);
+          await this.unsubscribeChannel(AHPChannelParamsSchema.parse(params).channel);
+          break;
+        }
+
+        default: {
+          break;
+        }
+      }
+    } catch {
+      // A JSON-RPC notification has no reply, so the router ignores a failed notification.
     }
   }
 
@@ -460,6 +432,21 @@ export abstract class AgentHostConnectionRouter<
     };
   }
 
+  /** Returns the client ID set by `initialize`, or undefined before initialization. */
+  private clientId(socket: WebSocket): string | undefined {
+    return AttachmentSchema.parse(socket.deserializeAttachment())?.clientId;
+  }
+
+  private requireClientId(socket: WebSocket): string {
+    const clientId = this.clientId(socket);
+
+    if (clientId === undefined) {
+      throw new AHPError("Initialize the connection first", AHPJsonRpcErrorCodes.InvalidRequest);
+    }
+
+    return clientId;
+  }
+
   /**
    * Subscribes the client to the channels and returns their snapshots. Pushes from the senders
    * of these channels wait until the client receives the reply.
@@ -468,8 +455,10 @@ export abstract class AgentHostConnectionRouter<
    * still open. Otherwise it tells each sender that accepted a new subscription to stop.
    */
   private async subscribeChannels(channels: string[], frame: Frame): Promise<AHPSnapshot[]> {
+    // An invalid channel throws here, before the router holds any sender.
     const items = channels.map((channel) => ({ channel, parsed: parseChannel(channel) }));
 
+    // Pushes from these senders wait until the frame sends its reply.
     for (const item of items) {
       this.gate.hold(channelSender(item.parsed), frame.done);
     }
@@ -478,7 +467,7 @@ export abstract class AgentHostConnectionRouter<
       items.map(async (item) => await this.subscribeAtSender(item.channel, item.parsed)),
     );
 
-    const loaded = results.flatMap((result) =>
+    const snapshots = results.flatMap((result) =>
       result.status === "fulfilled" ? [result.value] : [],
     );
 
@@ -488,12 +477,12 @@ export abstract class AgentHostConnectionRouter<
     if (failure || !open) {
       // Subscriptions from earlier requests stay while the connection is open.
       // After a close, the router has no storage. Thus each accepted subscription must stop.
-      const added = open
-        ? loaded.filter((item) => !this.channels.isSubscribed(item.channel))
-        : loaded;
+      const subscriptionsToUndo = open
+        ? snapshots.filter((item) => !this.channels.isSubscribed(item.channel))
+        : snapshots;
 
       await Promise.allSettled(
-        added.map(async (item) => {
+        subscriptionsToUndo.map(async (item) => {
           await this.unsubscribeAtSender(item.sender, [item.channel]);
         }),
       );
@@ -501,11 +490,36 @@ export abstract class AgentHostConnectionRouter<
       throw failure ? toAHPError(failure.reason) : new AHPError("Connection is closed");
     }
 
-    return loaded.map(({ channel, sender, revision, state }) => ({
+    return snapshots.map(({ channel, sender, revision, state }) => ({
       resource: channel,
       state,
       fromSeq: this.channels.subscribe({ channel, sender, revision }),
     }));
+  }
+
+  /**
+   * Subscribes this router at the sender of the channel and returns the snapshot. The host is
+   * the sender of the root channel. A session is the sender of its session and chat channels.
+   */
+  private async subscribeAtSender(channel: string, parsed: Channel): Promise<SenderSnapshot> {
+    const router = this.routerName();
+    const sender = channelSender(parsed);
+
+    if (parsed.kind === "root") {
+      const root = await callDoRpc(
+        () => this.hostStub(),
+        (host) => host.subscribeRoot({ router }),
+      );
+
+      return { channel, sender, ...root };
+    }
+
+    const session = await callDoRpc(
+      () => this.sessionStub(parsed.sessionId),
+      (stub) => stub.subscribe({ router, channel }),
+    );
+
+    return { channel, sender, ...session };
   }
 
   /** Removes a subscription here, then at its sender. */
@@ -517,14 +531,19 @@ export abstract class AgentHostConnectionRouter<
     }
   }
 
-  private async disposeSession(channel: string): Promise<void> {
-    const parsed = parseChannel(channel);
+  /** Tells the sender to stop its pushes of `channels` to this router. */
+  private async unsubscribeAtSender(sender: string, channels: string[]): Promise<void> {
+    const router = this.routerName();
 
-    if (parsed.kind !== "session") {
-      throw new AHPError("Expected an ahp-session channel");
-    }
-
-    await this.hostStub().disposeSession({ sessionId: parsed.sessionId });
+    await (sender === ROOT_SENDER
+      ? callDoRpc(
+          () => this.hostStub(),
+          (host) => host.unsubscribeRoot({ router }),
+        )
+      : callDoRpc(
+          () => this.sessionStub(sender),
+          (session) => session.unsubscribe({ router, channels }),
+        ));
   }
 
   /**
@@ -577,59 +596,29 @@ export abstract class AgentHostConnectionRouter<
     }
   }
 
-  /** Returns the client ID set by `initialize`, or undefined before initialization. */
-  private clientId(socket: WebSocket): string | undefined {
-    return AttachmentSchema.parse(socket.deserializeAttachment())?.clientId;
+  async sessionActions(req: RouterSessionActionsRequest): Promise<RouterPushResponse> {
+    const revisions = req.updates.map(({ revision, actions }) => ({ revision, items: actions }));
+
+    return await this.receivePush(req.sessionId, req.after, revisions, (socket, envelopes) => {
+      this.sendActions(socket, envelopes);
+    });
   }
 
-  private requireClientId(socket: WebSocket): string {
-    const clientId = this.clientId(socket);
+  async rootUpdate(req: RouterRootUpdateRequest): Promise<RouterPushResponse> {
+    const revisions = req.updates.map((update) => ({
+      revision: update.revision,
+      items: [{ channel: ROOT_CHANNEL, event: update }],
+    }));
 
-    if (clientId === undefined) {
-      throw new AHPError("Initialize the connection first", AHPJsonRpcErrorCodes.InvalidRequest);
+    return await this.receivePush(ROOT_SENDER, req.after, revisions, (socket, items) => {
+      this.sendRootEvents(socket, items);
+    });
+  }
+
+  async sessionDisposed(req: RouterSessionDisposedRequest): Promise<void> {
+    if (await this.admitPush(req.sessionId)) {
+      this.channels.removeSender(req.sessionId);
     }
-
-    return clientId;
-  }
-
-  /**
-   * Subscribes this router at the sender of the channel and returns the snapshot. The host is
-   * the sender of the root channel. A session is the sender of its session and chat channels.
-   */
-  private async subscribeAtSender(channel: string, parsed: Channel): Promise<SenderSnapshot> {
-    const router = this.routerName();
-    const sender = channelSender(parsed);
-
-    if (parsed.kind === "root") {
-      const root = await callDoRpc(
-        () => this.hostStub(),
-        (host) => host.subscribeRoot({ router }),
-      );
-
-      return { channel, sender, ...root };
-    }
-
-    const session = await callDoRpc(
-      () => this.sessionStub(parsed.sessionId),
-      (stub) => stub.subscribe({ router, channel }),
-    );
-
-    return { channel, sender, ...session };
-  }
-
-  /** Tells the sender to stop its pushes of `channels` to this router. */
-  private async unsubscribeAtSender(sender: string, channels: string[]): Promise<void> {
-    const router = this.routerName();
-
-    await (sender === ROOT_SENDER
-      ? callDoRpc(
-          () => this.hostStub(),
-          (host) => host.unsubscribeRoot({ router }),
-        )
-      : callDoRpc(
-          () => this.sessionStub(sender),
-          (session) => session.unsubscribe({ router, channels }),
-        ));
   }
 
   /**
@@ -671,6 +660,13 @@ export abstract class AgentHostConnectionRouter<
         return { subscribed: receipt.subscribed };
       }
     }
+  }
+
+  /** Resolves when pushes from the sender may continue. Returns false if the connection closed. */
+  private async admitPush(sender: string): Promise<boolean> {
+    await this.gate.settled(sender);
+
+    return this.connection.kind === "open";
   }
 
   /** Sends root actions with consecutive `serverSeq` values, and root notifications without. */

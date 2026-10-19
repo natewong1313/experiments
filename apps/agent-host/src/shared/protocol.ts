@@ -28,3 +28,8 @@ export class AHPError extends Error {
 export function sessionNotFound(): AHPError {
   return new AHPError("Session does not exist", AHPErrorCodes.SessionNotFound);
 }
+
+/** Returns the AHP error for a session ID that another session uses. */
+export function sessionAlreadyExists(): AHPError {
+  return new AHPError("Session already exists", AHPErrorCodes.SessionAlreadyExists);
+}

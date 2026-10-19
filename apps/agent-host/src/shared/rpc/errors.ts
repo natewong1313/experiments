@@ -31,11 +31,14 @@ const CodedErrorSchema = z.object({
 /**
  * Returns `cause` if it is an `AHPError`. If `cause` is a `CodedRpcError` from another Durable
  * Object, returns an `AHPError` with its code. Otherwise, returns an `AHPError` with the
- * message of `cause`.
+ * message of `cause` and `fallbackCode`.
  */
-// Exceptions can contain any thrown value.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
-export function toAHPError(cause: unknown): AHPError {
+export function toAHPError(
+  // Exceptions can contain any thrown value.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters
+  cause: unknown,
+  fallbackCode: number = AHPJsonRpcErrorCodes.InvalidParams,
+): AHPError {
   if (cause instanceof AHPError) {
     return cause;
   }
@@ -49,5 +52,5 @@ export function toAHPError(cause: unknown): AHPError {
     return new AHPError(coded.data.message, coded.data.code, coded.data.data);
   }
 
-  return new AHPError(errorMessage(cause));
+  return new AHPError(errorMessage(cause), fallbackCode);
 }
