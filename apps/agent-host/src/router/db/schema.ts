@@ -12,8 +12,9 @@ export const connectionTable = sqliteTable(
 );
 
 /**
- * The senders that push updates to this router. A sender is the host or one session.
- * `revision` is the last revision that the router received from the sender.
+ * The senders that push updates to this router. A sender is the host or one session. `id` is
+ * the sender key from `senderKey`. `revision` is the last revision that the router received from
+ * the sender.
  */
 export const sendersTable = sqliteTable("senders", {
   id: text().primaryKey(),
@@ -21,11 +22,24 @@ export const sendersTable = sqliteTable("senders", {
 });
 
 /**
- * The channels that the client subscribes to. `revision` is the sender revision of the snapshot
- * that the client received. The router skips actions that the snapshot already contains.
+ * The channels that the client subscribes to. `sender` is the sender key from `senderKey`.
+ * `revision` is the sender revision of the snapshot that the client received. The router skips
+ * actions that the snapshot already contains.
  */
 export const subscriptionsTable = sqliteTable("subscriptions", {
   channel: text().primaryKey(),
   sender: text().notNull(),
   revision: integer().notNull(),
 });
+
+/**
+ * Holds one row, with ID 1, while a subscription setup holds pushes in memory. A row that
+ * remains after a restart shows that the router lost held pushes.
+ */
+export const subscriptionSetupTable = sqliteTable(
+  "subscription_setup",
+  {
+    id: integer().primaryKey(),
+  },
+  (table) => [check("subscription_setup_singleton", sql`${table.id} = 1`)],
+);

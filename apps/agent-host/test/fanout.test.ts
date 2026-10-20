@@ -3,12 +3,14 @@ import { drizzle } from "drizzle-orm/durable-sqlite";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { RouterDatabase } from "../src/router/db/database";
-import { RouterChannels } from "../src/router/router-channels";
+import { SubscriptionStore } from "../src/router/dependencies/subscription-store";
 import { SessionDatabase } from "../src/session/db/database";
 import { subscriberChannelsTable } from "../src/shared/db/fanout-schema";
 import { RouterFanout } from "../src/shared/fanout";
 import type { FanoutSender } from "../src/shared/fanout";
 import { newRouterDOName, sessionDOName } from "../src/shared/lookups";
+import { HOST_SENDER, sessionSender } from "../src/router/sender";
+import { ROOT_CHANNEL } from "../src/shared/protocol";
 
 type Item = { revision: number };
 
@@ -39,6 +41,14 @@ function sessionStub(): ReturnType<typeof env.CONVERSATIONS.getByName> {
   const name = sessionDOName(crypto.randomUUID(), crypto.randomUUID());
 
   return env.CONVERSATIONS.getByName(name);
+}
+
+/** Creates a subscription store over migrated router storage. */
+async function subscriptionStore(ctx: DurableObjectState): Promise<SubscriptionStore> {
+  const db = new RouterDatabase(ctx.storage);
+  await db.migrate();
+
+  return new SubscriptionStore(db);
 }
 
 function routerStub(): ReturnType<typeof env.CONNECTIONS.getByName> {
@@ -112,15 +122,23 @@ it("starts a new sender at the lowest snapshot revision of its channels", async 
   const stub = routerStub();
 
   const receipt = await runInDurableObject(stub, async (_instance, ctx) => {
-    const db = new RouterDatabase(ctx.storage);
-    await db.migrate();
-    const channels = new RouterChannels(db);
-    channels.subscribe({ channel: "chat", sender: "session", revision: CHAT_REVISION });
-    channels.subscribe({ channel: "session", sender: "session", revision: SESSION_REVISION });
+    const channels = await subscriptionStore(ctx);
+    channels.store({
+      channel: "chat",
+      sender: sessionSender("session"),
+      revision: CHAT_REVISION,
+    });
+    channels.store({
+      channel: "session",
+      sender: sessionSender("session"),
+      revision: SESSION_REVISION,
+    });
 
     const items = [{ channel: "session" }, { channel: "chat" }];
 
-    return channels.receive("session", SESSION_REVISION, [{ revision: CHAT_REVISION, items }]);
+    return channels.receive(sessionSender("session"), SESSION_REVISION, [
+      { revision: CHAT_REVISION, items },
+    ]);
   });
 
   // The chat snapshot already contains revision 10. The session snapshot does not.
@@ -131,16 +149,67 @@ it("starts again when a sender with the same ID returns a lower snapshot revisio
   const stub = routerStub();
 
   const receipt = await runInDurableObject(stub, async (_instance, ctx) => {
-    const db = new RouterDatabase(ctx.storage);
-    await db.migrate();
-    const channels = new RouterChannels(db);
-    channels.subscribe({ channel: "old", sender: "session", revision: OLD_REVISION });
-    channels.subscribe({ channel: "new", sender: "session", revision: NEW_REVISION });
+    const channels = await subscriptionStore(ctx);
+    channels.store({
+      channel: "old",
+      sender: sessionSender("session"),
+      revision: OLD_REVISION,
+    });
+    channels.store({
+      channel: "new",
+      sender: sessionSender("session"),
+      revision: NEW_REVISION,
+    });
 
     const update = { revision: NEW_REVISION + 1, items: [{ channel: "new" }] };
 
-    return channels.receive("session", NEW_REVISION, [update]);
+    return channels.receive(sessionSender("session"), NEW_REVISION, [update]);
   });
 
   expect(receipt).toMatchObject({ kind: "accepted", items: [{ channel: "new" }] });
+});
+
+/** A push of revision 1 with one item for the channel. */
+function firstRevision(channel: string): { revision: number; items: { channel: string }[] }[] {
+  return [{ revision: 1, items: [{ channel }] }];
+}
+
+it("removes only the subscriptions of the removed sender", async () => {
+  const stub = routerStub();
+  const first = sessionSender("first");
+  const second = sessionSender("second");
+
+  const result = await runInDurableObject(stub, async (_instance, ctx) => {
+    const channels = await subscriptionStore(ctx);
+    channels.store({ channel: ROOT_CHANNEL, sender: HOST_SENDER, revision: 0 });
+    channels.store({ channel: "first", sender: first, revision: 0 });
+    channels.store({ channel: "second", sender: second, revision: 0 });
+    channels.removeSender(first);
+
+    return {
+      host: channels.receive(HOST_SENDER, 0, firstRevision(ROOT_CHANNEL)),
+      first: channels.receive(first, 0, firstRevision("first")),
+      second: channels.receive(second, 0, firstRevision("second")),
+      subscriptions: channels.subscriptions(),
+    };
+  });
+
+  expect(result.host).toEqual({
+    kind: "accepted",
+    items: [{ channel: ROOT_CHANNEL }],
+    subscribed: [ROOT_CHANNEL],
+  });
+  expect(result.first).toEqual({ kind: "unknown" });
+  expect(result.second).toEqual({
+    kind: "accepted",
+    items: [{ channel: "second" }],
+    subscribed: ["second"],
+  });
+
+  const remaining = result.subscriptions.toSorted((a, b) => a.channel.localeCompare(b.channel));
+
+  expect(remaining).toEqual([
+    { channel: ROOT_CHANNEL, sender: HOST_SENDER },
+    { channel: "second", sender: second },
+  ]);
 });

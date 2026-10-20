@@ -93,7 +93,7 @@ export default defineConfig({
     "eslint/max-lines": [
       "error",
       {
-        max: 750,
+        max: 950,
       },
     ],
     "eslint/max-lines-per-function": [

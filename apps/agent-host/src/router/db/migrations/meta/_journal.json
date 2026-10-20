@@ -8,6 +8,13 @@
       "when": 1792196807537,
       "tag": "0000_router",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792471503387,
+      "tag": "0001_host_sender_setup",
+      "breakpoints": true
     }
   ]
 }

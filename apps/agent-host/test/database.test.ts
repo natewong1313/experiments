@@ -1,11 +1,18 @@
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { HostDatabase } from "../src/host/db/database";
 import { rootTable, sessionsTable } from "../src/host/db/schema";
 import { RouterDatabase } from "../src/router/db/database";
-import { connectionTable, sendersTable, subscriptionsTable } from "../src/router/db/schema";
+import migrations from "../src/router/db/migrations/migrations";
+import {
+  connectionTable,
+  sendersTable,
+  subscriptionSetupTable,
+  subscriptionsTable,
+} from "../src/router/db/schema";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
 import { sessionSummary } from "../src/session/state";
@@ -120,5 +127,39 @@ it("commits and rolls back router writes", async () => {
     ]);
     expect(orm.select().from(connectionTable).get()).toEqual({ id: 1, serverSeq: 1 });
     expect(() => orm.insert(connectionTable).values({ id: 2, serverSeq: 0 }).run()).toThrow(Error);
+  });
+});
+
+it("migrates the root sender key to the host key", async () => {
+  const router = newRouterDOName(crypto.randomUUID());
+  const stub = env.CONNECTIONS.getByName(router);
+
+  await runInDurableObject(stub, async (_instance, ctx) => {
+    const database = new RouterDatabase(ctx.storage);
+    const { orm } = database;
+    const [first] = migrations.journal.entries;
+    const sessionId = crypto.randomUUID();
+    const channel = `ahp-session:/${sessionId}`;
+
+    await migrate(orm, {
+      journal: { entries: first ? [first] : [] },
+      migrations: { m0000: migrations.migrations.m0000 ?? "" },
+    });
+    orm.run(sql`INSERT INTO senders (id, revision) VALUES ('root', 1), (${sessionId}, 2)`);
+    orm.run(
+      sql`INSERT INTO subscriptions (channel, sender, revision) VALUES ('ahp-root://', 'root', 1), (${channel}, ${sessionId}, 2)`,
+    );
+    await database.migrate();
+
+    expect(orm.select().from(sendersTable).all()).toEqual([
+      { id: "host", revision: 1 },
+      { id: sessionId, revision: 2 },
+    ]);
+    expect(orm.select().from(subscriptionsTable).all()).toEqual([
+      { channel: "ahp-root://", sender: "host", revision: 1 },
+      { channel, sender: sessionId, revision: 2 },
+    ]);
+    expect(orm.select().from(subscriptionSetupTable).all()).toEqual([]);
+    expect(() => orm.insert(subscriptionSetupTable).values({ id: 2 }).run()).toThrow(Error);
   });
 });

@@ -11,9 +11,6 @@ export type ChatChannel = { kind: "chat"; sessionId: string; chatId: string };
 
 export type Channel = { kind: "root" } | SessionChannel | ChatChannel;
 
-/** The sender ID of root channel pushes. A session uses its session UUID as its sender ID. */
-export const ROOT_SENDER = "root";
-
 export function sessionUri(sessionId: string): string {
   return `${SESSION_PREFIX}${sessionId}`;
 }
@@ -77,11 +74,6 @@ export function requireName(ctx: DurableObjectState, className: string): string 
   }
 
   return ctx.id.name;
-}
-
-/** Returns `ROOT_SENDER` for the root channel, or the session ID for other channels. */
-export function channelSender(channel: Channel): string {
-  return channel.kind === "root" ? ROOT_SENDER : channel.sessionId;
 }
 
 /**
