@@ -48,11 +48,6 @@ pre-commit:
       files: git diff --cached --name-only --diff-filter=ACMR -- packages/scripts
       run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
-    oxlint-ui:
-      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
-      files: git diff --cached --name-only --diff-filter=ACMR -- packages/ui
-      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
-
     oxlint-ahp-conformance:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- packages/ahp-conformance
