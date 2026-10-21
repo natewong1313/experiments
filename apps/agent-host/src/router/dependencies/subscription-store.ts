@@ -21,7 +21,7 @@ export type Receipt<Item> =
 
 /**
  * Stores the subscriptions of one client connection and the last revision that the router
- * received from each sender. Storage exists only while the connection is open.
+ * received from each sender. The router deletes the storage after the connection closes.
  */
 export class SubscriptionStore {
   private db: RouterDatabase;

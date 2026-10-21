@@ -4,13 +4,11 @@ import { CloseCode } from "../websockets";
 import type { Subscriptions } from "./subscriptions";
 
 /**
- * The lifecycle of the client connection. Each open connection is a new object. A frame
- * compares its object with the current state to find out if its connection is still open.
+ * The lifecycle of the client connection. `new` means that the router has no connection and no
+ * storage. A router does not open a connection again after `closed`. Each open connection is a
+ * new object. A frame's connection is still open when its object matches the current state.
  */
-type ConnectionState =
-  | { kind: "closed" }
-  | { kind: "open" }
-  | { kind: "closing"; closed: Promise<void> };
+type ConnectionState = { kind: "new" } | { kind: "open" } | { kind: "closed" };
 
 type OpenConnection = Extract<ConnectionState, { kind: "open" }>;
 
@@ -28,12 +26,13 @@ export type FrameHandler = (frame: Frame) => Promise<void>;
  *
  * The connection admits client frames one at a time. `close` ends the connection before it
  * awaits anything. Work that started under the closed connection sees `isCurrent` return false
- * and must not write router storage.
+ * and must not write router storage. The router deletes its storage later, after the senders
+ * stop their pushes.
  */
 export class ClientConnection {
   private deps: AgentHostConnectionRouterDeps;
   private subscriptions: Subscriptions;
-  private state: ConnectionState = { kind: "closed" };
+  private state: ConnectionState = { kind: "new" };
   // The last frame that the socket sent. Each frame waits for the frame before it.
   private lastFrame: Promise<void> = Promise.resolve();
 
@@ -47,17 +46,17 @@ export class ClientConnection {
     return this.state.kind === "open";
   }
 
-  /** True if the router has a client WebSocket. */
-  hasSocket(): boolean {
-    return this.deps.ctx.getWebSockets().length > 0;
+  /** True if the router can accept a connection. A router has at most one connection. */
+  canOpen(): boolean {
+    return this.state.kind === "new" && this.deps.ctx.getWebSockets().length === 0;
   }
 
   /**
-   * Resumes the connection after a restart if the router has storage. Storage exists only
-   * while a connection is open.
+   * Resumes the connection after a restart if the router has storage. Storage exists from the
+   * open of the connection until the cleanup after its close.
    */
   async restore(): Promise<void> {
-    const { ctx, db } = this.deps;
+    const { ctx, db, durability } = this.deps;
 
     if (!db.hasMigrated()) {
       return;
@@ -65,6 +64,15 @@ export class ClientConnection {
 
     // Storage from an earlier version can need newer migrations.
     await db.migrate();
+    durability.open();
+
+    // The connection closed before the restart. The cleanup deletes the storage.
+    if (await durability.closeStarted()) {
+      this.state = { kind: "closed" };
+
+      return;
+    }
+
     this.state = { kind: "open" };
 
     // The router acknowledged the held pushes of the interrupted setup, but lost them.
@@ -78,15 +86,12 @@ export class ClientConnection {
   }
 
   /**
-   * Opens a connection after the cleanup of an earlier connection. Creates the router storage,
-   * accepts the server side of a new WebSocket, and returns the client side.
+   * Opens the connection. Creates the router storage, accepts the server side of a new
+   * WebSocket, and returns the client side. The caller checks `canOpen` first.
    */
   async open(): Promise<WebSocket> {
-    if (this.state.kind === "closing") {
-      await this.state.closed;
-    }
-
     await this.deps.db.migrate();
+    this.deps.durability.open();
     this.state = { kind: "open" };
 
     const { 0: client, 1: server } = new WebSocketPair();
@@ -97,9 +102,8 @@ export class ClientConnection {
   }
 
   /**
-   * Ends the connection, deletes the router storage, and tells each sender to stop its pushes.
-   * The unsubscribe calls are best effort. A sender also stops after a push to this router
-   * reports no subscriptions.
+   * Ends the connection and registers a durable call that tells each sender to stop its pushes.
+   * Resolves after the registration. The router deletes its storage after the call settles.
    */
   async close(): Promise<void> {
     if (this.state.kind !== "open") {
@@ -107,19 +111,8 @@ export class ClientConnection {
     }
 
     const senders = this.subscriptions.release();
-
-    const closed = (async (): Promise<void> => {
-      await this.deps.db.deleteAll();
-      await this.deps.remoteSubscriptions.unsubscribeAll(senders);
-    })();
-
-    this.state = { kind: "closing", closed };
-
-    try {
-      await closed;
-    } finally {
-      this.state = { kind: "closed" };
-    }
+    this.state = { kind: "closed" };
+    await this.deps.durability.registerClose(senders);
   }
 
   /** Closes the socket with a close code, then ends the connection. */

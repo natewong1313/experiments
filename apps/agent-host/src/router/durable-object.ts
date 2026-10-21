@@ -9,11 +9,11 @@ import type {
   RouterSessionDisposedRequest,
 } from "../shared/rpc/router";
 import type { SessionRPC } from "../shared/rpc/session";
-import { RouterDatabase } from "./db/database";
-import type { AgentHostConnectionRouterDeps, Stubs } from "./dependencies";
-import { RemoteSubscriptions } from "./dependencies/remote-subscriptions";
-import { ServerSequence } from "./dependencies/server-sequence";
-import { SubscriptionStore } from "./dependencies/subscription-store";
+import type { RouterDatabase } from "./db/database";
+import { createRouterDeps } from "./dependencies";
+import type { Stubs } from "./dependencies";
+import { DEFAULT_ROUTER_DURABILITY_POLICY } from "./dependencies/router-durability";
+import type { RouterDurability, RouterDurabilityPolicy } from "./dependencies/router-durability";
 import { ClientConnection } from "./services/client-connection";
 import { ClientRequestsRouter } from "./services/client-requests";
 import { SenderRequestsRouter } from "./services/sender-requests";
@@ -25,8 +25,12 @@ import { CloseCode } from "./websockets";
  *
  * `ClientConnection` owns the connection lifecycle and the frame order. `ClientRequestsRouter`
  * handles the client frames and `SenderRequestsRouter` handles the updates that the host and
- * the sessions push. `Subscriptions` holds pushes during subscription setup, so the client
- * receives each snapshot before the updates that follow it.
+ * the sessions push. `Subscriptions` holds pushes during subscription setup. Each snapshot
+ * reaches the client before its updates.
+ *
+ * After a close, a durable call tells the senders to stop their pushes. The alarm of the router
+ * deletes the router storage after that call settles. A router does not accept a second
+ * connection, because the Worker gives each connection a new router name.
  */
 export abstract class AgentHostConnectionRouter<
   Env = unknown,
@@ -36,11 +40,16 @@ export abstract class AgentHostConnectionRouter<
   extends DurableObject<Env>
   implements AgentHostConnectionRouterRPC
 {
-  // TODO: durability alarms?
+  private db: RouterDatabase;
+  private durability: RouterDurability;
   private connection: ClientConnection;
   private clientRequests: ClientRequestsRouter;
   private senderRequests: SenderRequestsRouter;
 
+  /**
+   * On wake, we resume the connection and migrate storage plus see if we were in the
+   * middle of cleaning up the DO and if so, clean it up.
+   */
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
 
@@ -53,16 +62,9 @@ export abstract class AgentHostConnectionRouter<
       session: (sessionId) => this.session.getByName(sessionDOName(hostId, sessionId)),
     };
 
-    const db = new RouterDatabase(ctx.storage);
-
-    const deps = {
-      ctx,
-      db,
-      stubs,
-      sequence: new ServerSequence(db),
-      remoteSubscriptions: new RemoteSubscriptions(routerName, stubs),
-      subscriptionStore: new SubscriptionStore(db),
-    } satisfies AgentHostConnectionRouterDeps;
+    const deps = createRouterDeps(ctx, routerName, stubs, () => this.getDurabilityPolicy());
+    this.db = deps.db;
+    this.durability = deps.durability;
 
     const subscriptions = new Subscriptions(deps);
     this.connection = new ClientConnection(deps, subscriptions);
@@ -71,6 +73,8 @@ export abstract class AgentHostConnectionRouter<
 
     void ctx.blockConcurrencyWhile(async () => {
       await this.connection.restore();
+      // A restart can interrupt a close before it schedules the wake-up.
+      await this.cleanUp();
     });
   }
 
@@ -80,13 +84,18 @@ export abstract class AgentHostConnectionRouter<
   /** The session Durable Object namespace. The router sends session requests to a session. */
   abstract session: DurableObjectNamespace<Session>;
 
+  /** Returns the timing of the durable calls. The router reads it when it opens its storage. */
+  protected getDurabilityPolicy(): RouterDurabilityPolicy {
+    return DEFAULT_ROUTER_DURABILITY_POLICY;
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected a WebSocket upgrade", { status: 426 });
     }
 
-    if (this.connection.hasSocket()) {
-      return new Response("Router already has a connection", { status: 409 });
+    if (!this.connection.canOpen()) {
+      return new Response("Router accepts only one connection", { status: 409 });
     }
 
     const client = await this.connection.open();
@@ -124,5 +133,36 @@ export abstract class AgentHostConnectionRouter<
   /** Removes the subscriptions of a disposed session without a message to the client. */
   async sessionDisposed(req: RouterSessionDisposedRequest): Promise<void> {
     await this.senderRequests.sessionDisposed(req);
+  }
+
+  /**
+   * We run any due durable work, then cleans up storage.
+   */
+  async alarm(info?: AlarmInvocationInfo): Promise<void> {
+    await this.durability.mountAlarm(info);
+    await this.cleanUp();
+  }
+
+  /**
+   * Cleaning up the DO runs as a durable job via our durability dep. We only delete the DOs storage
+   * once that job has completed. This checks if the job is pending, which would mean we schedule a future
+   * wake up.
+   *
+   * We only delete the DOs storage once that job is done.
+   */
+  private async cleanUp(): Promise<void> {
+    if (!(await this.durability.closeStarted())) {
+      return;
+    }
+
+    if (await this.durability.hasPendingWork()) {
+      await this.durability.scheduleWakeUp();
+
+      return;
+    }
+
+    // Also deletes the tables of the scheduler and the alarm.
+    await this.db.deleteAll();
+    this.durability.reset();
   }
 }

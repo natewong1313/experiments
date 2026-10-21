@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
-import { runInDurableObject } from "cloudflare:test";
-import { expect, it } from "vitest";
+import { evictDurableObject, runInDurableObject } from "cloudflare:test";
+import { expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { RouterDatabase } from "../src/router/db/database";
 import type { HostSubscribeRootResponse } from "../src/shared/rpc/host";
@@ -9,14 +9,24 @@ import { ROOT_CHANNEL } from "../src/shared/protocol";
 import { MAX_HELD_PUSHES } from "../src/router/services/subscriptions";
 import { ServerSequence } from "../src/router/dependencies/server-sequence";
 import type { AgentHostConnectionRouter } from "./router";
+import { connectPeerAt } from "./peer";
+import { subscribedRouters, waitForRouterCleanup } from "./storage";
 
-/** A host that holds each root subscription until the test releases it. */
+/**
+ * A host that holds each root subscription until the test releases it. Its root unsubscribe
+ * fails `unsubscribeFailures` times. The next `stalledUnsubscribes` unsubscribes wait until the
+ * test resolves `unsubscribeReleased`. Later unsubscribes succeed.
+ */
 class HeldHost {
   readonly started = Promise.withResolvers<null>();
   readonly released = Promise.withResolvers<null>();
+  readonly unsubscribeReleased = Promise.withResolvers<null>();
   readonly unsubscribed: string[] = [];
   subscriptions = 0;
   revision = 0;
+  unsubscribeFailures = 0;
+  stalledUnsubscribes = 0;
+  unsubscribeAttempts = 0;
 
   async subscribeRoot(): Promise<HostSubscribeRootResponse> {
     this.subscriptions += 1;
@@ -27,10 +37,34 @@ class HeldHost {
   }
 
   async unsubscribeRoot(): Promise<void> {
+    this.unsubscribeAttempts += 1;
+
+    if (this.unsubscribeAttempts <= this.unsubscribeFailures) {
+      throw new Error("Unsubscribe failed");
+    }
+
+    if (this.unsubscribeAttempts <= this.unsubscribeFailures + this.stalledUnsubscribes) {
+      await this.unsubscribeReleased.promise;
+    }
+
     this.unsubscribed.push(ROOT_CHANNEL);
     await Promise.resolve();
   }
 }
+
+/** Returns a host that answers subscriptions at once and fails its first unsubscribes. */
+function failingHost(unsubscribeFailures: number): HeldHost {
+  const host = new HeldHost();
+  host.released.resolve(null);
+  host.unsubscribeFailures = unsubscribeFailures;
+
+  return host;
+}
+
+const RESTART_CLEANUP_TIMEOUT_MS = 10_000;
+
+/** A short attempt timeout, so a stalled unsubscribe times out during the test. */
+const STALLED_ATTEMPT_TIMEOUT_MS = 50;
 
 function routerStub(): ReturnType<typeof env.CONNECTIONS.getByName> {
   const name = newRouterDOName(crypto.randomUUID());
@@ -43,13 +77,16 @@ function useHost(router: AgentHostConnectionRouter, host: HeldHost): void {
   Object.assign(router, { host: { getByName: (): HeldHost => host } });
 }
 
+function upgrade(): Request {
+  return new Request("https://router/", { headers: { Upgrade: "websocket" } });
+}
+
 /** Opens the client connection and returns the server side of its WebSocket. */
 async function connect(
   router: AgentHostConnectionRouter,
   ctx: DurableObjectState,
 ): Promise<WebSocket> {
-  const upgrade = new Request("https://router/", { headers: { Upgrade: "websocket" } });
-  await router.fetch(upgrade);
+  await router.fetch(upgrade());
   const [socket] = ctx.getWebSockets();
 
   if (!socket) {
@@ -93,7 +130,9 @@ it("does not run frames that wait behind a frame when the connection closes", as
 });
 
 it("stops a subscription that its sender accepts after the connection closes", async () => {
-  const result = await runInDurableObject(routerStub(), async (router, ctx) => {
+  const stub = routerStub();
+
+  await runInDurableObject(stub, async (router, ctx) => {
     const host = new HeldHost();
     useHost(router, host);
     const socket = await connect(router, ctx);
@@ -104,13 +143,94 @@ it("stops a subscription that its sender accepts after the connection closes", a
     host.released.resolve(null);
     await running;
 
-    return {
-      unsubscribed: host.unsubscribed,
-      stored: new RouterDatabase(ctx.storage).hasMigrated(),
-    };
+    // The close and the stopped subscription each unsubscribe the root channel.
+    await vi.waitFor(() => {
+      expect(host.unsubscribed).toEqual([ROOT_CHANNEL, ROOT_CHANNEL]);
+    });
   });
 
-  expect(result).toEqual({ unsubscribed: [ROOT_CHANNEL, ROOT_CHANNEL], stored: false });
+  await waitForRouterCleanup(stub);
+});
+
+it("retries the unsubscribe of a close, then deletes the router storage", async () => {
+  const stub = routerStub();
+  const host = failingHost(1);
+
+  await runInDurableObject(stub, async (router, ctx) => {
+    useHost(router, host);
+    const socket = await connect(router, ctx);
+    await router.webSocketMessage(socket, initialize("first"));
+    await router.webSocketClose(socket);
+  });
+
+  await waitForRouterCleanup(stub);
+  expect(host.unsubscribeAttempts).toBe(host.unsubscribeFailures + 1);
+  expect(host.unsubscribed).toEqual([ROOT_CHANNEL]);
+});
+
+it("retries an unsubscribe that stalls past its attempt timeout", async () => {
+  const stub = routerStub();
+  const host = failingHost(0);
+  host.stalledUnsubscribes = 1;
+
+  await runInDurableObject(stub, async (router, ctx) => {
+    router.useDurabilityPolicy({ unsubscribeAttemptTimeoutMs: STALLED_ATTEMPT_TIMEOUT_MS });
+    useHost(router, host);
+    const socket = await connect(router, ctx);
+    await router.webSocketMessage(socket, initialize("first"));
+    await router.webSocketClose(socket);
+  });
+
+  // The first unsubscribe still waits. The retry after its timeout completes the close.
+  await waitForRouterCleanup(stub);
+  expect(host.unsubscribeAttempts).toBe(host.stalledUnsubscribes + 1);
+  expect(host.unsubscribed).toEqual([ROOT_CHANNEL]);
+  host.unsubscribeReleased.resolve(null);
+});
+
+it(
+  "deletes the router storage after a restart interrupts the unsubscribe of a close",
+  {
+    // The first wake-up after the restart can find the retry still pending.
+    timeout: RESTART_CLEANUP_TIMEOUT_MS,
+  },
+  async () => {
+    const hostId = crypto.randomUUID();
+    const name = newRouterDOName(hostId);
+    const stub = env.CONNECTIONS.getByName(name);
+    const host = failingHost(Number.POSITIVE_INFINITY);
+
+    // A WebSocket client completes the close handshake. Without it, the eviction waits.
+    const peer = await connectPeerAt(name);
+    await peer.request("subscribe", { channel: ROOT_CHANNEL });
+    await runInDurableObject(stub, (router) => {
+      useHost(router, host);
+    });
+
+    peer.close();
+    await vi.waitFor(() => {
+      expect(host.unsubscribeAttempts).toBeGreaterThan(0);
+    });
+
+    // After the restart, the router unsubscribes at the host of the test environment.
+    await evictDurableObject(stub);
+    await waitForRouterCleanup(stub);
+    const coordinator = env.COORDINATORS.getByName(hostId);
+    expect(await subscribedRouters(coordinator)).toEqual([]);
+  },
+);
+
+it("does not open a connection again after a close", async () => {
+  const rejection = await runInDurableObject(routerStub(), async (router, ctx) => {
+    useHost(router, failingHost(0));
+    const socket = await connect(router, ctx);
+    await router.webSocketClose(socket);
+    const response = await router.fetch(upgrade());
+
+    return await response.text();
+  });
+
+  expect(rejection).toBe("Router accepts only one connection");
 });
 
 it.each([
@@ -234,7 +354,9 @@ it("keeps an existing subscription when a replacement snapshot fails", async () 
 });
 
 it("closes the connection when subscription setup buffers too many pushes", async () => {
-  const result = await runInDurableObject(routerStub(), async (router, ctx) => {
+  const stub = routerStub();
+
+  const result = await runInDurableObject(stub, async (router, ctx) => {
     const host = new HeldHost();
     useHost(router, host);
     const socket = await connect(router, ctx);
@@ -265,16 +387,13 @@ it("closes the connection when subscription setup buffers too many pushes", asyn
     host.released.resolve(null);
     await running;
 
-    return {
-      overflow,
-      stored: new RouterDatabase(ctx.storage).hasMigrated(),
-      unsubscribed: host.unsubscribed,
-    };
+    await vi.waitFor(() => {
+      expect(host.unsubscribed).toEqual([ROOT_CHANNEL, ROOT_CHANNEL]);
+    });
+
+    return overflow;
   });
 
-  expect(result).toEqual({
-    overflow: { subscribed: [] },
-    stored: false,
-    unsubscribed: [ROOT_CHANNEL, ROOT_CHANNEL],
-  });
+  expect(result).toEqual({ subscribed: [] });
+  await waitForRouterCleanup(stub);
 });

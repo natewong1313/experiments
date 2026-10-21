@@ -75,10 +75,36 @@ export class RemoteSubscriptions {
    * also stops after a push to this router reports no subscriptions.
    */
   async unsubscribeAll(senders: SenderChannels): Promise<void> {
-    await Promise.allSettled(
+    try {
+      await this.unsubscribeEach(senders);
+    } catch {
+      // The pushes of a sender that fails stop at its next push.
+    }
+  }
+
+  /**
+   * Tells each sender to stop the pushes of its channels. A failure at one sender does not
+   * stop the calls to the other senders.
+   *
+   * @throws {AggregateError} If a sender fails.
+   */
+  async unsubscribeEach(senders: SenderChannels): Promise<void> {
+    const results = await Promise.allSettled(
       senders.map(async ({ sender, channels }) => {
         await this.unsubscribe(sender, channels);
       }),
     );
+
+    const errors: unknown[] = [];
+
+    for (const result of results) {
+      if (result.status === "rejected") {
+        errors.push(result.reason);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Unsubscribe failed");
+    }
   }
 }

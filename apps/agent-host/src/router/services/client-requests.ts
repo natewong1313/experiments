@@ -334,7 +334,7 @@ export class ClientRequestsRouter {
         origin,
       });
     } catch (error) {
-      // A closed connection has no storage for the `serverSeq` of the rejection.
+      // A closed connection must not write the `serverSeq` of the rejection.
       if (!frame.isCurrent()) {
         return;
       }

@@ -23,6 +23,7 @@ import {
   subscribedChannels,
   storeSubscriptionSetup,
   subscribedRouters,
+  waitForRouterCleanup,
 } from "./storage";
 
 const MISSED = 2;
@@ -48,13 +49,14 @@ it("removes the subscriptions and storage of a router when its client disconnect
 
   const routerStub = env.CONNECTIONS.getByName(router);
 
+  const host = env.COORDINATORS.getByName(hostId);
+
   await vi.waitFor(async () => {
     expect(await subscribedRouters(session)).toEqual([]);
-    expect(await storedTables(routerStub)).toEqual([]);
+    expect(await subscribedRouters(host)).toEqual([]);
   });
 
-  const host = env.COORDINATORS.getByName(hostId);
-  expect(await subscribedRouters(host)).toEqual([]);
+  await waitForRouterCleanup(routerStub);
 });
 
 it("ignores repeated revisions and closes the connection after a gap", async () => {
@@ -95,7 +97,7 @@ it("ignores repeated revisions and closes the connection after a gap", async () 
   expect(await stub.sessionActions(gap)).toEqual({ subscribed: [] });
   expect(await peer.closed).toBe(CloseCode.InternalError);
   expect(await stub.sessionActions(gap)).toEqual({ subscribed: [] });
-  expect(await storedTables(stub)).toEqual([]);
+  await waitForRouterCleanup(stub);
 });
 
 it("answers pushes without writing storage when a router has no connection", async () => {
@@ -292,7 +294,7 @@ it("closes an interrupted subscription after a router restart and removes its re
 
   expect(await stub.rootUpdate({ after: 0, updates: [] })).toEqual({ subscribed: [] });
   expect(await peer.closed).toBe(CloseCode.InternalError);
-  expect(await storedTables(stub)).toEqual([]);
+  await waitForRouterCleanup(stub);
   const host = env.COORDINATORS.getByName(hostId);
 
   expect(await subscribedRouters(host)).toEqual([]);

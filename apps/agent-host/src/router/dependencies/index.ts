@@ -1,8 +1,11 @@
+import { untilAborted } from "../../shared/abort";
 import type { StubFor } from "../../shared/stubs";
-import type { RouterDatabase } from "../db/database";
-import type { RemoteSubscriptions } from "./remote-subscriptions";
-import type { ServerSequence } from "./server-sequence";
-import type { SubscriptionStore } from "./subscription-store";
+import { RouterDatabase } from "../db/database";
+import { RemoteSubscriptions } from "./remote-subscriptions";
+import { RouterDurability } from "./router-durability";
+import type { RouterDurabilityPolicy } from "./router-durability";
+import { ServerSequence } from "./server-sequence";
+import { SubscriptionStore } from "./subscription-store";
 
 export type Stubs = {
   host(): StubFor<"host">;
@@ -21,4 +24,33 @@ export type AgentHostConnectionRouterDeps = {
   sequence: ServerSequence;
   remoteSubscriptions: RemoteSubscriptions;
   subscriptionStore: SubscriptionStore;
+  durability: RouterDurability;
 };
+
+export function createRouterDeps(
+  ctx: DurableObjectState,
+  routerName: string,
+  stubs: Stubs,
+  durabilityPolicy: () => RouterDurabilityPolicy,
+): AgentHostConnectionRouterDeps {
+  const db = new RouterDatabase(ctx.storage);
+  const remoteSubscriptions = new RemoteSubscriptions(routerName, stubs);
+
+  return {
+    ctx,
+    db,
+    stubs,
+    sequence: new ServerSequence(db),
+    remoteSubscriptions,
+    subscriptionStore: new SubscriptionStore(db),
+    durability: new RouterDurability(
+      ctx,
+      {
+        unsubscribeSenders: async ({ payload, signal }): Promise<void> => {
+          await untilAborted(remoteSubscriptions.unsubscribeEach(payload), signal);
+        },
+      },
+      durabilityPolicy,
+    ),
+  };
+}

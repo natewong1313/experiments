@@ -74,7 +74,8 @@ export class Subscriptions {
 
     if (failure || !open) {
       // Subscriptions from earlier requests stay while the connection is open.
-      // After a close, the router has no storage. Thus each accepted subscription must stop.
+      // The close unsubscribes only the subscriptions that it released.
+      // Thus each subscription that a sender accepts after the close must stop here.
       const subscriptionsToUndo = open
         ? snapshots.filter((item) => !subscriptionStore.isSubscribed(item.channel))
         : snapshots;

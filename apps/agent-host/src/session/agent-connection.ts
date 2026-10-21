@@ -9,6 +9,7 @@ import type {
   Stream as ACPStream,
   PromptResponse as ACPPromptResponse,
 } from "@agentclientprotocol/sdk";
+import { untilAborted } from "../shared/abort";
 
 type OpenOptions = {
   stream(): Promise<ACPStream>;
@@ -249,27 +250,6 @@ async function openStream(options: OpenOptions, signal: AbortSignal): Promise<AC
     }
 
     throw error;
-  }
-}
-
-/** Settles as `promise` does, or rejects with the abort reason when `signal` aborts first. */
-async function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  const aborted = Promise.withResolvers<never>();
-
-  function abort(): void {
-    aborted.reject(signal.reason);
-  }
-
-  if (signal.aborted) {
-    abort();
-  } else {
-    signal.addEventListener("abort", abort, { once: true });
-  }
-
-  try {
-    return await Promise.race([promise, aborted.promise]);
-  } finally {
-    signal.removeEventListener("abort", abort);
   }
 }
 
