@@ -227,3 +227,13 @@ pnpm run format
 The Workers tests use custom binding names and an in-process ACP agent. They test
 shared streaming, independent concurrent sessions, cancellation, reconstruction,
 client disconnection, disposal, push ordering, gaps after a restart, and catalogue sync.
+
+The same `test` command also runs `test/integration` through Wrangler's
+`createTestHarness()`. The integration fixture reuses the basic example's concrete Worker
+and Durable Objects with the real Pi harness, ACP WebSocket adapters, and workspace tools.
+Only the model provider uses Faux. Tests cover shared streaming, a workspace write,
+history recovery after a session restart, and disposal. The harness resets storage between
+tests and prints runtime diagnostics on failure. No Cloudflare credentials are required.
+
+Run `pnpm --filter @experiments/agent-host test:workers` or
+`pnpm --filter @experiments/agent-host test:integration` to run either suite alone.

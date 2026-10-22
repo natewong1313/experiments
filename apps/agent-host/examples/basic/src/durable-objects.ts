@@ -5,6 +5,8 @@ import { Harness, createRegistry } from "@earendil-works/pi-durable";
 import { Lifecycle } from "agents/lifecycle";
 import { PiHarness } from "agents/harnesses/pi";
 import { createModels } from "@earendil-works/pi-ai/models";
+import type { Models } from "@earendil-works/pi-ai/models";
+import type { ModelRef } from "@earendil-works/pi-durable";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 
 import {
@@ -67,9 +69,7 @@ export class AgentSession extends BaseAgentSession<Env, AgentHostConnectionRoute
         recursive: true,
       });
 
-      const models = createModels();
-      const ai = createAI({ binding: this.env.AI });
-      models.setProvider(ai.provider);
+      const models = this.createModels();
 
       this.registry.batch(() => {
         this.registry.systemPrompt.section(
@@ -87,15 +87,27 @@ export class AgentSession extends BaseAgentSession<Env, AgentHostConnectionRoute
       return Harness.open(storage, { models, registry: this.registry }, context);
     },
     defaults: {
-      model: {
-        provider: CLOUDFLARE_PROVIDER_ID,
-        modelId: "@cf/moonshotai/kimi-k2.7-code",
-      },
+      model: this.getDefaultModel(),
       thinkingLevel: "low",
       retry: { enabled: true, maxRetries: 2, baseDelayMs: 500 },
     },
   });
   lifecycle = Lifecycle.install(this).use(this.harness);
+
+  protected createModels(): Models {
+    const models = createModels();
+    const ai = createAI({ binding: this.env.AI });
+    models.setProvider(ai.provider);
+
+    return models;
+  }
+
+  protected getDefaultModel(): ModelRef {
+    return {
+      provider: CLOUDFLARE_PROVIDER_ID,
+      modelId: "@cf/moonshotai/kimi-k2.7-code",
+    };
+  }
 
   protected getWorkingDirectory(): string {
     return this.env.WORKSPACE_DIR;

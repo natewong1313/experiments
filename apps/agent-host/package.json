@@ -6,9 +6,11 @@
     "build": "tsc --noEmit",
     "format": "oxfmt --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "db:generate": "drizzle-kit generate --config src/host/db/drizzle.config.ts && drizzle-kit generate --config src/session/db/drizzle.config.ts && drizzle-kit generate --config src/router/db/drizzle.config.ts",
-    "check-types": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
-    "lint": "oxlint --deny-warnings --type-aware src test vitest.config.ts",
-    "test": "vitest run"
+    "check-types": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json && tsc --noEmit -p test/integration/tsconfig.json",
+    "lint": "oxlint --deny-warnings --type-aware src test vitest.config.ts vitest.integration.config.ts",
+    "test": "pnpm run test:workers && pnpm run test:integration",
+    "test:workers": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "catalog:",
@@ -20,6 +22,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-durable": "catalog:",
     "@experiments/oxlint-config": "workspace:*",
     "@experiments/typescript-config": "workspace:*",
     "drizzle-kit": "^0.31.11"

@@ -131,6 +131,8 @@ export function websocketStream(socket: WebSocket): Stream {
     },
   });
 
+  socket.accept();
+
   return { readable, writable };
 }
 

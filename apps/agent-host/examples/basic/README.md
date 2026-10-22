@@ -48,9 +48,14 @@ no client-side tool approvals or structured questions.
 
 ```sh
 pnpm --filter @experiments/agent-host test
+pnpm --filter @experiments/agent-host test:integration
 pnpm --filter @experiments/agent-host check-types
 pnpm --filter @experiments/agent-host-example check-types
 pnpm --filter @experiments/agent-host-example build
 ```
 
 `build` dry-runs deployment without publishing the Worker.
+
+The agent-host integration tests in `../../test/integration` reuse this example's concrete
+Worker and Durable Objects with Pi's Faux model provider. They require no Cloudflare
+credentials.

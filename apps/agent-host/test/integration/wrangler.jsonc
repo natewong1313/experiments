@@ -1,0 +1,23 @@
+{
+  "$schema": "../../../../node_modules/wrangler/config-schema.json",
+  "name": "agent-host-integration",
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "WORKSPACE_DIR": "/workspace" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "AGENT_HOST", "class_name": "AgentHost" },
+      { "name": "AGENT_SESSION", "class_name": "AgentSession" },
+      { "name": "AGENT_ROUTER", "class_name": "AgentHostConnectionRouter" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AgentHost", "AgentSession", "AgentHostConnectionRouter"],
+    },
+  ],
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+}
