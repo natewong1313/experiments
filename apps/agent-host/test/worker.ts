@@ -1,12 +1,14 @@
 import { getHost } from "../src/helpers";
 import type { AgentHost } from "./host";
 import type { AgentHostConnectionRouter } from "./router";
+import type { StallingConnectionRouter } from "./stalling-router";
 import type { AgentSession } from "./session";
 
 export type TestEnv = {
   COORDINATORS: DurableObjectNamespace<AgentHost>;
   CONVERSATIONS: DurableObjectNamespace<AgentSession>;
   CONNECTIONS: DurableObjectNamespace<AgentHostConnectionRouter>;
+  STALLING_CONNECTIONS: DurableObjectNamespace<StallingConnectionRouter>;
 };
 
 // /hosts/{host id}/ahp
@@ -35,3 +37,5 @@ export { AgentHost } from "./host";
 export { AgentSession } from "./session";
 
 export { AgentHostConnectionRouter } from "./router";
+
+export { StallingConnectionRouter } from "./stalling-router";

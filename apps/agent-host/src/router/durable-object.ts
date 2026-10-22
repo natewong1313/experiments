@@ -12,8 +12,8 @@ import type { SessionRPC } from "../shared/rpc/session";
 import type { RouterDatabase } from "./db/database";
 import { createRouterDeps } from "./dependencies";
 import type { Stubs } from "./dependencies";
-import { DEFAULT_ROUTER_DURABILITY_POLICY } from "./dependencies/router-durability";
-import type { RouterDurability, RouterDurabilityPolicy } from "./dependencies/router-durability";
+import { DEFAULT_ROUTER_CONFIG } from "./dependencies/router-durability";
+import type { RouterDurability, RouterConfig } from "./dependencies/router-durability";
 import { ClientConnection } from "./services/client-connection";
 import { ClientRequestsRouter } from "./services/client-requests";
 import { SenderRequestsRouter } from "./services/sender-requests";
@@ -68,7 +68,7 @@ export abstract class AgentHostConnectionRouter<
     };
 
     const deps = createRouterDeps(ctx, routerName, stubs, {
-      policy: () => this.getDurabilityPolicy(),
+      config: this.config,
       onWakeUp: () => {
         this.onWakeUp();
       },
@@ -96,9 +96,12 @@ export abstract class AgentHostConnectionRouter<
   /** The session Durable Object namespace. The router sends session requests to a session. */
   abstract session: DurableObjectNamespace<Session>;
 
-  /** Returns the timing of the durable calls. The router reads it when it opens its storage. */
-  protected getDurabilityPolicy(): RouterDurabilityPolicy {
-    return DEFAULT_ROUTER_DURABILITY_POLICY;
+  /**
+   * The timing of the durable calls. The router reads it once, when it opens its storage. A
+   * subclass overrides this to replace the defaults.
+   */
+  protected get config(): RouterConfig {
+    return DEFAULT_ROUTER_CONFIG;
   }
 
   async fetch(request: Request): Promise<Response> {

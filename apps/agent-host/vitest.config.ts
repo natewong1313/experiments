@@ -28,6 +28,7 @@ export default defineConfig({
           COORDINATORS: { className: "AgentHost", useSQLite: true },
           CONVERSATIONS: { className: "AgentSession", useSQLite: true },
           CONNECTIONS: { className: "AgentHostConnectionRouter", useSQLite: true },
+          STALLING_CONNECTIONS: { className: "StallingConnectionRouter", useSQLite: true },
         },
       },
     }),

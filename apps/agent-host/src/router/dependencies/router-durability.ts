@@ -28,8 +28,8 @@ const WAKE_UP_DELAY_MS = 2000;
 
 /** The parts of the durable work that the router class supplies. */
 export type RouterDurabilityHooks = {
-  /** Returns the timing of the durable calls. The class reads it each time it opens. */
-  policy(): RouterDurabilityPolicy;
+  /** The timing of the durable calls. The router reads it once, when it opens its storage. */
+  config: RouterConfig;
   /**
    * Runs in the handler of the wake-up alarm. It must not delete storage before the handler
    * returns.
@@ -38,7 +38,7 @@ export type RouterDurabilityHooks = {
 };
 
 /** The timing of the durable calls of the router. */
-export type RouterDurabilityPolicy = {
+export type RouterConfig = {
   /**
    * The maximum duration of one unsubscribe attempt. At the timeout, the attempt stops waiting
    * for the senders and the call retries.
@@ -51,7 +51,7 @@ export type RouterDurabilityPolicy = {
   unsubscribeAttempts: number;
 };
 
-export const DEFAULT_ROUTER_DURABILITY_POLICY: RouterDurabilityPolicy = {
+export const DEFAULT_ROUTER_CONFIG: RouterConfig = {
   unsubscribeAttemptTimeoutMs: 30_000,
   // With the default backoff of `durability`, the retries last 10 to 20 minutes.
   unsubscribeAttempts: 12,
@@ -88,23 +88,24 @@ export class RouterDurability {
   private ctx: DurableObjectState;
   private handlers: CallHandlers;
   private hooks: RouterDurabilityHooks;
+  private config: RouterConfig;
   private durableCtx?: DurableCtx;
 
   constructor(ctx: DurableObjectState, handlers: CallHandlers, hooks: RouterDurabilityHooks) {
     this.ctx = ctx;
     this.handlers = handlers;
     this.hooks = hooks;
+    this.config = hooks.config;
   }
 
   /**
-   * We setup all the durablity items that go into context if it hasn't been setup yet.
+   * Sets up the durable items that go into context if it has not been set up yet. The router
+   * reads its config once when it opens its storage.
    */
   open(): void {
     if (this.durableCtx) {
       return;
     }
-
-    const policy = this.hooks.policy();
 
     const scheduler = new DurabilityScheduler({
       context: this.ctx,
@@ -116,8 +117,8 @@ export class RouterDurability {
       handlers: this.handlers,
       methods: {
         unsubscribeSenders: {
-          attemptTimeoutMs: policy.unsubscribeAttemptTimeoutMs,
-          retries: { maxAttempts: policy.unsubscribeAttempts },
+          attemptTimeoutMs: this.config.unsubscribeAttemptTimeoutMs,
+          retries: { maxAttempts: this.config.unsubscribeAttempts },
         },
       },
     });

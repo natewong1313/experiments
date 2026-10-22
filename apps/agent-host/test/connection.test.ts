@@ -8,7 +8,6 @@ import { newRouterDOName } from "../src/shared/lookups";
 import { ROOT_CHANNEL } from "../src/shared/protocol";
 import { MAX_HELD_PUSHES } from "../src/router/services/subscriptions";
 import { ServerSequence } from "../src/router/dependencies/server-sequence";
-import { DEFAULT_ROUTER_DURABILITY_POLICY } from "../src/router/dependencies/router-durability";
 import type { AgentHostConnectionRouter } from "./router";
 import { connectPeerAt } from "./peer";
 import { subscribedRouters, waitForRouterCleanup } from "./storage";
@@ -87,9 +86,6 @@ function retryableError(): Error {
 /** Allows cleanup to wait for another wake-up if the first finds a retry pending. */
 const RETRY_CLEANUP_TIMEOUT_MS = 10_000;
 
-/** A short attempt timeout, so a stalled close times out during the test. */
-const STALLED_ATTEMPT_TIMEOUT_MS = 50;
-
 /** The close of the connection and the close of a subscription that a sender accepts after it. */
 const CLOSES_WITH_LATE_SUBSCRIPTION = 2;
 
@@ -106,6 +102,13 @@ function routerStub(): ReturnType<typeof env.CONNECTIONS.getByName> {
   const name = newRouterDOName(crypto.randomUUID());
 
   return env.CONNECTIONS.getByName(name);
+}
+
+/** A router whose unsubscribe attempts time out after 50 ms (see `StallingConnectionRouter`). */
+function stallingRouterStub(): ReturnType<typeof env.STALLING_CONNECTIONS.getByName> {
+  const name = newRouterDOName(crypto.randomUUID());
+
+  return env.STALLING_CONNECTIONS.getByName(name);
 }
 
 /** Replaces the host namespace of the router with one that returns `host`. */
@@ -289,15 +292,11 @@ it(
   "retries a close that stalls past its attempt timeout",
   { timeout: RETRY_CLEANUP_TIMEOUT_MS },
   async () => {
-    const stub = routerStub();
+    const stub = stallingRouterStub();
     const host = failingHost(0);
     host.stallsClose = (attempt): boolean => attempt === 1;
 
     await runInDurableObject(stub, async (router, ctx) => {
-      router.useDurabilityPolicy({
-        ...DEFAULT_ROUTER_DURABILITY_POLICY,
-        unsubscribeAttemptTimeoutMs: STALLED_ATTEMPT_TIMEOUT_MS,
-      });
       useHost(router, host);
       const socket = await connect(router, ctx);
       await router.webSocketMessage(socket, initialize("first"));
