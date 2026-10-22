@@ -75,9 +75,17 @@ export class ClientConnection {
 
     this.state = { kind: "open" };
 
+    const sockets = ctx.getWebSockets();
+
+    if (sockets.length === 0) {
+      await this.close();
+
+      return;
+    }
+
     // The router acknowledged the held pushes of the interrupted setup, but lost them.
     if (this.deps.subscriptionStore.interrupted()) {
-      for (const socket of ctx.getWebSockets()) {
+      for (const socket of sockets) {
         socket.close(CloseCode.InternalError, "Subscription setup interrupted");
       }
 

@@ -343,6 +343,33 @@ it(
   },
 );
 
+it(
+  "deletes the router storage after a restart drops an open connection",
+  {
+    // The first wake-up after the restart can find the retry still pending.
+    timeout: RETRY_CLEANUP_TIMEOUT_MS,
+  },
+  async () => {
+    const hostId = crypto.randomUUID();
+    const name = newRouterDOName(hostId);
+    const stub = env.CONNECTIONS.getByName(name);
+
+    // A subscribe registers the router at the host while the connection is open.
+    const peer = await connectPeerAt(name);
+    await peer.request("subscribe", { channel: ROOT_CHANNEL });
+
+    // Evict while the connection is still open, closing the socket with the instance.
+    // A restart can drop the in-memory socket without a close handshake.
+    // The restored router then has an open connection and no socket, so it closes and reclaims the storage.
+    await evictDurableObject(stub, { webSockets: "close" });
+    await peer.closed;
+    await waitForRouterCleanup(stub);
+
+    const coordinator = env.COORDINATORS.getByName(hostId);
+    expect(await subscribedRouters(coordinator)).toEqual([]);
+  },
+);
+
 it("does not open a connection again after a close", async () => {
   const rejection = await runInDurableObject(routerStub(), async (router, ctx) => {
     useHost(router, failingHost(0));
