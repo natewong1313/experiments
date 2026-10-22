@@ -70,6 +70,22 @@ export class UpdatesPublisher<
     await this.fanout.publish(updates);
   }
 
+  hasSubscribers(channel: string): boolean {
+    return this.fanout.hasSubscribers(channel);
+  }
+
+  isSubscribed(router: string, channel: string): boolean {
+    return this.fanout.isSubscribed(router, channel);
+  }
+
+  /**
+   * Waits for the router to acknowledge at least `revision` or have no queued or in-flight pushes.
+   * Returns false if the router is absent or has not acknowledged that revision.
+   */
+  async delivered(router: string, revision: number): Promise<boolean> {
+    return await this.fanout.delivered(router, revision);
+  }
+
   async recover(revision: number): Promise<void> {
     await this.fanout.recover(revision);
   }

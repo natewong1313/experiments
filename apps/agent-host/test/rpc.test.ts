@@ -3,18 +3,17 @@ import { eq } from "drizzle-orm";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import {
+  ActionType as AHPActionType,
   AhpErrorCodes as AHPErrorCodes,
   MessageKind as AHPMessageKind,
   ResponsePartKind as AHPResponsePartKind,
-  TurnState as AHPTurnState,
 } from "@microsoft/agent-host-protocol";
 import { ChatStateSchema, SessionStateSchema } from "@experiments/protocol-schemas/ahp";
 import type { HostRPC, SessionRPC } from "../src";
 import type { SessionCreateRequest, SessionSubscribeResponse } from "../src/shared/rpc/session";
-import { SessionDatabase } from "../src/session/db/database";
-import { sessionTable } from "../src/session/db/schema";
+import { chatsTable, sessionTable } from "../src/session/db/schema";
 import { connectPeer } from "./peer";
-import { readState, storedTables } from "./storage";
+import { changeSession, readState, storedTables } from "./storage";
 import type { AgentSession } from "./session";
 import { newRouterDOName, sessionDOName, sessionUri, chatUri } from "../src/shared/lookups";
 
@@ -185,33 +184,44 @@ it("retains opaque AHP metadata in snapshots after reconstruction and subscripti
   try {
     await peer.request("createSession", req.params);
 
-    const chat = await runInDurableObject(stub, async (_instance, ctx) => {
-      const db = new SessionDatabase(ctx.storage);
-      const record = db.orm.select().from(sessionTable).get();
+    const chat = await changeSession(stub, ({ chats }, record, { orm }) => {
+      const { defaultChat } = record.sessionState;
+      const turnId = crypto.randomUUID();
+      const sessionState = { ...record.sessionState, _meta: metadata };
+      orm.update(sessionTable).set({ sessionState }).where(eq(sessionTable.id, record.id)).run();
+      const chatRow = eq(chatsTable.resource, defaultChat);
+      orm
+        .update(chatsTable)
+        .set({ metadata: { _meta: metadata } })
+        .where(chatRow)
+        .run();
+      const activity = "Retained activity";
+      chats.apply(defaultChat, { type: AHPActionType.ChatActivityChanged, activity });
 
-      if (!record) {
-        throw new Error("Missing session");
-      }
-
-      record.sessionState._meta = metadata;
-      record.chatState._meta = metadata;
-      record.chatState.activity = "Retained activity";
-      record.chatState.turns.push({
-        id: crypto.randomUUID(),
-        state: AHPTurnState.Error,
+      chats.apply(defaultChat, {
+        type: AHPActionType.ChatTurnStarted,
+        turnId,
+        startedAt: new Date().toISOString(),
         message: { text: "hello", origin: { kind: AHPMessageKind.User }, _meta: metadata },
-        usage: { inputTokens: 1, _meta: metadata },
-        responseParts: [
-          {
-            kind: AHPResponsePartKind.Error,
-            error: { errorType: "agent", message: "Retained error", _meta: metadata },
-          },
-        ],
       });
 
-      db.orm.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
+      chats.apply(defaultChat, {
+        type: AHPActionType.ChatUsage,
+        turnId,
+        usage: { inputTokens: 1, _meta: metadata },
+      });
 
-      return record.chatState.resource;
+      chats.apply(defaultChat, {
+        type: AHPActionType.ChatError,
+        turnId,
+        duration: 1,
+        part: {
+          kind: AHPResponsePartKind.Error,
+          error: { errorType: "agent", message: "Retained error", _meta: metadata },
+        },
+      });
+
+      return defaultChat;
     });
 
     await evictDurableObject(stub);

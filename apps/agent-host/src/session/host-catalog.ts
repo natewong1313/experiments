@@ -1,9 +1,6 @@
 import { callDoRpc } from "../shared/do-rpc";
 import type { StubFor } from "../shared/stubs";
-import type { SessionRecord } from "./db/schema";
 import type { HostSessionEntry } from "../shared/rpc/host";
-import { defaultChatOf } from "./records";
-import { sessionSummary } from "./state";
 
 /**
  * Sends the catalog changes of one session to its host. Each call starts after the call before
@@ -19,17 +16,17 @@ export class HostCatalog {
     this.host = host;
   }
 
-  /** Adds the session to the catalog, with its summary at its current revision. */
-  async created(record: SessionRecord): Promise<void> {
+  /** Adds the session to the catalog, with the summary of `entry`. */
+  async created(entry: HostSessionEntry): Promise<void> {
     await this.call(async (host) => {
-      await host.sessionCreated(catalogEntry(record));
+      await host.sessionCreated(entry);
     });
   }
 
-  /** Sends the summary of the session at its current revision. */
-  async summaryChanged(record: SessionRecord): Promise<void> {
+  /** Sends the summary of the session at the revision of `entry`. */
+  async summaryChanged(entry: HostSessionEntry): Promise<void> {
     await this.call(async (host) => {
-      await host.summaryChanged(catalogEntry(record));
+      await host.summaryChanged(entry);
     });
   }
 
@@ -75,13 +72,4 @@ async function settled(promise: Promise<unknown>): Promise<null> {
   }
 
   return null;
-}
-
-function catalogEntry(record: SessionRecord): HostSessionEntry {
-  return {
-    sessionId: record.id,
-    defaultChat: defaultChatOf(record),
-    revision: record.revision,
-    summary: sessionSummary(record),
-  };
 }

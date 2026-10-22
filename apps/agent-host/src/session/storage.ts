@@ -6,6 +6,7 @@ import type { SessionRecord } from "./db/schema";
 import { retryDelay } from "./lifecycle-policy";
 import type { SessionLifecyclePolicy } from "./lifecycle-policy";
 import { phaseOf, SessionRecords } from "./records";
+import type { HasSubscribers } from "./chat/store";
 
 type AlarmName =
   | "syncCatalog"
@@ -32,6 +33,11 @@ type SessionStorageOptions = {
   handlers: Record<AlarmName, DurableAlarmHandler>;
   /** Returns the alarm timing. The storage reads it once each time it opens. */
   policy(): SessionLifecyclePolicy;
+  /**
+   * Returns true if at least one router subscribes to the chat.
+   * The chat keeps its loaded-history window while subscribers remain.
+   */
+  hasSubscribers: HasSubscribers;
 };
 
 const CATALOG_SYNC_TIMEOUT_MS = 30_000;
@@ -44,7 +50,7 @@ export class SessionStorage {
 
   constructor(options: SessionStorageOptions) {
     this.options = options;
-    this.records = new SessionRecords(options.db);
+    this.records = new SessionRecords(options.db, options.hasSubscribers);
   }
 
   /** Returns true if the session tables exist. Reads without writing. */

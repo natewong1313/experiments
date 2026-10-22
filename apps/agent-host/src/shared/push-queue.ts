@@ -41,6 +41,11 @@ export class PushQueue<Item> {
     return this.running.has(router);
   }
 
+  /** Resolves after the router has no queued or in-flight items. Never rejects. */
+  async routerIdle(router: string): Promise<void> {
+    await this.running.get(router);
+  }
+
   /** Returns true if any router has queued or in-flight items. */
   hasWork(): boolean {
     return this.running.size > 0;

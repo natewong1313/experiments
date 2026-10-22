@@ -3,7 +3,10 @@ import {
   ChatTurnCancelledActionSchema as AHPChatTurnCancelledActionSchema,
   ChatTurnStartedActionSchema as AHPChatTurnStartedActionSchema,
 } from "@experiments/protocol-schemas/ahp";
-import type { CreateSessionParams as AHPCreateSessionParams } from "@experiments/protocol-schemas/ahp";
+import type {
+  CreateSessionParams as AHPCreateSessionParams,
+  SubscribeView as AHPSubscribeView,
+} from "@experiments/protocol-schemas/ahp";
 import type {
   ActionOrigin as AHPActionOrigin,
   ChatState as AHPChatState,
@@ -26,7 +29,8 @@ export type SessionDispatchRequest = {
   origin: AHPActionOrigin;
 };
 
-export type SessionSubscribeRequest = { router: string; channel: string };
+/** `view` sets the loaded history of a chat subscription. The session channel ignores it. */
+export type SessionSubscribeRequest = { router: string; channel: string; view?: AHPSubscribeView };
 
 export type SessionSubscribeResponse = {
   revision: number;
@@ -36,6 +40,9 @@ export type SessionSubscribeResponse = {
 export type SessionUnsubscribeRequest = { router: string; channels: string[] };
 
 export type SessionRouterClosedRequest = { router: string };
+
+/** The AHP `fetchTurns` parameters, and the router that receives the loaded turns first. */
+export type SessionFetchTurnsRequest = { router: string; channel: string; cursor?: string };
 
 export class SessionCreateError extends CodedRpcError {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
@@ -58,6 +65,14 @@ export class SessionSubscribeError extends CodedRpcError {
   constructor(cause: unknown) {
     super(cause);
     this.name = "SessionSubscribeError";
+  }
+}
+
+export class SessionFetchTurnsError extends CodedRpcError {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
+  constructor(cause: unknown) {
+    super(cause);
+    this.name = "SessionFetchTurnsError";
   }
 }
 
@@ -96,11 +111,23 @@ export interface SessionRPC extends Rpc.DurableObjectBranded {
   /**
    * Subscribes a router to the session channel or to its default chat, and returns the state
    * and revision of the channel. The router receives each revision after the returned one.
+   * The chat snapshot contains the shared loaded-history window. It can contain more turns
+   * than `view` requests.
    *
    * @throws {SessionSubscribeError} If the session is absent, the channel does not belong
    * to it, or the router closed.
    */
   subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse>;
+
+  /**
+   * Loads the next page of older turns into the history that the subscribers of the chat share.
+   * The subscribers receive a `chat/turnsLoaded` action. The call resolves after the requesting
+   * router receives it. A retry with a cursor that a call already used loads nothing.
+   *
+   * @throws {SessionFetchTurnsError} If the session is absent, the channel does not belong to
+   * it, or the cursor is unknown. An unknown cursor has the `InvalidParams` code.
+   */
+  fetchTurns(req: SessionFetchTurnsRequest): Promise<void>;
 
   /** Removes subscriptions of a router. Succeeds if the session or subscription is absent. */
   unsubscribe(req: SessionUnsubscribeRequest): Promise<void>;

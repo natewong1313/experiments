@@ -1,13 +1,26 @@
 import { eq } from "drizzle-orm";
 import { SessionLifecycle as AHPSessionLifecycle } from "@microsoft/agent-host-protocol";
+import type {
+  ChatState as AHPChatState,
+  SessionState as AHPSessionState,
+} from "@microsoft/agent-host-protocol";
+import type { HostSessionEntry } from "../shared/rpc/host";
 import type { SessionUpdate } from "../shared/rpc/router";
+import { sessionUri } from "../shared/lookups";
+import { ChatStore } from "./chat/store";
+import type { HasSubscribers } from "./chat/store";
 import type { SessionDatabase } from "./db/database";
 import { sessionTable } from "./db/schema";
 import type { SessionRecord } from "./db/schema";
-import { sessionSummary } from "./state";
+import { sessionState, sessionSummary } from "./state";
+import type { NewSessionRows } from "./state";
 
-/** Changes the record in place and returns the update to push, or undefined to skip. */
-export type SessionChange = (record: SessionRecord) => SessionUpdate | undefined;
+/**
+ * Changes the session record in place and writes chat rows through `chats`. Returns the update
+ * to publish, or undefined to skip a change that writes no rows. Chat writes commit with the
+ * transaction. A change that writes chat rows must return an update.
+ */
+export type SessionChange = (record: SessionRecord, chats: ChatStore) => SessionUpdate | undefined;
 
 /**
  * The outcome of applying a change to the session record. `absent` means the record is absent
@@ -39,18 +52,20 @@ export function phaseOf(record: SessionRecord | undefined): SessionPhase {
  * chat identifies one creation of a session ID.
  */
 export function defaultChatOf(record: SessionRecord): string {
-  return record.chatState.resource;
+  return record.sessionState.defaultChat;
 }
 
 /**
- * Reads and writes the one session record. The caller checks that the session tables exist.
- * Methods that take a `defaultChat` ignore a record of another creation.
+ * Reads and writes the session record and its chats. The caller checks that the session
+ * tables exist. Methods with `defaultChat` ignore records from a different creation of the same session.
  */
 export class SessionRecords {
+  readonly chats: ChatStore;
   private db: SessionDatabase;
 
-  constructor(db: SessionDatabase) {
+  constructor(db: SessionDatabase, hasSubscribers: HasSubscribers) {
     this.db = db;
+    this.chats = new ChatStore(db.orm, hasSubscribers);
   }
 
   /** Returns the stored record, also while it is disposing. */
@@ -58,8 +73,8 @@ export class SessionRecords {
     return this.db.orm.select().from(sessionTable).get();
   }
 
-  /** Inserts the record from `build` if no record is stored. Returns the stored record. */
-  insertIfAbsent(build: () => SessionRecord): SessionRecord {
+  /** Inserts the rows from `build` if no record is stored. Returns the stored record. */
+  insertIfAbsent(build: () => NewSessionRows): SessionRecord {
     return this.db.transactionSync(() => {
       const existing = this.get();
 
@@ -68,10 +83,30 @@ export class SessionRecords {
       }
 
       const created = build();
-      this.db.orm.insert(sessionTable).values(created).run();
+      this.chats.insert(created.chat);
+      this.db.orm.insert(sessionTable).values(created.session).run();
 
-      return created;
+      return created.session;
     });
+  }
+
+  /** Returns the session state for the session channel, or the chat state for a chat channel. */
+  channelState(record: SessionRecord, channel: string): AHPSessionState | AHPChatState {
+    return channel === sessionUri(record.id)
+      ? sessionState(record, this.chats)
+      : this.chats.snapshot(channel);
+  }
+
+  /** Returns the catalog entry of the session at its current revision. */
+  catalogEntry(record: SessionRecord): HostSessionEntry {
+    const defaultChat = defaultChatOf(record);
+
+    return {
+      sessionId: record.id,
+      defaultChat,
+      revision: record.revision,
+      summary: sessionSummary(record, this.chats.summary(defaultChat)),
+    };
   }
 
   /**
@@ -95,15 +130,15 @@ export class SessionRecords {
         return { status: "absent" };
       }
 
-      const before = catalogFields(record);
+      const before = this.catalogFields(record);
       const wasSynced = record.syncedRevision === record.revision;
-      const update = change(record);
+      const update = change(record, this.chats);
 
       if (!update) {
         return { status: "skipped" };
       }
 
-      const summaryChanged = before !== catalogFields(record);
+      const summaryChanged = before !== this.catalogFields(record);
 
       if (wasSynced && !summaryChanged) {
         record.syncedRevision = record.revision;
@@ -179,6 +214,17 @@ export class SessionRecords {
     });
   }
 
+  /**
+   * Returns the summary fields that the host stores, without `modifiedAt`, as JSON. A change to
+   * `modifiedAt` alone does not schedule a catalog sync.
+   */
+  private catalogFields(record: SessionRecord): string {
+    const chat = this.chats.summary(defaultChatOf(record));
+    const { modifiedAt: _modifiedAt, ...fields } = sessionSummary(record, chat);
+
+    return JSON.stringify(fields);
+  }
+
   private write(record: SessionRecord): void {
     this.update(record.id, record);
   }
@@ -186,14 +232,4 @@ export class SessionRecords {
   private update(id: string, values: Partial<SessionRecord>): void {
     this.db.orm.update(sessionTable).set(values).where(eq(sessionTable.id, id)).run();
   }
-}
-
-/**
- * Returns the summary fields that the host stores, without `modifiedAt`, as JSON. A change to
- * `modifiedAt` alone does not schedule a catalog sync.
- */
-function catalogFields(record: SessionRecord): string {
-  const { modifiedAt: _modifiedAt, ...fields } = sessionSummary(record);
-
-  return JSON.stringify(fields);
 }

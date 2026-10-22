@@ -8,9 +8,8 @@ import type { HostRPC, SessionRPC } from "../src";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
 import type { SessionRecord } from "../src/session/db/schema";
-import { sessionSummary } from "../src/session/state";
 import { chatUri, sessionDOName, sessionUri } from "../src/shared/lookups";
-import { failure, failureMessage, newRecord } from "./fixtures";
+import { failure, failureMessage, newEntry } from "./fixtures";
 import { connectPeer } from "./peer";
 import { readState, storedTables } from "./storage";
 import type { AgentSession } from "./session";
@@ -144,14 +143,7 @@ it("fails a creation after the last finishCreate attempt and removes it everywhe
 
 it("fails a creation at once when the catalogue has another session with the ID", async () => {
   const created = target();
-  const stranger = newRecord({ sessionId: created.sessionId });
-
-  const entry = {
-    sessionId: created.sessionId,
-    defaultChat: stranger.chatState.resource,
-    revision: 0,
-    summary: sessionSummary(stranger),
-  };
+  const entry = newEntry({ sessionId: created.sessionId });
 
   await hostRPC(created).sessionCreated(entry);
 
@@ -352,9 +344,8 @@ it("deletes storage without a record after a reset", async () => {
 it("removes a catalogue entry that has no session and rejects an unknown session", async () => {
   const orphan = target();
   const peer = await connectPeer(orphan.hostId);
-  const record = newRecord({ sessionId: orphan.sessionId });
   const defaultChat = chatUri(orphan.sessionId, crypto.randomUUID());
-  const summary = sessionSummary(record);
+  const { summary } = newEntry({ sessionId: orphan.sessionId });
 
   try {
     await hostRPC(orphan).sessionCreated({

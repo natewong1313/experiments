@@ -42,6 +42,9 @@ type RouterFanoutOptions<Item extends FanoutItem> = {
 /** The subscriptions of a router when a push was sent. */
 type SentChannels = { channels: string[]; lastId: number };
 
+/** Tracks a caller waiting for a router to acknowledge at least `revision`. */
+type DeliveryWaiter = { router: string; revision: number; resolve(): void };
+
 /**
  * The delay before a sender checks for routers that missed updates. The delay is longer than
  * the 15-second window in which `durability` runs alarms from an in-memory timer. A pending
@@ -78,6 +81,7 @@ export class RouterFanout<Item extends FanoutItem> {
   private queue: PushQueue<Item>;
   private flushScheduled = false;
   private runningCheck: Promise<void> = Promise.resolve();
+  private waiters: Set<DeliveryWaiter> = new Set();
 
   constructor(options: RouterFanoutOptions<Item>) {
     this.options = options;
@@ -183,6 +187,66 @@ export class RouterFanout<Item extends FanoutItem> {
     }
 
     await this.scheduleFlush();
+  }
+
+  /** Returns true if a router subscribes to the channel. */
+  hasSubscribers(channel: string): boolean {
+    const row = this.database.orm
+      .select({ id: subscriberChannelsTable.id })
+      .from(subscriberChannelsTable)
+      .where(eq(subscriberChannelsTable.channel, channel))
+      .limit(1)
+      .get();
+
+    return row !== undefined;
+  }
+
+  /** Returns true if the router subscribes to the channel. */
+  isSubscribed(router: string, channel: string): boolean {
+    const subscription = and(
+      eq(subscriberChannelsTable.router, router),
+      eq(subscriberChannelsTable.channel, channel),
+    );
+
+    return (
+      this.database.orm.select().from(subscriberChannelsTable).where(subscription).get() !==
+      undefined
+    );
+  }
+
+  /**
+   * Waits until the router acknowledges at least `revision` or has no queued or in-flight pushes.
+   * Returns true if the router remains subscribed and has acknowledged at least `revision`.
+   * A failed push removes the router and makes this return false.
+   */
+  async delivered(router: string, revision: number): Promise<boolean> {
+    if (this.queue.isActive(router)) {
+      const acknowledged = Promise.withResolvers<null>();
+
+      const waiter: DeliveryWaiter = {
+        router,
+        revision,
+        resolve: (): void => {
+          acknowledged.resolve(null);
+        },
+      };
+
+      this.waiters.add(waiter);
+
+      try {
+        await Promise.race([acknowledged.promise, this.queue.routerIdle(router)]);
+      } finally {
+        this.waiters.delete(waiter);
+      }
+    }
+
+    const row = this.database.orm
+      .select({ revision: subscriberRoutersTable.deliveredRevision })
+      .from(subscriberRoutersTable)
+      .where(eq(subscriberRoutersTable.router, router))
+      .get();
+
+    return row !== undefined && row.revision >= revision;
   }
 
   /** Waits for queued pushes and the running subscriber check to settle, including failures. */
@@ -324,6 +388,12 @@ export class RouterFanout<Item extends FanoutItem> {
 
     if (!this.acknowledge(router, last.revision, sent, subscribed)) {
       this.queue.drop(router);
+    }
+
+    for (const waiter of this.waiters) {
+      if (waiter.router === router && waiter.revision <= last.revision) {
+        waiter.resolve();
+      }
     }
   }
 

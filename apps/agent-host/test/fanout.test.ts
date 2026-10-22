@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { runInDurableObject } from "cloudflare:test";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { RouterDatabase } from "../src/router/db/database";
 import { SubscriptionStore } from "../src/router/dependencies/subscription-store";
 import { SessionDatabase } from "../src/session/db/database";
@@ -356,4 +356,55 @@ it("accepts a subscribe request from a closed router after the closed router exp
   });
 
   expect(result).toEqual({ routers: [expired], rejection: "Router is closed" });
+});
+
+it("waits for the acknowledgement of a revision and reports a failed push", async () => {
+  const router = newRouterDOName(crypto.randomUUID());
+  const replies: PromiseWithResolvers<string[]>[] = [];
+
+  async function heldSend(): Promise<string[]> {
+    const reply = Promise.withResolvers<string[]>();
+    replies.push(reply);
+
+    return await reply.promise;
+  }
+
+  const result = await runInDurableObject(sessionStub(), async (_instance, ctx) => {
+    const pushes = await fanout(ctx, heldSend);
+    pushes.subscribe(router, "chat", 0);
+    await pushes.publish([{ revision: 1 }]);
+    await pushes.publish([{ revision: NEW_REVISION }]);
+    const states: string[] = [];
+    const delivery = pushes.delivered(router, NEW_REVISION);
+    void delivery.then(() => states.push("delivered"));
+
+    // Acknowledging the first batch does not resolve a wait for the second revision.
+    await vi.waitFor(() => {
+      expect(replies).toHaveLength(1);
+    });
+    replies[0]?.resolve(["chat"]);
+    await vi.waitFor(() => {
+      expect(replies).toHaveLength(NEW_REVISION);
+    });
+    states.push("second batch sent");
+    replies[1]?.resolve(["chat"]);
+    const acknowledged = await delivery;
+
+    // A failed push removes the router. The delivery wait returns false.
+    await pushes.publish([{ revision: NEW_REVISION + 1 }]);
+    const failed = pushes.delivered(router, NEW_REVISION + 1);
+    await vi.waitFor(() => {
+      expect(replies).toHaveLength(NEW_REVISION + 1);
+    });
+    replies[NEW_REVISION]?.reject(new Error("Router is unreachable"));
+
+    return { states, acknowledged, failed: await failed, routers: pushes.routers() };
+  });
+
+  expect(result).toEqual({
+    states: ["second batch sent", "delivered"],
+    acknowledged: true,
+    failed: false,
+    routers: [],
+  });
 });

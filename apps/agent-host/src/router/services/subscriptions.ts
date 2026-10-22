@@ -6,6 +6,7 @@ import type { SenderSnapshot } from "../dependencies/remote-subscriptions";
 import { channelSender, groupBySender, isSameSender } from "../sender";
 import type { ChannelSender, Sender, SenderChannels } from "../sender";
 import type { Frame } from "./client-connection";
+import type { SubscribeView as AHPSubscribeView } from "@experiments/protocol-schemas/ahp";
 
 /** The maximum number of pushes that one subscription setup holds. */
 export const MAX_HELD_PUSHES = 1024;
@@ -42,8 +43,8 @@ export class Subscriptions {
   }
 
   /**
-   * Subscribes the client to the channels and returns their snapshots. The pushes from the
-   * senders of the channels wait until `finishFrame`.
+   * Subscribes the client to the channels and returns their snapshots. `view` sets the loaded
+   * history of each chat. The pushes from the senders of the channels wait until `finishFrame`.
    *
    * The router stores the subscriptions only if every sender accepts and the frame is still
    * current. Otherwise it tells each sender that accepted a new subscription to stop. After a
@@ -51,7 +52,11 @@ export class Subscriptions {
    *
    * @throws {AHPError} If a channel is not valid, a sender fails, or the connection closed.
    */
-  async subscribe(channels: string[], frame: Frame): Promise<SenderSnapshot[]> {
+  async subscribe(
+    channels: string[],
+    frame: Frame,
+    view?: AHPSubscribeView,
+  ): Promise<SenderSnapshot[]> {
     // An invalid channel throws here, before the setup starts.
     const subscriptions = channels.map((channel) => ({
       channel,
@@ -61,7 +66,7 @@ export class Subscriptions {
     this.running += 1;
 
     try {
-      return await this.subscribeAtSenders(subscriptions, frame);
+      return await this.subscribeAtSenders(subscriptions, frame, view);
     } finally {
       this.running -= 1;
     }
@@ -79,6 +84,7 @@ export class Subscriptions {
   private async subscribeAtSenders(
     subscriptions: ChannelSender[],
     frame: Frame,
+    view?: AHPSubscribeView,
   ): Promise<SenderSnapshot[]> {
     const { remoteSubscriptions, subscriptionStore } = this.deps;
     this.startSetup(subscriptions);
@@ -86,7 +92,7 @@ export class Subscriptions {
     const results = await Promise.allSettled(
       subscriptions.map(
         async ({ channel, sender }) =>
-          await remoteSubscriptions.subscribe(sender, channel, () => frame.isCurrent()),
+          await remoteSubscriptions.subscribe({ sender, channel, view }, () => frame.isCurrent()),
       ),
     );
 

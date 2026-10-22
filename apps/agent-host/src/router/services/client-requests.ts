@@ -6,16 +6,20 @@ import {
 } from "@microsoft/agent-host-protocol";
 import type {
   CreateSessionParams as AHPCreateSessionParams,
+  FetchTurnsParams as AHPFetchTurnsParams,
+  FetchTurnsResult as AHPFetchTurnsResult,
   InitializeParams as AHPInitializeParams,
   InitializeResult as AHPInitializeResult,
   ListSessionsResult as AHPListSessionsResult,
   Snapshot as AHPSnapshot,
   SubscribeResult as AHPSubscribeResult,
+  SubscribeView as AHPSubscribeView,
 } from "@experiments/protocol-schemas/ahp";
 import {
   ChannelParamsSchema as AHPChannelParamsSchema,
   CreateSessionParamsSchema as AHPCreateSessionParamsSchema,
   DispatchActionParamsSchema as AHPDispatchActionParamsSchema,
+  FetchTurnsParamsSchema as AHPFetchTurnsParamsSchema,
   InitializeParamsSchema as AHPInitializeParamsSchema,
   ListSessionsParamsSchema as AHPListSessionsParamsSchema,
   RootChannelParamsSchema as AHPRootChannelParamsSchema,
@@ -36,7 +40,12 @@ import type { Subscriptions } from "./subscriptions";
 
 const AttachmentSchema = z.object({ clientId: z.string().optional() }).nullable();
 
-type RequestResult = AHPInitializeResult | AHPListSessionsResult | AHPSubscribeResult | null;
+type RequestResult =
+  | AHPInitializeResult
+  | AHPListSessionsResult
+  | AHPSubscribeResult
+  | AHPFetchTurnsResult
+  | null;
 
 /**
  * Handles the client frames of one connection. It parses each frame, runs the AHP request or
@@ -128,10 +137,16 @@ export class ClientRequestsRouter {
 
     switch (method) {
       case "subscribe": {
-        const { channel } = AHPSubscribeParamsSchema.parse(params);
-        const [snapshot] = await this.subscribe([channel], frame);
+        const { channel, view } = AHPSubscribeParamsSchema.parse(params);
+        const [snapshot] = await this.subscribe([channel], frame, view);
 
         return { snapshot };
+      }
+
+      case "fetchTurns": {
+        await this.fetchTurns(AHPFetchTurnsParamsSchema.parse(params));
+
+        return {};
       }
 
       case "listSessions": {
@@ -226,8 +241,12 @@ export class ClientRequestsRouter {
    * Subscribes the client to the channels. Each snapshot starts at the current `serverSeq`,
    * because the router sends the updates that follow it after the reply.
    */
-  private async subscribe(channels: string[], frame: Frame): Promise<AHPSnapshot[]> {
-    const snapshots = await this.subscriptions.subscribe(channels, frame);
+  private async subscribe(
+    channels: string[],
+    frame: Frame,
+    view?: AHPSubscribeView,
+  ): Promise<AHPSnapshot[]> {
+    const snapshots = await this.subscriptions.subscribe(channels, frame, view);
     const fromSeq = this.deps.sequence.current();
 
     return snapshots.map(({ channel, state }) => ({ resource: channel, state, fromSeq }));
@@ -286,6 +305,21 @@ export class ClientRequestsRouter {
         }
       },
     );
+  }
+
+  /**
+   * The session pushes `chat/turnsLoaded` to this router before the call resolves.
+   * This makes the client receive the action before the command reply.
+   * A retry with the same cursor loads nothing.
+   */
+  private async fetchTurns({ channel, cursor }: AHPFetchTurnsParams): Promise<void> {
+    const parsed = parseChannel(channel);
+
+    if (parsed.kind !== "chat") {
+      throw new AHPError("Expected an ahp-chat channel");
+    }
+
+    await this.deps.remoteSubscriptions.fetchTurns(parsed.sessionId, channel, cursor);
   }
 
   /**

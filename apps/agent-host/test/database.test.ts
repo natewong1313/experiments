@@ -15,13 +15,12 @@ import {
 } from "../src/router/db/schema";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
-import { sessionSummary } from "../src/session/state";
-import { newRecord } from "./fixtures";
+import { newEntry, newRecord } from "./fixtures";
 import { newRouterDOName, sessionDOName } from "../src/shared/lookups";
 
 it("commits and rolls back host writes", async () => {
   const hostId = crypto.randomUUID();
-  const session = newRecord();
+  const { sessionId: id, defaultChat, summary } = newEntry();
 
   await runInDurableObject(env.COORDINATORS.getByName(hostId), async (_instance, ctx) => {
     const database = new HostDatabase(ctx.storage);
@@ -32,12 +31,7 @@ it("commits and rolls back host writes", async () => {
       return orm.select({ revision: rootTable.revision }).from(rootTable).get()?.revision ?? 0;
     }
 
-    const entry = {
-      id: session.id,
-      revision: 0,
-      defaultChat: session.chatState.resource,
-      summary: sessionSummary(session),
-    };
+    const entry = { id, revision: 0, defaultChat, summary };
 
     database.transactionSync(() => {
       orm.insert(sessionsTable).values(entry).run();
@@ -63,7 +57,7 @@ it("commits and rolls back host writes", async () => {
 
 it("commits and rolls back session writes and creates no tables before a session exists", async () => {
   const hostId = crypto.randomUUID();
-  const session = newRecord();
+  const { session } = newRecord();
   const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.id));
 
   await runInDurableObject(stub, async (_instance, ctx) => {

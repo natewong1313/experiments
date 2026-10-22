@@ -9,8 +9,7 @@ import {
 } from "@microsoft/agent-host-protocol";
 import type { SessionSummary as AHPSessionSummary } from "@experiments/protocol-schemas/ahp";
 import type { HostRPC } from "../src";
-import { sessionSummary } from "../src/session/state";
-import { failure, newRecord } from "./fixtures";
+import { failure, newEntry as newCatalogEntry } from "./fixtures";
 import { chatUri, sessionUri } from "../src/shared/lookups";
 import { HostDatabase } from "../src/host/db/database";
 import { sessionsTable } from "../src/host/db/schema";
@@ -95,14 +94,7 @@ type Entry = { host: HostRPC; sessionId: string; defaultChat: string; summary: A
 
 /** Returns a host and a catalogue entry for a new session ID, without storing the entry. */
 function newEntry(): Entry {
-  const record = newRecord();
-
-  return {
-    host: env.COORDINATORS.getByName(crypto.randomUUID()),
-    sessionId: record.id,
-    defaultChat: record.chatState.resource,
-    summary: sessionSummary(record),
-  };
+  return { host: env.COORDINATORS.getByName(crypto.randomUUID()), ...newCatalogEntry() };
 }
 
 async function listed(host: HostRPC): Promise<AHPSessionSummary[]> {

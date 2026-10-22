@@ -14,12 +14,14 @@ import {
   SessionCreateError,
   SessionDispatchError,
   SessionDisposeError,
+  SessionFetchTurnsError,
   SessionSubscribeError,
 } from "../shared/rpc/session";
 import type {
   SessionRPC,
   SessionCreateRequest,
   SessionDispatchRequest,
+  SessionFetchTurnsRequest,
   SessionRouterClosedRequest,
   SessionSubscribeRequest,
   SessionSubscribeResponse,
@@ -36,7 +38,7 @@ import { AHPError, sessionAlreadyExists, sessionNotFound } from "../shared/proto
 import { SingleFlight } from "../shared/single-flight";
 import { SessionDatabase } from "./db/database";
 import type { SessionRecord } from "./db/schema";
-import { applyChat, applySession, buildSession } from "./state";
+import { applyChat, applyLoaded, applySession, buildSession } from "./state";
 import { AgentConnection } from "./agent-connection";
 import { UpdatesPublisher } from "./update-publisher";
 import { validateCreateRequest } from "./create-request";
@@ -75,6 +77,7 @@ export abstract class AgentHostSession<
     ctx: this.ctx,
     db: this.db,
     policy: (): SessionLifecyclePolicy => this.getLifecyclePolicy(),
+    hasSubscribers: (chat): boolean => this.publisher.hasSubscribers(chat),
     handlers: {
       syncCatalog: async (): Promise<void> => {
         await this.sendSummary();
@@ -193,34 +196,92 @@ export abstract class AgentHostSession<
   }
 
   /**
-   * Subscribes a router to a channel of this session and returns the channel snapshot.
+   * Subscribes a router to a channel of this session and returns the channel snapshot. A chat
+   * subscription can widen the loaded history of the chat. The other subscribers then receive
+   * the added turns.
    *
    * @throws {SessionSubscribeError} If the session does not exist or the channel does not
    * belong to it.
    */
   async subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse> {
     try {
-      const snapshot = this.db.transactionSync(() => {
+      const { snapshot, widened } = this.db.transactionSync(() => {
         const session = this.storage.requireSession();
-        const sessionChannel = sessionUri(session.id);
+        const isChat = req.channel !== sessionUri(session.id);
 
-        if (req.channel !== sessionChannel && req.channel !== defaultChatOf(session)) {
+        if (isChat && req.channel !== defaultChatOf(session)) {
           throw new AHPError("Channel does not belong to this session");
         }
 
-        this.publisher.subscribe(req.router, req.channel, session.revision);
+        // The first chat subscriber starts a window without publishing an action or advancing the revision.
+        // Widening an existing window publishes the added turns to the other subscribers.
+        const { records } = this.storage;
+        const loaded = isChat ? records.chats.openWindow(req.channel, req.view?.turns) : undefined;
+        const saved = loaded && records.save((record) => applyLoaded(record, loaded));
+
+        const record = this.storage.requireSession();
+        this.publisher.subscribe(req.router, req.channel, record.revision);
 
         return {
-          revision: session.revision,
-          state: req.channel === sessionChannel ? session.sessionState : session.chatState,
+          snapshot: {
+            revision: record.revision,
+            state: this.storage.records.channelState(record, req.channel),
+          },
+          widened: saved?.status === "applied" ? saved.update : undefined,
         };
       });
+
+      if (widened) {
+        await this.publisher.publish([widened]);
+      }
 
       await this.publisher.scheduleCheck();
 
       return snapshot;
     } catch (error) {
       throw new SessionSubscribeError(error);
+    }
+  }
+
+  /**
+   * Loads the next page of older turns into the loaded history of the chat.
+   * AHP requires the call to resolve after the requesting router receives `chat/turnsLoaded`.
+   *
+   * @throws {SessionFetchTurnsError} If the session does not exist, the channel does not belong
+   * to it, or the cursor is unknown.
+   */
+  async fetchTurns(req: SessionFetchTurnsRequest): Promise<void> {
+    try {
+      if (req.channel !== defaultChatOf(this.storage.requireSession())) {
+        throw new AHPError("Channel does not belong to this session");
+      }
+
+      // The loaded turns go only to subscribers, so the router must subscribe first.
+      if (!this.publisher.isSubscribed(req.router, req.channel)) {
+        throw new AHPError("Subscribe to the chat before fetching turns");
+      }
+
+      const outcome = await this.applyChange((record, chats) => {
+        const loaded = chats.fetchTurns(req.channel, req.cursor);
+
+        return loaded && applyLoaded(record, loaded);
+      });
+
+      if (outcome === "absent") {
+        throw sessionNotFound();
+      }
+
+      // A retry of a used cursor loads nothing, but an earlier load can still be in flight.
+      const { revision } = this.storage.requireSession();
+
+      if (!(await this.publisher.delivered(req.router, revision))) {
+        throw new AHPError(
+          "The connection did not receive the loaded turns",
+          AHPJsonRpcErrorCodes.InternalError,
+        );
+      }
+    } catch (error) {
+      throw new SessionFetchTurnsError(error);
     }
   }
 
@@ -325,21 +386,20 @@ export abstract class AgentHostSession<
       }
     }
 
-    await this.applyChange((session) => {
-      const turn = session.chatState.activeTurn;
+    await this.applyChange((session, chats) => {
+      const turnId = chats.activeTurnId(defaultChatOf(session));
 
-      return (
-        turn &&
-        applyChat(session, {
-          type: AHPActionType.ChatError,
-          turnId: turn.id,
-          duration: 0,
-          part: {
-            kind: AHPResponsePartKind.Error,
-            error: { errorType: "agent", message: "Turn interrupted by session restart" },
-          },
-        })
-      );
+      return turnId === undefined
+        ? undefined
+        : applyChat(session, chats, {
+            type: AHPActionType.ChatError,
+            turnId,
+            duration: 0,
+            part: {
+              kind: AHPResponsePartKind.Error,
+              error: { errorType: "agent", message: "Turn interrupted by session restart" },
+            },
+          });
     });
 
     const session = this.storage.requireSession();
@@ -423,7 +483,7 @@ export abstract class AgentHostSession<
     }
 
     try {
-      await this.catalog.created(session);
+      await this.catalog.created(this.storage.records.catalogEntry(session));
       this.storage.records.markSynced(defaultChat, session.revision);
       await this.openAgent();
 
@@ -652,7 +712,7 @@ export abstract class AgentHostSession<
       return;
     }
 
-    await this.catalog.summaryChanged(session);
+    await this.catalog.summaryChanged(this.storage.records.catalogEntry(session));
     this.storage.records.markSynced(defaultChatOf(session), session.revision);
   }
 

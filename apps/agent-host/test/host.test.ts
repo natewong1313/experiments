@@ -1,6 +1,5 @@
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
-import { evictDurableObject, runInDurableObject } from "cloudflare:test";
+import { evictDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import * as z from "zod";
 import {
@@ -14,10 +13,11 @@ import {
 import { connectPeer, createSession as createPeerSession, openPeer } from "./peer";
 import type { CreatedSession, Peer } from "./peer";
 import { CloseCode } from "../src/router/websockets";
-import { SessionDatabase } from "../src/session/db/database";
-import { sessionTable } from "../src/session/db/schema";
+import { changeSession } from "./storage";
 import {
+  ActionType as AHPActionType,
   MessageKind as AHPMessageKind,
+  ResponsePartKind as AHPResponsePartKind,
   PROTOCOL_VERSION as AHP_PROTOCOL_VERSION,
 } from "@microsoft/agent-host-protocol";
 import { sessionDOName } from "../src/shared/lookups";
@@ -273,36 +273,36 @@ it("records an interrupted turn as an error on reconstruction", async () => {
     const session = await createSubscribedSession(peer);
     const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
 
-    const interrupted = await runInDurableObject(stub, async (_instance, ctx) => {
-      const db = new SessionDatabase(ctx.storage);
-      const record = db.orm.select().from(sessionTable).get();
+    const interrupted = crypto.randomUUID();
 
-      if (!record) {
-        throw new Error("Missing session");
-      }
+    await changeSession(stub, ({ chats }, record) => {
+      const chat = record.sessionState.defaultChat;
 
-      record.chatState.activeTurn = {
-        id: crypto.randomUUID(),
+      chats.apply(chat, {
+        type: AHPActionType.ChatTurnStarted,
+        turnId: interrupted,
         startedAt: new Date().toISOString(),
         message: { text: "unfinished", origin: { kind: AHPMessageKind.User } },
-        responseParts: [],
-        usage: undefined,
-      };
+      });
 
-      db.orm.update(sessionTable).set(record).where(eq(sessionTable.id, record.id)).run();
-
-      return record.chatState.activeTurn.id;
+      chats.apply(chat, {
+        type: AHPActionType.ChatResponsePart,
+        turnId: interrupted,
+        part: { kind: AHPResponsePartKind.Markdown, id: "answer", content: "partial" },
+      });
     });
 
-    expect(interrupted).toBeDefined();
     await evictDurableObject(stub);
     const state = await chatState(peer, session.chat);
     expect(state.activeTurn).toBeUndefined();
-    expect(state.turns[0]?.state).toBe("error");
-    expect(state.turns[0]?.responseParts).toContainEqual({
-      kind: "error",
-      error: { errorType: "agent", message: "Turn interrupted by session restart" },
-    });
+    expect(state.turns[0]).toMatchObject({ id: interrupted, state: "error", duration: 0 });
+    expect(state.turns[0]?.responseParts).toEqual([
+      { kind: "markdown", id: "answer", content: "partial" },
+      {
+        kind: "error",
+        error: { errorType: "agent", message: "Turn interrupted by session restart" },
+      },
+    ]);
   } finally {
     peer.close();
   }

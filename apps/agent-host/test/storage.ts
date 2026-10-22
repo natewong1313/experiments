@@ -4,14 +4,14 @@ import { runInDurableObject } from "cloudflare:test";
 import { expect, vi } from "vitest";
 import type { SessionSubscribeResponse } from "../src/shared/rpc/session";
 import { SessionDatabase } from "../src/session/db/database";
-import { sessionTable } from "../src/session/db/schema";
+import { SessionRecords } from "../src/session/records";
+import type { SessionRecord } from "../src/session/db/schema";
 import { RouterDatabase } from "../src/router/db/database";
 import { SubscriptionStore } from "../src/router/dependencies/subscription-store";
 import { sendersTable } from "../src/router/db/schema";
 import { senderFromKey } from "../src/router/sender";
 import type { ChannelSender, Sender } from "../src/router/sender";
 import { subscriberChannelsTable, subscriberRoutersTable } from "../src/shared/db/fanout-schema";
-import { sessionUri } from "../src/shared/lookups";
 import type { AgentSession } from "./session";
 
 /**
@@ -96,14 +96,37 @@ export async function readState(
 ): Promise<SessionSubscribeResponse | undefined> {
   return await runInDurableObject(stub, (_instance, ctx) => {
     const db = new SessionDatabase(ctx.storage);
-    const record = db.hasMigrated() ? db.orm.select().from(sessionTable).get() : undefined;
+    const records = db.hasMigrated() ? new SessionRecords(db, () => false) : undefined;
+    const record = records?.get();
 
-    if (!record) {
+    if (!records || !record) {
       return;
     }
 
-    const state = channel === sessionUri(record.id) ? record.sessionState : record.chatState;
+    return { revision: record.revision, state: records.channelState(record, channel) };
+  });
+}
 
-    return { revision: record.revision, state };
+/**
+ * Runs `change` on the stored session record and its chats in one transaction without
+ * publishing actions. Tests use this to store states that the agent does not produce.
+ */
+export async function changeSession<Result>(
+  stub: DurableObjectStub<AgentSession>,
+  change: (records: SessionRecords, record: SessionRecord, db: SessionDatabase) => Result,
+): Promise<Result> {
+  return await runInDurableObject(stub, (_instance, ctx) => {
+    const db = new SessionDatabase(ctx.storage);
+    const records = new SessionRecords(db, () => false);
+
+    return db.transactionSync(() => {
+      const record = records.get();
+
+      if (!record) {
+        throw new Error("Missing session");
+      }
+
+      return change(records, record, db);
+    });
   });
 }
