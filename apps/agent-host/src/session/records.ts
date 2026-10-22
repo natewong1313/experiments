@@ -115,7 +115,9 @@ export class SessionRecords {
    * This lets an idempotent operation succeed on retry without another side effect.
    *
    * A change that leaves the summary fields as they were keeps the host in sync. Thus
-   * `syncedRevision` moves with `revision` when it was current.
+   * `syncedRevision` moves with `revision` when it was current. The catalog check compares the
+   * session fields by reference, so a change must replace `sessionState` rather than mutate its
+   * directories.
    */
   save(
     change: SessionChange,
@@ -130,7 +132,8 @@ export class SessionRecords {
         return { status: "absent" };
       }
 
-      const before = this.catalogFields(record);
+      const { title, workingDirectories } = record.sessionState;
+      const { statusChanges } = this.chats;
       const wasSynced = record.syncedRevision === record.revision;
       const update = change(record, this.chats);
 
@@ -138,7 +141,11 @@ export class SessionRecords {
         return { status: "skipped" };
       }
 
-      const summaryChanged = before !== this.catalogFields(record);
+      // The other catalog fields never change, and `modifiedAt` alone does not need a sync.
+      const summaryChanged =
+        this.chats.statusChanges !== statusChanges ||
+        title !== record.sessionState.title ||
+        !sameDirectories(workingDirectories, record.sessionState.workingDirectories);
 
       if (wasSynced && !summaryChanged) {
         record.syncedRevision = record.revision;
@@ -214,17 +221,6 @@ export class SessionRecords {
     });
   }
 
-  /**
-   * Returns the summary fields that the host stores, without `modifiedAt`, as JSON. A change to
-   * `modifiedAt` alone does not schedule a catalog sync.
-   */
-  private catalogFields(record: SessionRecord): string {
-    const chat = this.chats.summary(defaultChatOf(record));
-    const { modifiedAt: _modifiedAt, ...fields } = sessionSummary(record, chat);
-
-    return JSON.stringify(fields);
-  }
-
   private write(record: SessionRecord): void {
     this.update(record.id, record);
   }
@@ -232,4 +228,12 @@ export class SessionRecords {
   private update(id: string, values: Partial<SessionRecord>): void {
     this.db.orm.update(sessionTable).set(values).where(eq(sessionTable.id, id)).run();
   }
+}
+
+function sameDirectories(before: string[] | undefined, after: string[] | undefined): boolean {
+  return (
+    before === after ||
+    (before?.length === after?.length &&
+      (before ?? []).every((directory, index) => directory === after?.[index]))
+  );
 }

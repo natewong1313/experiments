@@ -93,11 +93,19 @@ export class ChatStore {
   private orm: SessionDatabaseOrm;
   private turns: TurnRows;
   private hasSubscribers: HasSubscribers;
+  private statusWrites = 0;
 
   constructor(orm: SessionDatabaseOrm, hasSubscribers: HasSubscribers) {
     this.orm = orm;
     this.turns = new TurnRows(orm);
     this.hasSubscribers = hasSubscribers;
+  }
+
+  /**
+   * The number of writes that changed the status of a chat.
+   */
+  get statusChanges(): number {
+    return this.statusWrites;
   }
 
   insert(chat: NewChat): void {
@@ -465,6 +473,10 @@ export class ChatStore {
     const metadata = metadataOf(after);
     const metadataChanged = !sameFields(metadataOf(before), metadata);
     const summaryChanged = Object.keys(changes).length > 0;
+
+    if (Object.hasOwn(changes, "status")) {
+      this.statusWrites += 1;
+    }
 
     if (summaryChanged) {
       this.orm.update(chatsTable).set({ summary }).where(eq(chatsTable.resource, chat)).run();
