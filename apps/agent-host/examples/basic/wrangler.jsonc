@@ -25,6 +25,12 @@
       },
     ],
   },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AgentHost", "AgentSession", "AgentHostConnectionRouter"],
+    },
+  ],
   "compatibility_flags": ["nodejs_compat"],
   "ai": {
     "binding": "AI",
