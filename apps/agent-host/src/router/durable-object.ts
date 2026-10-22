@@ -13,7 +13,7 @@ import type { RouterDatabase } from "./db/database";
 import { createRouterDeps } from "./dependencies";
 import type { Stubs } from "./dependencies";
 import { DEFAULT_ROUTER_CONFIG } from "./dependencies/router-durability";
-import type { RouterDurability, RouterConfig } from "./dependencies/router-durability";
+import type { RouterDurability } from "./dependencies/router-durability";
 import { ClientConnection } from "./services/client-connection";
 import { ClientRequestsRouter } from "./services/client-requests";
 import { SenderRequestsRouter } from "./services/sender-requests";
@@ -68,7 +68,8 @@ export abstract class AgentHostConnectionRouter<
     };
 
     const deps = createRouterDeps(ctx, routerName, stubs, {
-      config: this.config,
+      // Read lazily so a subclass field override is in effect by the time `open` runs.
+      config: () => this.config,
       onWakeUp: () => {
         this.onWakeUp();
       },
@@ -92,17 +93,13 @@ export abstract class AgentHostConnectionRouter<
 
   /** The host Durable Object namespace. The router sends catalogue requests to the host. */
   abstract host: DurableObjectNamespace<Host>;
-
   /** The session Durable Object namespace. The router sends session requests to a session. */
   abstract session: DurableObjectNamespace<Session>;
-
   /**
    * The timing of the durable calls. The router reads it once, when it opens its storage. A
    * subclass overrides this to replace the defaults.
    */
-  protected get config(): RouterConfig {
-    return DEFAULT_ROUTER_CONFIG;
-  }
+  protected config = DEFAULT_ROUTER_CONFIG;
 
   async fetch(request: Request): Promise<Response> {
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {

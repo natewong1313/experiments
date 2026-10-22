@@ -28,8 +28,11 @@ const WAKE_UP_DELAY_MS = 2000;
 
 /** The parts of the durable work that the router class supplies. */
 export type RouterDurabilityHooks = {
-  /** The timing of the durable calls. The router reads it once, when it opens its storage. */
-  config: RouterConfig;
+  /**
+   * The timing of the durable calls. The router reads it once, when it opens its storage, so
+   * a subclass field override is in effect by then.
+   */
+  config(): RouterConfig;
   /**
    * Runs in the handler of the wake-up alarm. It must not delete storage before the handler
    * returns.
@@ -88,14 +91,12 @@ export class RouterDurability {
   private ctx: DurableObjectState;
   private handlers: CallHandlers;
   private hooks: RouterDurabilityHooks;
-  private config: RouterConfig;
   private durableCtx?: DurableCtx;
 
   constructor(ctx: DurableObjectState, handlers: CallHandlers, hooks: RouterDurabilityHooks) {
     this.ctx = ctx;
     this.handlers = handlers;
     this.hooks = hooks;
-    this.config = hooks.config;
   }
 
   /**
@@ -107,6 +108,8 @@ export class RouterDurability {
       return;
     }
 
+    const config = this.hooks.config();
+
     const scheduler = new DurabilityScheduler({
       context: this.ctx,
       alarmMinDelayMs: ALARM_MIN_DELAY_MS,
@@ -117,8 +120,8 @@ export class RouterDurability {
       handlers: this.handlers,
       methods: {
         unsubscribeSenders: {
-          attemptTimeoutMs: this.config.unsubscribeAttemptTimeoutMs,
-          retries: { maxAttempts: this.config.unsubscribeAttempts },
+          attemptTimeoutMs: config.unsubscribeAttemptTimeoutMs,
+          retries: { maxAttempts: config.unsubscribeAttempts },
         },
       },
     });

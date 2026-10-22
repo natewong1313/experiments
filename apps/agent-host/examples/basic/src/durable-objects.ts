@@ -24,6 +24,11 @@ import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./wo
 export class AgentHostConnectionRouter extends BaseConnectionRouter<Env, AgentHost, AgentSession> {
   host = this.env.AGENT_HOST;
   session = this.env.AGENT_SESSION;
+
+  config = {
+    unsubscribeAttemptTimeoutMs: 1000,
+    unsubscribeAttempts: 11,
+  };
 }
 
 const PI_AGENT: AgentInfo = {
