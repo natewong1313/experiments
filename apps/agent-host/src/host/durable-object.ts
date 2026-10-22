@@ -41,7 +41,7 @@ export type { AgentInfo } from "@microsoft/agent-host-protocol";
  * Client connections reach the host through their `AgentHostConnectionRouter`.
  * Sessions add, update, and remove their own catalog entries. The host never calls a session.
  */
-export abstract class AgentHost<
+export abstract class AgentHostRoot<
   Env = unknown,
   Router extends AgentHostConnectionRouterRPC = AgentHostConnectionRouterRPC,
 >

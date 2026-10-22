@@ -1,4 +1,4 @@
-import { AgentHost as BaseHost } from "../src";
+import { AgentHostRoot as BaseHost } from "../src";
 import type {
   HostRemovedResponse,
   HostSessionEntry,

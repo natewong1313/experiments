@@ -1,8 +1,8 @@
-export { AgentHost } from "./host/durable-object";
+export { AgentHostRoot } from "./host/durable-object";
 
 export type { AgentInfo } from "./host/durable-object";
 
-export { AgentSession } from "./session/durable-object";
+export { AgentHostSession } from "./session/durable-object";
 
 export type { SessionLifecyclePolicy } from "./session/durable-object";
 

@@ -1,4 +1,4 @@
-import { AgentSession as BaseSession } from "../src";
+import { AgentHostSession as BaseSession } from "../src";
 import type { SessionLifecyclePolicy } from "../src";
 import {
   agent as acpAgent,

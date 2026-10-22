@@ -6,8 +6,8 @@ Each session has one default chat and accepts one active text turn at a time.
 - An `AgentHostConnectionRouter` owns one client WebSocket. The Worker creates a new router for each
   connection. The router answers `initialize` and `ping`, and counts the `serverSeq` of
   its connection.
-- The `AgentHost` owns the session catalogue and the root channel.
-- An `AgentSession` owns one session: its ACP connection, its persisted conversation state,
+- The `AgentHostRoot` owns the session catalogue and the root channel.
+- An `AgentHostSession` owns one session: its ACP connection, its persisted conversation state,
   and the routers that subscribe to it.
 
 The router sends `listSessions` and root subscriptions to the host. It sends
@@ -24,8 +24,8 @@ correct when they resolve. The host never calls a session.
 ```mermaid
 flowchart LR
   Client <-->|AHP WebSocket| Router[AgentHostConnectionRouter DO]
-  Router -->|listSessions and root RPC| Host[AgentHost DO]
-  Router -->|create, dispose, subscribe, and dispatch RPC| Session[AgentSession DO]
+  Router -->|listSessions and root RPC| Host[AgentHostRoot DO]
+  Router -->|create, dispose, subscribe, and dispatch RPC| Session[AgentHostSession DO]
   Host -->|root pushes| Router
   Session -->|session and chat pushes| Router
   Session -->|sessionCreated, summaryChanged, and sessionRemoved RPC| Host
@@ -75,12 +75,12 @@ require any binding names.
   }
   ```
 
-- Override `AgentHost.getAgentInfo()` and `AgentSession.getAgentInfo()` to describe the
+- Override `AgentHostRoot.getAgentInfo()` and `AgentHostSession.getAgentInfo()` to describe the
   single agent backend. Return the same value from both. The session checks the provider of
   a create request against it.
-- Override `AgentSession.connectAgent(sessionId)` to return an ACP `Stream`.
-- Override `AgentSession.getWorkingDirectory()` when `/` is not the default.
-- Override `AgentSession.getLifecyclePolicy()` to change the timing of the alarms that
+- Override `AgentHostSession.connectAgent(sessionId)` to return an ACP `Stream`.
+- Override `AgentHostSession.getWorkingDirectory()` when `/` is not the default.
+- Override `AgentHostSession.getLifecyclePolicy()` to change the timing of the alarms that
   complete a creation or a dispose.
 
 All three classes require SQLite-backed Durable Object storage.

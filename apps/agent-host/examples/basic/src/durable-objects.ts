@@ -10,8 +10,8 @@ import type { ModelRef } from "@earendil-works/pi-durable";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 
 import {
-  AgentHost as BaseAgentHost,
-  AgentSession as BaseAgentSession,
+  AgentHostRoot as BaseAgentHostRoot,
+  AgentHostSession as BaseAgentHostSession,
   AgentHostConnectionRouter as BaseConnectionRouter,
 } from "@experiments/agent-host";
 import type { AgentInfo } from "@experiments/agent-host";
@@ -33,14 +33,14 @@ const PI_AGENT: AgentInfo = {
   models: [],
 };
 
-export class AgentHost extends BaseAgentHost<Env, AgentHostConnectionRouter> {
+export class AgentHost extends BaseAgentHostRoot<Env, AgentHostConnectionRouter> {
   router = this.env.AGENT_ROUTER;
   getAgentInfo(): AgentInfo {
     return PI_AGENT;
   }
 }
 
-export class AgentSession extends BaseAgentSession<Env, AgentHostConnectionRouter, AgentHost> {
+export class AgentSession extends BaseAgentHostSession<Env, AgentHostConnectionRouter, AgentHost> {
   router = this.env.AGENT_ROUTER;
   host = this.env.AGENT_HOST;
 

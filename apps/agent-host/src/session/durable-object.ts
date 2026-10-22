@@ -62,7 +62,7 @@ export type { SessionLifecyclePolicy } from "./lifecycle-policy";
  * A dispose commits when the session marks its record as disposing. From then on, the session
  * rejects requests, and the only next step is deletion.
  */
-export abstract class AgentSession<
+export abstract class AgentHostSession<
   Env = unknown,
   Router extends AgentHostConnectionRouterRPC = AgentHostConnectionRouterRPC,
   Host extends HostRPC = HostRPC,
@@ -658,7 +658,7 @@ export abstract class AgentSession<
 
   /** Returns the host ID and session ID from the Durable Object name. */
   private name(): SessionDOName {
-    return parseSessionDOName(requireName(this.ctx, "AgentSession"));
+    return parseSessionDOName(requireName(this.ctx, "AgentHostSession"));
   }
 }
 

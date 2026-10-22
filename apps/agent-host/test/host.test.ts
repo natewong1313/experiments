@@ -68,7 +68,7 @@ it("refuses a session that was not addressed by name", async () => {
     failure = error instanceof Error ? error : undefined;
   }
 
-  expect(failure).toMatchObject({ message: "AgentSession must be addressed by name" });
+  expect(failure).toMatchObject({ message: "AgentHostSession must be addressed by name" });
 });
 
 it("rejects actions on a session channel and reports only changed summary fields", async () => {
