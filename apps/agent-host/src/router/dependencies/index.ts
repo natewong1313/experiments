@@ -3,7 +3,7 @@ import type { StubFor } from "../../shared/stubs";
 import { RouterDatabase } from "../db/database";
 import { RemoteSubscriptions } from "./remote-subscriptions";
 import { RouterDurability } from "./router-durability";
-import type { RouterDurabilityPolicy } from "./router-durability";
+import type { RouterDurabilityHooks } from "./router-durability";
 import { ServerSequence } from "./server-sequence";
 import { SubscriptionStore } from "./subscription-store";
 
@@ -31,7 +31,7 @@ export function createRouterDeps(
   ctx: DurableObjectState,
   routerName: string,
   stubs: Stubs,
-  durabilityPolicy: () => RouterDurabilityPolicy,
+  hooks: RouterDurabilityHooks,
 ): AgentHostConnectionRouterDeps {
   const db = new RouterDatabase(ctx.storage);
   const remoteSubscriptions = new RemoteSubscriptions(routerName, stubs);
@@ -47,10 +47,10 @@ export function createRouterDeps(
       ctx,
       {
         unsubscribeSenders: async ({ payload, signal }): Promise<void> => {
-          await untilAborted(remoteSubscriptions.unsubscribeEach(payload), signal);
+          await untilAborted(remoteSubscriptions.closeEach(payload), signal);
         },
       },
-      durabilityPolicy,
+      hooks,
     ),
   };
 }

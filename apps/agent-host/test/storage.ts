@@ -6,9 +6,10 @@ import type { SessionSubscribeResponse } from "../src/shared/rpc/session";
 import { SessionDatabase } from "../src/session/db/database";
 import { sessionTable } from "../src/session/db/schema";
 import { RouterDatabase } from "../src/router/db/database";
-import { sendersTable, subscriptionSetupTable } from "../src/router/db/schema";
+import { SubscriptionStore } from "../src/router/dependencies/subscription-store";
+import { sendersTable } from "../src/router/db/schema";
 import { senderFromKey } from "../src/router/sender";
-import type { Sender } from "../src/router/sender";
+import type { ChannelSender, Sender } from "../src/router/sender";
 import { subscriberChannelsTable, subscriberRoutersTable } from "../src/shared/db/fanout-schema";
 import { sessionUri } from "../src/shared/lookups";
 import type { AgentSession } from "./session";
@@ -78,10 +79,13 @@ export async function routerSenders(stub: DurableObjectStub): Promise<Sender[]> 
   return rows.map((row) => senderFromKey(row.id));
 }
 
-/** Records an unfinished subscription setup, as if a restart interrupted it. */
-export async function storeSubscriptionSetup(stub: DurableObjectStub): Promise<void> {
+/** Stores `subscriptions` as an unfinished setup to simulate an interrupted router. */
+export async function storeSubscriptionSetup(
+  stub: DurableObjectStub,
+  subscriptions: ChannelSender[] = [],
+): Promise<void> {
   await runInDurableObject(stub, (_instance, ctx) => {
-    new RouterDatabase(ctx.storage).orm.insert(subscriptionSetupTable).values({ id: 1 }).run();
+    new SubscriptionStore(new RouterDatabase(ctx.storage)).startSetup(subscriptions);
   });
 }
 

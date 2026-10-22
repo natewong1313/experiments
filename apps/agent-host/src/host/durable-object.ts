@@ -20,6 +20,7 @@ import type {
   HostSessionEntry,
   HostSessionRemovedRequest,
   HostSubscribeRootRequest,
+  HostRouterClosedRequest,
   HostSubscribeRootResponse,
   HostUnsubscribeRootRequest,
 } from "../shared/rpc/host";
@@ -54,12 +55,16 @@ export abstract class AgentHost<
       flushSubscribers: async (): Promise<void> => {
         await this.eventPublisher.flush(this.getRevision());
       },
+      checkSubscribers: async (): Promise<void> => {
+        await this.eventPublisher.check(this.getRevision());
+      },
     },
   });
   private eventPublisher = new EventsPublisher({
     db: this.db,
     router: (): DurableObjectNamespace<Router> => this.router,
     scheduleFlush: this.durability.flushSubscribers,
+    scheduleCheck: this.durability.checkSubscribers,
   });
 
   /**
@@ -93,6 +98,8 @@ export abstract class AgentHost<
         return [currentRevision, this.countActiveSessions()];
       });
 
+      await this.eventPublisher.scheduleCheck();
+
       return {
         revision,
         state: {
@@ -107,6 +114,10 @@ export abstract class AgentHost<
 
   async unsubscribeRoot(req: HostUnsubscribeRootRequest): Promise<void> {
     this.eventPublisher.unsubscribe(req.router);
+  }
+
+  async routerClosed(req: HostRouterClosedRequest): Promise<void> {
+    this.eventPublisher.close(req.router);
   }
 
   async listSessions(): Promise<AHPListSessionsResult> {

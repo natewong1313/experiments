@@ -12,6 +12,7 @@ type UpdatesPublisherOptions<Router extends AgentHostConnectionRouterRPC> = {
   /** Returns the session ID from the Durable Object name. */
   sessionId(): string;
   scheduleFlush(time: number): Promise<void>;
+  scheduleCheck(time: number): Promise<void>;
 };
 
 /**
@@ -41,6 +42,7 @@ export class UpdatesPublisher<
         },
       },
       scheduleFlush: (time): Promise<void> => options.scheduleFlush(time),
+      scheduleCheck: (time): Promise<void> => options.scheduleCheck(time),
     });
   }
 
@@ -50,6 +52,18 @@ export class UpdatesPublisher<
 
   unsubscribe(router: string, channels: string[]): void {
     this.fanout.unsubscribe(router, channels);
+  }
+
+  close(router: string): void {
+    this.fanout.close(router);
+  }
+
+  async scheduleCheck(): Promise<void> {
+    await this.fanout.scheduleCheck();
+  }
+
+  async check(revision: number): Promise<void> {
+    await this.fanout.check(revision);
   }
 
   async publish(updates: SessionUpdate[]): Promise<void> {

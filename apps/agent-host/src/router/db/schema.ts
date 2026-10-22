@@ -43,3 +43,14 @@ export const subscriptionSetupTable = sqliteTable(
   },
   (table) => [check("subscription_setup_singleton", sql`${table.id} = 1`)],
 );
+
+/**
+ * The channels of the subscription setup that runs now. The router stores them before it sends
+ * the subscribe requests, and deletes them when the setup ends. A close after a restart thus
+ * reaches each sender that can have accepted a subscription. `sender` is the sender key from
+ * `senderKey`.
+ */
+export const pendingSubscriptionsTable = sqliteTable("pending_subscriptions", {
+  channel: text().primaryKey(),
+  sender: text().notNull(),
+});

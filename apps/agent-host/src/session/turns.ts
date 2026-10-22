@@ -16,18 +16,17 @@ import type {
 } from "@experiments/protocol-schemas/ahp";
 import { errorMessage } from "../shared/errors";
 import { sessionNotFound } from "../shared/protocol";
-import type { SessionUpdate } from "../shared/rpc/router";
 import type { AgentConnection } from "./agent-connection";
 import type { SessionRecord } from "./db/schema";
-import type { SessionChange } from "./records";
+import type { ApplyOutcome, SessionChange } from "./records";
 import { applyChat } from "./state";
 
 type SessionTurnsOptions = {
   agent: AgentConnection;
   /** Opens the agent connection of the session if it is closed. */
   openAgent(): Promise<void>;
-  /** Saves a change and pushes it. Returns false if the session is absent or disposing. */
-  applyChange(change: SessionChange): Promise<boolean>;
+  /** Saves a change and pushes it. Returns `absent` if the session is absent or disposing. */
+  applyChange(change: SessionChange): Promise<ApplyOutcome>;
 };
 
 /** Runs the chat turns of one session against its agent connection. */
@@ -63,51 +62,79 @@ export class SessionTurns {
       message: { text: message.text, origin: { kind: AHPMessageKind.User } },
     };
 
-    if (this.promptRunning) {
-      throw new Error("A turn is already running");
-    }
-
-    this.promptRunning = true;
+    // `claimed` is true once this call claims the prompt. Only that call starts the prompt.
+    // The callback sets it last, so a check that throws leaves it false.
+    const admission = { claimed: false };
 
     try {
-      await this.applyExisting((record) => {
+      const outcome = await this.options.applyChange((record) => {
+        // A retry of a recorded turn start is a no-op, also while the prompt of the turn runs.
+        if (hasTurn(record, action.turnId)) {
+          return;
+        }
+
         if (record.sessionState.lifecycle !== AHPSessionLifecycle.Ready) {
           throw new Error("Session is not ready");
         }
 
-        if (record.chatState.activeTurn) {
+        // The prompt of a cancelled turn can still run after the turn ended.
+        if (this.promptRunning || record.chatState.activeTurn) {
           throw new Error("A turn is already running");
         }
 
-        if (record.chatState.turns.some((turn) => turn.id === action.turnId)) {
-          throw new Error("Turn ID already exists");
-        }
+        this.promptRunning = true;
+        admission.claimed = true;
 
         return applyChat(record, action, origin);
       });
+
+      if (outcome === "absent") {
+        throw sessionNotFound();
+      }
     } catch (error) {
-      this.promptRunning = false;
+      if (admission.claimed) {
+        this.promptRunning = false;
+      }
+
       throw error;
     }
 
-    waitUntil(this.runPrompt(action));
+    if (admission.claimed) {
+      waitUntil(this.runPrompt(action));
+    }
   }
 
-  /** Cancels the active turn and tells the agent to stop the running prompt. */
+  /**
+   * Cancels the active turn and tells the agent to stop the running prompt. A retry of a
+   * cancellation that already ended the turn is a no-op, so a retried call does not cancel
+   * the agent twice.
+   */
   async cancel(request: TurnCancelledRequest, origin: AHPActionOrigin): Promise<void> {
-    await this.applyExisting((record) => {
+    const outcome = await this.options.applyChange((record) => {
       if (record.sessionState.lifecycle !== AHPSessionLifecycle.Ready) {
         throw new Error("Session is not ready");
       }
 
-      if (record.chatState.activeTurn?.id !== request.turnId) {
-        throw new Error("No matching active turn to cancel");
+      if (record.chatState.activeTurn?.id === request.turnId) {
+        return applyChat(record, { ...request, type: AHPActionType.ChatTurnCancelled }, origin);
       }
 
-      return applyChat(record, { ...request, type: AHPActionType.ChatTurnCancelled }, origin);
+      // A retry of a cancellation reaches the session after the turn ended. Treat it as a no-op.
+      if (record.chatState.turns.some((turn) => turn.id === request.turnId)) {
+        return;
+      }
+
+      throw new Error("No matching active turn to cancel");
     });
 
-    await this.options.agent.cancel();
+    if (outcome === "absent") {
+      throw sessionNotFound();
+    }
+
+    // Only the cancellation that ended the active turn tells the agent to stop.
+    if (outcome === "applied") {
+      await this.options.agent.cancel();
+    }
   }
 
   /**
@@ -163,22 +190,23 @@ export class SessionTurns {
     }
   }
 
-  /** Applies a change and pushes it. Throws when the session is absent. */
-  private async applyExisting(change: (record: SessionRecord) => SessionUpdate): Promise<void> {
-    const saved = await this.options.applyChange(change);
-
-    if (!saved) {
-      throw sessionNotFound();
-    }
-  }
-
   /**
    * Applies `action` while `turnId` is the active turn. Returns false after the turn stops being
    * active, for example after a cancellation.
    */
-  private applyToTurn(turnId: string, action: AHPChatAction): Promise<boolean> {
-    return this.options.applyChange((record) =>
+  private async applyToTurn(turnId: string, action: AHPChatAction): Promise<boolean> {
+    const outcome = await this.options.applyChange((record) =>
       record.chatState.activeTurn?.id === turnId ? applyChat(record, action) : undefined,
     );
+
+    return outcome === "applied";
   }
+}
+
+/** Returns true if `record` has a turn with `turnId`, active or ended. */
+function hasTurn(record: SessionRecord, turnId: string): boolean {
+  return (
+    record.chatState.activeTurn?.id === turnId ||
+    record.chatState.turns.some((turn) => turn.id === turnId)
+  );
 }

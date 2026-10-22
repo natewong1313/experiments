@@ -35,6 +35,8 @@ export type SessionSubscribeResponse = {
 
 export type SessionUnsubscribeRequest = { router: string; channels: string[] };
 
+export type SessionRouterClosedRequest = { router: string };
+
 export class SessionCreateError extends CodedRpcError {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- cause comes from a catch binding
   constructor(cause: unknown) {
@@ -95,13 +97,19 @@ export interface SessionRPC extends Rpc.DurableObjectBranded {
    * Subscribes a router to the session channel or to its default chat, and returns the state
    * and revision of the channel. The router receives each revision after the returned one.
    *
-   * @throws {SessionSubscribeError} If the session is absent or the channel does not belong
-   * to it.
+   * @throws {SessionSubscribeError} If the session is absent, the channel does not belong
+   * to it, or the router closed.
    */
   subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse>;
 
   /** Removes subscriptions of a router. Succeeds if the session or subscription is absent. */
   unsubscribe(req: SessionUnsubscribeRequest): Promise<void>;
+
+  /**
+   * Removes all subscriptions of a router whose connection closed, and rejects its later
+   * subscribe requests. Does nothing for an absent session.
+   */
+  routerClosed(req: SessionRouterClosedRequest): Promise<void>;
 
   /**
    * Stops the ACP connection, tells subscribed routers, removes the session from the host

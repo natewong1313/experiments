@@ -34,6 +34,8 @@ type Setup = { subscriptions: ChannelSender[]; pushes: HeldPush[] };
 export class Subscriptions {
   private deps: AgentHostConnectionRouterDeps;
   private setup?: Setup;
+  // The `subscribe` calls that run now.
+  private running = 0;
 
   constructor(deps: AgentHostConnectionRouterDeps) {
     this.deps = deps;
@@ -44,24 +46,47 @@ export class Subscriptions {
    * senders of the channels wait until `finishFrame`.
    *
    * The router stores the subscriptions only if every sender accepts and the frame is still
-   * current. Otherwise it tells each sender that accepted a new subscription to stop.
+   * current. Otherwise it tells each sender that accepted a new subscription to stop. After a
+   * close, it registers a durable call for this.
    *
    * @throws {AHPError} If a channel is not valid, a sender fails, or the connection closed.
    */
   async subscribe(channels: string[], frame: Frame): Promise<SenderSnapshot[]> {
-    const { remoteSubscriptions, subscriptionStore } = this.deps;
-
     // An invalid channel throws here, before the setup starts.
     const subscriptions = channels.map((channel) => ({
       channel,
       sender: channelSender(parseChannel(channel)),
     }));
 
+    this.running += 1;
+
+    try {
+      return await this.subscribeAtSenders(subscriptions, frame);
+    } finally {
+      this.running -= 1;
+    }
+  }
+
+  /**
+   * True while a `subscribe` call runs. A call that started before a close can still register
+   * a durable call, so the router keeps its storage until the call ends.
+   */
+  isSubscribing(): boolean {
+    return this.running > 0;
+  }
+
+  /** Starts the setup, subscribes at the senders, and stores the subscriptions. */
+  private async subscribeAtSenders(
+    subscriptions: ChannelSender[],
+    frame: Frame,
+  ): Promise<SenderSnapshot[]> {
+    const { remoteSubscriptions, subscriptionStore } = this.deps;
     this.startSetup(subscriptions);
 
     const results = await Promise.allSettled(
       subscriptions.map(
-        async ({ channel, sender }) => await remoteSubscriptions.subscribe(sender, channel),
+        async ({ channel, sender }) =>
+          await remoteSubscriptions.subscribe(sender, channel, () => frame.isCurrent()),
       ),
     );
 
@@ -72,17 +97,24 @@ export class Subscriptions {
     const failure = results.find((result) => result.status === "rejected");
     const open = frame.isCurrent();
 
-    if (failure || !open) {
+    if (!open) {
+      // The initial close can reach a sender before its subscribe request.
+      if (snapshots.length > 0) {
+        await this.deps.durability.registerLateClose(groupBySender(snapshots));
+      }
+
+      throw new AHPError("Connection is closed");
+    }
+
+    if (failure) {
       // Subscriptions from earlier requests stay while the connection is open.
-      // The close unsubscribes only the subscriptions that it released.
-      // Thus each subscription that a sender accepts after the close must stop here.
-      const subscriptionsToUndo = open
-        ? snapshots.filter((item) => !subscriptionStore.isSubscribed(item.channel))
-        : snapshots;
+      const subscriptionsToUndo = snapshots.filter(
+        (item) => !subscriptionStore.isSubscribed(item.channel),
+      );
 
       await remoteSubscriptions.unsubscribeAll(groupBySender(subscriptionsToUndo));
 
-      throw failure ? toAHPError(failure.reason) : new AHPError("Connection is closed");
+      throw toAHPError(failure.reason);
     }
 
     for (const { channel, sender, revision } of snapshots) {
@@ -165,13 +197,17 @@ export class Subscriptions {
 
   /**
    * Discards the current setup and its held pushes. Returns the channels of each sender,
-   * including the channels of the discarded setup. The connection calls this when it closes.
+   * including the channels of a setup that did not end. The connection calls this when it
+   * closes. The setup can be from before a restart, so its channels come from storage.
    */
   release(): SenderChannels {
-    const pending = this.setup?.subscriptions ?? [];
+    const { subscriptionStore } = this.deps;
     this.setup = undefined;
 
-    return groupBySender([...this.deps.subscriptionStore.subscriptions(), ...pending]);
+    return groupBySender([
+      ...subscriptionStore.subscriptions(),
+      ...subscriptionStore.pendingSubscriptions(),
+    ]);
   }
 
   /** Records the setup and holds pushes from its senders until `finishFrame`. */
@@ -181,7 +217,7 @@ export class Subscriptions {
       return;
     }
 
-    this.deps.subscriptionStore.startSetup();
+    this.deps.subscriptionStore.startSetup(subscriptions);
     this.setup = { subscriptions, pushes: [] };
   }
 }

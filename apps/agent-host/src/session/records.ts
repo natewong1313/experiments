@@ -9,8 +9,12 @@ import { sessionSummary } from "./state";
 /** Changes the record in place and returns the update to push, or undefined to skip. */
 export type SessionChange = (record: SessionRecord) => SessionUpdate | undefined;
 
-/** A saved change, and whether it changed a summary field that the host stores. */
-export type SavedChange = { update: SessionUpdate; summaryChanged: boolean };
+/**
+ * The outcome of applying a change to the session record. `absent` means the record is absent
+ * or disposing. `skipped` means the change returned nothing. This lets an idempotent operation
+ * succeed on retry without another side effect.
+ */
+export type ApplyOutcome = "absent" | "skipped" | "applied";
 
 /**
  * The phase of a session object. A creating or ready session becomes disposing when a dispose
@@ -71,18 +75,24 @@ export class SessionRecords {
   }
 
   /**
-   * Applies `change` to a record that is not disposing and saves it. Returns undefined if no
-   * such record is stored or the change is skipped.
+   * Applies `change` to a record that is not disposing and saves it. Returns `absent` if no
+   * such record is stored. If the change returns nothing, returns `skipped` without writing the record.
+   * This lets an idempotent operation succeed on retry without another side effect.
    *
    * A change that leaves the summary fields as they were keeps the host in sync. Thus
    * `syncedRevision` moves with `revision` when it was current.
    */
-  save(change: SessionChange): SavedChange | undefined {
+  save(
+    change: SessionChange,
+  ):
+    | { status: "absent" }
+    | { status: "skipped" }
+    | { status: "applied"; update: SessionUpdate; summaryChanged: boolean } {
     return this.db.transactionSync(() => {
       const record = this.get();
 
       if (!record || record.disposing) {
-        return;
+        return { status: "absent" };
       }
 
       const before = catalogFields(record);
@@ -90,7 +100,7 @@ export class SessionRecords {
       const update = change(record);
 
       if (!update) {
-        return;
+        return { status: "skipped" };
       }
 
       const summaryChanged = before !== catalogFields(record);
@@ -101,7 +111,7 @@ export class SessionRecords {
 
       this.write(record);
 
-      return { update, summaryChanged };
+      return { status: "applied", update, summaryChanged };
     });
   }
 

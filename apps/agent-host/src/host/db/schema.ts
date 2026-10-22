@@ -13,7 +13,12 @@ export const rootTable = sqliteTable(
 );
 
 // The router subscriptions of the root channel. `RouterFanout` uses these tables.
-export { subscriberChannelsTable, subscriberRoutersTable } from "../../shared/db/fanout-schema";
+export {
+  closedRoutersTable,
+  subscriberChannelsTable,
+  subscriberCheckTable,
+  subscriberRoutersTable,
+} from "../../shared/db/fanout-schema";
 
 export const sessionsTable = sqliteTable("sessions", {
   id: text().primaryKey(),

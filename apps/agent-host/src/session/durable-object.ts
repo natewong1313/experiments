@@ -20,6 +20,7 @@ import type {
   SessionRPC,
   SessionCreateRequest,
   SessionDispatchRequest,
+  SessionRouterClosedRequest,
   SessionSubscribeRequest,
   SessionSubscribeResponse,
   SessionUnsubscribeRequest,
@@ -44,7 +45,7 @@ import { HostCatalog } from "./host-catalog";
 import { DEFAULT_LIFECYCLE_POLICY, retryDelay } from "./lifecycle-policy";
 import type { SessionLifecyclePolicy } from "./lifecycle-policy";
 import { defaultChatOf, phaseOf } from "./records";
-import type { SessionChange } from "./records";
+import type { ApplyOutcome, SessionChange } from "./records";
 import { SessionStorage } from "./storage";
 import { SessionTurns } from "./turns";
 
@@ -85,6 +86,13 @@ export abstract class AgentSession<
           await this.publisher.flush(session.revision);
         }
       },
+      checkSubscribers: async (): Promise<void> => {
+        const session = this.storage.session();
+
+        if (session) {
+          await this.publisher.check(session.revision);
+        }
+      },
       finishCreate: async (info: DurableAlarmInfo): Promise<void> => {
         await this.finishCreate(info);
       },
@@ -103,6 +111,9 @@ export abstract class AgentSession<
     scheduleFlush: async (time): Promise<void> => {
       await this.storage.alarms()?.flushSubscribers(time);
     },
+    scheduleCheck: async (time): Promise<void> => {
+      await this.storage.alarms()?.checkSubscribers(time);
+    },
   });
   private catalog = new HostCatalog((): StubFor<"host"> => this.host.getByName(this.name().hostId));
   private agent = new AgentConnection();
@@ -111,7 +122,7 @@ export abstract class AgentSession<
     openAgent: async (): Promise<void> => {
       await this.openAgent();
     },
-    applyChange: async (change): Promise<boolean> => await this.applyChange(change),
+    applyChange: async (change): Promise<ApplyOutcome> => await this.applyChange(change),
   });
   // The creation and the disposal that run now, keyed by default chat.
   // Callers for the same creation wait for them.
@@ -189,7 +200,7 @@ export abstract class AgentSession<
    */
   async subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse> {
     try {
-      return this.db.transactionSync(() => {
+      const snapshot = this.db.transactionSync(() => {
         const session = this.storage.requireSession();
         const sessionChannel = sessionUri(session.id);
 
@@ -204,6 +215,10 @@ export abstract class AgentSession<
           state: req.channel === sessionChannel ? session.sessionState : session.chatState,
         };
       });
+
+      await this.publisher.scheduleCheck();
+
+      return snapshot;
     } catch (error) {
       throw new SessionSubscribeError(error);
     }
@@ -213,6 +228,16 @@ export abstract class AgentSession<
   async unsubscribe(req: SessionUnsubscribeRequest): Promise<void> {
     if (this.storage.isOpen()) {
       this.publisher.unsubscribe(req.router, req.channels);
+    }
+  }
+
+  /**
+   * Removes the subscriptions of a closed router and rejects its later subscribe requests. Does
+   * nothing for an absent session, which accepts no subscribe requests.
+   */
+  async routerClosed(req: SessionRouterClosedRequest): Promise<void> {
+    if (this.storage.isOpen()) {
+      this.publisher.close(req.router);
     }
   }
 
@@ -569,15 +594,21 @@ export abstract class AgentSession<
 
   /**
    * Saves the changed record, then queues its update for the subscribed routers. Schedules a
-   * catalog sync when a summary field other than `modifiedAt` changes.
-   * Returns false when the session is absent or disposing, or the change is skipped.
+   * catalog sync when a summary field other than `modifiedAt` changes. Returns `absent` when
+   * the session is absent or disposing, `skipped` when the change does nothing, and `applied`
+   * when it saved a change.
    */
-  private async applyChange(change: SessionChange): Promise<boolean> {
+  private async applyChange(change: SessionChange): Promise<ApplyOutcome> {
     const alarms = this.storage.alarms();
-    const saved = alarms && this.storage.records.save(change);
 
-    if (!saved) {
-      return false;
+    if (!alarms) {
+      return "absent";
+    }
+
+    const saved = this.storage.records.save(change);
+
+    if (saved.status !== "applied") {
+      return saved.status;
     }
 
     await this.publisher.publish([saved.update]);
@@ -586,7 +617,7 @@ export abstract class AgentSession<
       await alarms.syncCatalog(Date.now());
     }
 
-    return true;
+    return "applied";
   }
 
   /**

@@ -8,25 +8,30 @@ import { newRouterDOName } from "../src/shared/lookups";
 import { ROOT_CHANNEL } from "../src/shared/protocol";
 import { MAX_HELD_PUSHES } from "../src/router/services/subscriptions";
 import { ServerSequence } from "../src/router/dependencies/server-sequence";
+import { DEFAULT_ROUTER_DURABILITY_POLICY } from "../src/router/dependencies/router-durability";
 import type { AgentHostConnectionRouter } from "./router";
 import { connectPeerAt } from "./peer";
 import { subscribedRouters, waitForRouterCleanup } from "./storage";
 
 /**
- * A host that holds each root subscription until the test releases it. Its root unsubscribe
- * fails `unsubscribeFailures` times. The next `stalledUnsubscribes` unsubscribes wait until the
- * test resolves `unsubscribeReleased`. Later unsubscribes succeed.
+ * A host that holds each root subscription until the test releases it. It records the root
+ * unsubscribes and the router closes. A close attempt fails if `failsClose` returns true for
+ * its attempt number. Else, it waits until the test resolves `closeReleased` if `stallsClose`
+ * returns true. Attempt numbers start at 1.
  */
 class HeldHost {
   readonly started = Promise.withResolvers<null>();
   readonly released = Promise.withResolvers<null>();
-  readonly unsubscribeReleased = Promise.withResolvers<null>();
+  readonly closeReleased = Promise.withResolvers<null>();
+  readonly listStarted = Promise.withResolvers<null>();
+  readonly listReleased = Promise.withResolvers<null>();
   readonly unsubscribed: string[] = [];
   subscriptions = 0;
   revision = 0;
-  unsubscribeFailures = 0;
-  stalledUnsubscribes = 0;
-  unsubscribeAttempts = 0;
+  closeAttempts = 0;
+  closes = 0;
+  failsClose = (_attempt: number): boolean => false;
+  stallsClose = (_attempt: number): boolean => false;
 
   async subscribeRoot(): Promise<HostSubscribeRootResponse> {
     this.subscriptions += 1;
@@ -36,35 +41,66 @@ class HeldHost {
     return { revision: this.revision, state: { agents: [], activeSessions: this.revision } };
   }
 
+  /** Waits until the test resolves `listReleased`. */
+  async listSessions(): Promise<{ items: [] }> {
+    this.listStarted.resolve(null);
+    await this.listReleased.promise;
+
+    return { items: [] };
+  }
+
   async unsubscribeRoot(): Promise<void> {
-    this.unsubscribeAttempts += 1;
-
-    if (this.unsubscribeAttempts <= this.unsubscribeFailures) {
-      throw new Error("Unsubscribe failed");
-    }
-
-    if (this.unsubscribeAttempts <= this.unsubscribeFailures + this.stalledUnsubscribes) {
-      await this.unsubscribeReleased.promise;
-    }
-
     this.unsubscribed.push(ROOT_CHANNEL);
     await Promise.resolve();
   }
+
+  async routerClosed(): Promise<void> {
+    this.closeAttempts += 1;
+    const attempt = this.closeAttempts;
+
+    if (this.failsClose(attempt)) {
+      throw new Error("Close failed");
+    }
+
+    if (this.stallsClose(attempt)) {
+      await this.closeReleased.promise;
+    }
+
+    this.closes += 1;
+  }
 }
 
-/** Returns a host that answers subscriptions at once and fails its first unsubscribes. */
-function failingHost(unsubscribeFailures: number): HeldHost {
+/** Returns a host that answers subscriptions at once and fails its first `failures` closes. */
+function failingHost(failures: number): HeldHost {
   const host = new HeldHost();
   host.released.resolve(null);
-  host.unsubscribeFailures = unsubscribeFailures;
+  host.failsClose = (attempt): boolean => attempt <= failures;
 
   return host;
 }
 
-const RESTART_CLEANUP_TIMEOUT_MS = 10_000;
+/** Returns an error that `callDoRpc` retries. */
+function retryableError(): Error {
+  return Object.assign(new Error("Host is busy"), { retryable: true });
+}
 
-/** A short attempt timeout, so a stalled unsubscribe times out during the test. */
+/** Allows cleanup to wait for another wake-up if the first finds a retry pending. */
+const RETRY_CLEANUP_TIMEOUT_MS = 10_000;
+
+/** A short attempt timeout, so a stalled close times out during the test. */
 const STALLED_ATTEMPT_TIMEOUT_MS = 50;
+
+/** The close of the connection and the close of a subscription that a sender accepts after it. */
+const CLOSES_WITH_LATE_SUBSCRIPTION = 2;
+
+/** The attempts of a durable call that fails once. */
+const ATTEMPTS_WITH_ONE_RETRY = 2;
+
+/** Longer than the delay of the wake-up alarm, which deletes storage after a close. */
+const PAST_WAKE_UP_MS = 3000;
+
+/** Allows the test to wait `PAST_WAKE_UP_MS` and then wait for cleanup. */
+const SLOW_FRAME_TIMEOUT_MS = 15_000;
 
 function routerStub(): ReturnType<typeof env.CONNECTIONS.getByName> {
   const name = newRouterDOName(crypto.randomUUID());
@@ -129,70 +165,158 @@ it("does not run frames that wait behind a frame when the connection closes", as
   expect(subscriptions).toBe(1);
 });
 
-it("stops a subscription that its sender accepts after the connection closes", async () => {
+it(
+  "retries the close of a subscription that its sender accepts after the connection closes",
+  { timeout: RETRY_CLEANUP_TIMEOUT_MS },
+  async () => {
+    const stub = routerStub();
+    const host = new HeldHost();
+    // The last attempt before the retry fails. It belongs to either of the two closes.
+    host.failsClose = (attempt): boolean => attempt === CLOSES_WITH_LATE_SUBSCRIPTION;
+
+    await runInDurableObject(stub, async (router, ctx) => {
+      useHost(router, host);
+      const socket = await connect(router, ctx);
+
+      const running = router.webSocketMessage(socket, initialize("first"));
+      await host.started.promise;
+      await router.webSocketClose(socket);
+      host.released.resolve(null);
+      await running;
+    });
+
+    // The close and the stopped subscription each close the router at the host.
+    await waitForRouterCleanup(stub);
+    expect(host.closes).toBe(CLOSES_WITH_LATE_SUBSCRIPTION);
+    expect(host.closeAttempts).toBe(CLOSES_WITH_LATE_SUBSCRIPTION + 1);
+    expect(host.unsubscribed).toEqual([]);
+  },
+);
+
+it(
+  "keeps the router storage until a frame that started before the close finishes",
+  { timeout: SLOW_FRAME_TIMEOUT_MS },
+  async () => {
+    const stub = routerStub();
+    const host = new HeldHost();
+
+    await runInDurableObject(stub, async (router, ctx) => {
+      useHost(router, host);
+      const socket = await connect(router, ctx);
+
+      const running = router.webSocketMessage(socket, initialize("first"));
+      await host.started.promise;
+      await router.webSocketClose(socket);
+      // The wake-up alarm fires while the subscription waits.
+      await scheduler.wait(PAST_WAKE_UP_MS);
+      host.released.resolve(null);
+      await running;
+    });
+
+    await waitForRouterCleanup(stub);
+    expect(host.closes).toBe(CLOSES_WITH_LATE_SUBSCRIPTION);
+  },
+);
+
+it("deletes the router storage while a frame that is not a subscription still runs", async () => {
   const stub = routerStub();
+  const host = failingHost(0);
 
   await runInDurableObject(stub, async (router, ctx) => {
-    const host = new HeldHost();
+    useHost(router, host);
+    const socket = await connect(router, ctx);
+    await router.webSocketMessage(socket, initialize("first"));
+
+    const list = JSON.stringify({
+      jsonrpc: "2.0",
+      id: "list",
+      method: "listSessions",
+      params: { channel: ROOT_CHANNEL },
+    });
+
+    // The frame continues after this callback returns.
+    void router.webSocketMessage(socket, list);
+    await host.listStarted.promise;
+    await router.webSocketClose(socket);
+  });
+
+  await waitForRouterCleanup(stub);
+  expect(host.closes).toBe(1);
+  host.listReleased.resolve(null);
+});
+
+it("does not retry a subscription after the connection closes", async () => {
+  const stub = routerStub();
+  const host = new HeldHost();
+
+  await runInDurableObject(stub, async (router, ctx) => {
     useHost(router, host);
     const socket = await connect(router, ctx);
 
     const running = router.webSocketMessage(socket, initialize("first"));
     await host.started.promise;
     await router.webSocketClose(socket);
-    host.released.resolve(null);
+    host.released.reject(retryableError());
     await running;
+  });
 
-    // The close and the stopped subscription each unsubscribe the root channel.
-    await vi.waitFor(() => {
-      expect(host.unsubscribed).toEqual([ROOT_CHANNEL, ROOT_CHANNEL]);
+  await waitForRouterCleanup(stub);
+  expect(host.subscriptions).toBe(1);
+  expect(host.closes).toBe(1);
+});
+
+it(
+  "retries the close of a router, then deletes the router storage",
+  { timeout: RETRY_CLEANUP_TIMEOUT_MS },
+  async () => {
+    const stub = routerStub();
+    const host = failingHost(1);
+
+    await runInDurableObject(stub, async (router, ctx) => {
+      useHost(router, host);
+      const socket = await connect(router, ctx);
+      await router.webSocketMessage(socket, initialize("first"));
+      await router.webSocketClose(socket);
     });
-  });
 
-  await waitForRouterCleanup(stub);
-});
+    await waitForRouterCleanup(stub);
+    expect(host.closeAttempts).toBe(ATTEMPTS_WITH_ONE_RETRY);
+    expect(host.closes).toBe(1);
+  },
+);
 
-it("retries the unsubscribe of a close, then deletes the router storage", async () => {
-  const stub = routerStub();
-  const host = failingHost(1);
+it(
+  "retries a close that stalls past its attempt timeout",
+  { timeout: RETRY_CLEANUP_TIMEOUT_MS },
+  async () => {
+    const stub = routerStub();
+    const host = failingHost(0);
+    host.stallsClose = (attempt): boolean => attempt === 1;
 
-  await runInDurableObject(stub, async (router, ctx) => {
-    useHost(router, host);
-    const socket = await connect(router, ctx);
-    await router.webSocketMessage(socket, initialize("first"));
-    await router.webSocketClose(socket);
-  });
+    await runInDurableObject(stub, async (router, ctx) => {
+      router.useDurabilityPolicy({
+        ...DEFAULT_ROUTER_DURABILITY_POLICY,
+        unsubscribeAttemptTimeoutMs: STALLED_ATTEMPT_TIMEOUT_MS,
+      });
+      useHost(router, host);
+      const socket = await connect(router, ctx);
+      await router.webSocketMessage(socket, initialize("first"));
+      await router.webSocketClose(socket);
+    });
 
-  await waitForRouterCleanup(stub);
-  expect(host.unsubscribeAttempts).toBe(host.unsubscribeFailures + 1);
-  expect(host.unsubscribed).toEqual([ROOT_CHANNEL]);
-});
-
-it("retries an unsubscribe that stalls past its attempt timeout", async () => {
-  const stub = routerStub();
-  const host = failingHost(0);
-  host.stalledUnsubscribes = 1;
-
-  await runInDurableObject(stub, async (router, ctx) => {
-    router.useDurabilityPolicy({ unsubscribeAttemptTimeoutMs: STALLED_ATTEMPT_TIMEOUT_MS });
-    useHost(router, host);
-    const socket = await connect(router, ctx);
-    await router.webSocketMessage(socket, initialize("first"));
-    await router.webSocketClose(socket);
-  });
-
-  // The first unsubscribe still waits. The retry after its timeout completes the close.
-  await waitForRouterCleanup(stub);
-  expect(host.unsubscribeAttempts).toBe(host.stalledUnsubscribes + 1);
-  expect(host.unsubscribed).toEqual([ROOT_CHANNEL]);
-  host.unsubscribeReleased.resolve(null);
-});
+    // The first close still waits. The retry after its timeout completes the close.
+    await waitForRouterCleanup(stub);
+    expect(host.closeAttempts).toBe(ATTEMPTS_WITH_ONE_RETRY);
+    expect(host.closes).toBe(1);
+    host.closeReleased.resolve(null);
+  },
+);
 
 it(
   "deletes the router storage after a restart interrupts the unsubscribe of a close",
   {
     // The first wake-up after the restart can find the retry still pending.
-    timeout: RESTART_CLEANUP_TIMEOUT_MS,
+    timeout: RETRY_CLEANUP_TIMEOUT_MS,
   },
   async () => {
     const hostId = crypto.randomUUID();
@@ -209,7 +333,7 @@ it(
 
     peer.close();
     await vi.waitFor(() => {
-      expect(host.unsubscribeAttempts).toBeGreaterThan(0);
+      expect(host.closeAttempts).toBeGreaterThan(0);
     });
 
     // After the restart, the router unsubscribes at the host of the test environment.
@@ -387,8 +511,9 @@ it("closes the connection when subscription setup buffers too many pushes", asyn
     host.released.resolve(null);
     await running;
 
+    // The close and the stopped subscription each close the router at the host.
     await vi.waitFor(() => {
-      expect(host.unsubscribed).toEqual([ROOT_CHANNEL, ROOT_CHANNEL]);
+      expect(host.closes).toBe(CLOSES_WITH_LATE_SUBSCRIPTION);
     });
 
     return overflow;

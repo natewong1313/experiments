@@ -8,7 +8,7 @@ import {
   ResponsePartKind as AHPResponsePartKind,
   TurnState as AHPTurnState,
 } from "@microsoft/agent-host-protocol";
-import { SessionStateSchema } from "@experiments/protocol-schemas/ahp";
+import { ChatStateSchema, SessionStateSchema } from "@experiments/protocol-schemas/ahp";
 import type { HostRPC, SessionRPC } from "../src";
 import type { SessionCreateRequest, SessionSubscribeResponse } from "../src/shared/rpc/session";
 import { SessionDatabase } from "../src/session/db/database";
@@ -309,6 +309,82 @@ it("does not cancel the agent when a cancellation targets another turn", async (
     expect(await readState(stub, chat)).toMatchObject({
       state: { activeTurn: { id: turnId } },
     });
+  } finally {
+    await session.dispose();
+  }
+});
+
+it("treats a repeated turn start with the same turn ID as a no-op", async () => {
+  const req = request();
+  const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
+  const session: SessionRPC = stub;
+  const turnId = crypto.randomUUID();
+  await session.create(req.params);
+  const chat = await chatOf(stub, req);
+
+  try {
+    await session.dispatch(turnStart(chat, turnId));
+    await vi.waitFor(async () => {
+      expect(await readState(stub, chat)).toMatchObject({
+        state: { activeTurn: { id: turnId, responseParts: [{ content: "hold" }] } },
+      });
+    });
+
+    // A retry of the same turn start while the prompt runs succeeds without a second prompt.
+    const restart = turnStart(chat, turnId);
+    await expect(session.dispatch(restart)).resolves.toBeUndefined();
+
+    // A retry after the turn ends also succeeds without recording another turn.
+    await stub.finishPrompt();
+    await vi.waitFor(async () => {
+      expect(await readState(stub, chat)).toMatchObject({
+        state: { turns: [{ id: turnId, state: "complete" }] },
+      });
+    });
+    const afterComplete = turnStart(chat, turnId);
+    await expect(session.dispatch(afterComplete)).resolves.toBeUndefined();
+
+    const state = await readState(stub, chat);
+    const parsed = ChatStateSchema.parse(state?.state);
+    const { turns } = parsed;
+    const matching = turns.filter((turn) => turn.id === turnId);
+    expect(matching).toHaveLength(1);
+  } finally {
+    await session.dispose();
+  }
+});
+
+it("treats a repeated cancellation of the same turn as a no-op", async () => {
+  const req = request();
+  const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
+  const session: SessionRPC = stub;
+  const turnId = crypto.randomUUID();
+  await session.create(req.params);
+  const chat = await chatOf(stub, req);
+
+  try {
+    await session.dispatch(turnStart(chat, turnId));
+    await vi.waitFor(async () => {
+      expect(await readState(stub, chat)).toMatchObject({ state: { activeTurn: { id: turnId } } });
+    });
+
+    const cancel = {
+      channel: chat,
+      action: { type: "chat/turnCancelled" as const, turnId, duration: 0 },
+      origin: { clientId: crypto.randomUUID(), clientSeq: 1 },
+    };
+
+    await session.dispatch(cancel);
+    await vi.waitFor(async () => {
+      expect(await readState(stub, chat)).toMatchObject({
+        state: { turns: [{ id: turnId, state: "cancelled" }] },
+      });
+    });
+    expect(await stub.cancellationCount()).toBe(1);
+
+    // A retry of the cancellation after the turn ended succeeds without cancelling the agent again.
+    await expect(session.dispatch(cancel)).resolves.toBeUndefined();
+    expect(await stub.cancellationCount()).toBe(1);
   } finally {
     await session.dispose();
   }

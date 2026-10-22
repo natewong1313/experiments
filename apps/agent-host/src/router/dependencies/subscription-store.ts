@@ -1,6 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import type { RouterDatabase } from "../db/database";
-import { sendersTable, subscriptionSetupTable, subscriptionsTable } from "../db/schema";
+import {
+  pendingSubscriptionsTable,
+  sendersTable,
+  subscriptionSetupTable,
+  subscriptionsTable,
+} from "../db/schema";
 import { senderFromKey, senderKey } from "../sender";
 import type { ChannelSender, Sender } from "../sender";
 
@@ -175,14 +180,46 @@ export class SubscriptionStore {
     });
   }
 
-  /** Records that a subscription setup holds pushes in memory. */
-  startSetup(): void {
-    this.db.orm.insert(subscriptionSetupTable).values({ id: 1 }).onConflictDoNothing().run();
+  /**
+   * Records that a subscription setup holds pushes in memory, and stores the subscriptions of
+   * the setup. Call it before the router sends the subscribe requests.
+   */
+  startSetup(subscriptions: ChannelSender[]): void {
+    this.db.transactionSync(() => {
+      this.db.orm.insert(subscriptionSetupTable).values({ id: 1 }).onConflictDoNothing().run();
+
+      for (const { channel, sender } of subscriptions) {
+        this.db.orm
+          .insert(pendingSubscriptionsTable)
+          .values({ channel, sender: senderKey(sender) })
+          .onConflictDoNothing()
+          .run();
+      }
+    });
   }
 
-  /** Records that no subscription setup holds pushes. */
+  /** Records that no subscription setup holds pushes, and removes its subscriptions. */
   endSetup(): void {
-    this.db.orm.delete(subscriptionSetupTable).run();
+    this.db.transactionSync(() => {
+      this.db.orm.delete(subscriptionSetupTable).run();
+      this.db.orm.delete(pendingSubscriptionsTable).run();
+    });
+  }
+
+  /**
+   * Returns the subscriptions of the setup that did not end. After a restart, they include
+   * subscriptions that a sender can have accepted, but that the router did not store.
+   */
+  pendingSubscriptions(): ChannelSender[] {
+    const rows = this.db.orm
+      .select({
+        channel: pendingSubscriptionsTable.channel,
+        sender: pendingSubscriptionsTable.sender,
+      })
+      .from(pendingSubscriptionsTable)
+      .all();
+
+    return rows.map((row) => ({ channel: row.channel, sender: senderFromKey(row.sender) }));
   }
 
   /**

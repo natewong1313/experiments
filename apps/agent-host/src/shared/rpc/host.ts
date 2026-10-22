@@ -10,6 +10,8 @@ export type HostSubscribeRootResponse = { revision: number; state: AHPRootState 
 
 export type HostUnsubscribeRootRequest = { router: string };
 
+export type HostRouterClosedRequest = { router: string };
+
 /**
  * The catalogue entry of a session at one session revision. `sessionCreated` and
  * `summaryChanged` send it.
@@ -75,12 +77,18 @@ export interface HostRPC extends Rpc.DurableObjectBranded {
    * Subscribes a router to the root channel. The router receives each root revision after
    * the returned revision.
    *
-   * @throws {HostSubscribeRootError} If the subscription cannot be stored.
+   * @throws {HostSubscribeRootError} If the router closed or the subscription cannot be stored.
    */
   subscribeRoot(req: HostSubscribeRootRequest): Promise<HostSubscribeRootResponse>;
 
   /** Removes the root subscription of a router. Succeeds if the router has none. */
   unsubscribeRoot(req: HostUnsubscribeRootRequest): Promise<void>;
+
+  /**
+   * Removes the root subscription of a router whose connection closed, and rejects its later
+   * subscribe requests.
+   */
+  routerClosed(req: HostRouterClosedRequest): Promise<void>;
 
   /**
    * Returns the summary of each session in the catalog.

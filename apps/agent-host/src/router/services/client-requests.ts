@@ -326,15 +326,11 @@ export class ClientRequestsRouter {
 
       const action = SessionDispatchActionSchema.parse(submitted.action);
 
-      // The router does not retry the dispatch.
-      // If the session applied a turn start, it rejects a retry of that turn start.
-      await this.deps.stubs.session(parsed.sessionId).dispatch({
-        channel: submitted.channel,
-        action,
-        origin,
-      });
+      await callDoRpc(
+        () => this.deps.stubs.session(parsed.sessionId),
+        (session) => session.dispatch({ channel: submitted.channel, action, origin }),
+      );
     } catch (error) {
-      // A closed connection must not write the `serverSeq` of the rejection.
       if (!frame.isCurrent()) {
         return;
       }

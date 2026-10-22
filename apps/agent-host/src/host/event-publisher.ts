@@ -11,6 +11,7 @@ type EventsPublisherOptions<Router extends AgentHostConnectionRouterRPC> = {
   router(): DurableObjectNamespace<Router>;
   /* We flush the current revision */
   scheduleFlush(time: number): Promise<void>;
+  scheduleCheck(time: number): Promise<void>;
 };
 
 /**
@@ -35,6 +36,7 @@ export class EventsPublisher<
         },
       },
       scheduleFlush: (time): Promise<void> => options.scheduleFlush(time),
+      scheduleCheck: (time): Promise<void> => options.scheduleCheck(time),
     });
   }
 
@@ -44,6 +46,18 @@ export class EventsPublisher<
 
   unsubscribe(router: string): void {
     this.fanout.unsubscribe(router, [ROOT_CHANNEL]);
+  }
+
+  close(router: string): void {
+    this.fanout.close(router);
+  }
+
+  async scheduleCheck(): Promise<void> {
+    await this.fanout.scheduleCheck();
+  }
+
+  async check(revision: number): Promise<void> {
+    await this.fanout.check(revision);
   }
 
   async publish(items: RootUpdate[]): Promise<void> {

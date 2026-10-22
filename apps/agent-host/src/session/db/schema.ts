@@ -27,4 +27,9 @@ export const sessionTable = sqliteTable("session", {
 export type SessionRecord = typeof sessionTable.$inferSelect;
 
 // The router subscriptions of this session. `RouterFanout` uses these tables.
-export { subscriberChannelsTable, subscriberRoutersTable } from "../../shared/db/fanout-schema";
+export {
+  closedRoutersTable,
+  subscriberChannelsTable,
+  subscriberCheckTable,
+  subscriberRoutersTable,
+} from "../../shared/db/fanout-schema";

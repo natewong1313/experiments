@@ -1,4 +1,4 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject, waitUntil } from "cloudflare:workers";
 import { hostIdFromRouterName, requireName, sessionDOName } from "../shared/lookups";
 import type { HostRPC } from "../shared/rpc/host";
 import type {
@@ -43,8 +43,13 @@ export abstract class AgentHostConnectionRouter<
   private db: RouterDatabase;
   private durability: RouterDurability;
   private connection: ClientConnection;
+  private subscriptions: Subscriptions;
   private clientRequests: ClientRequestsRouter;
   private senderRequests: SenderRequestsRouter;
+  // True while `alarm` runs the due durable work. `alarm` cleans up after that work.
+  private alarmRunning = false;
+  // The cleanup that runs now. Callers wait for it instead of starting another one.
+  private cleaning?: Promise<void>;
 
   /**
    * On wake, we resume the connection and migrate storage plus see if we were in the
@@ -62,11 +67,18 @@ export abstract class AgentHostConnectionRouter<
       session: (sessionId) => this.session.getByName(sessionDOName(hostId, sessionId)),
     };
 
-    const deps = createRouterDeps(ctx, routerName, stubs, () => this.getDurabilityPolicy());
+    const deps = createRouterDeps(ctx, routerName, stubs, {
+      policy: () => this.getDurabilityPolicy(),
+      onWakeUp: () => {
+        this.onWakeUp();
+      },
+    });
+
     this.db = deps.db;
     this.durability = deps.durability;
 
     const subscriptions = new Subscriptions(deps);
+    this.subscriptions = subscriptions;
     this.connection = new ClientConnection(deps, subscriptions);
     this.clientRequests = new ClientRequestsRouter(deps, subscriptions);
     this.senderRequests = new SenderRequestsRouter(deps, this.connection, subscriptions);
@@ -136,26 +148,57 @@ export abstract class AgentHostConnectionRouter<
   }
 
   /**
-   * We run any due durable work, then cleans up storage.
+   * Runs any due durable work, then cleans up storage.
    */
   async alarm(info?: AlarmInvocationInfo): Promise<void> {
-    await this.durability.mountAlarm(info);
+    this.alarmRunning = true;
+
+    try {
+      await this.durability.mountAlarm(info);
+    } finally {
+      this.alarmRunning = false;
+    }
+
     await this.cleanUp();
   }
 
   /**
-   * Cleaning up the DO runs as a durable job via our durability dep. We only delete the DOs storage
-   * once that job has completed. This checks if the job is pending, which would mean we schedule a future
-   * wake up.
-   *
-   * We only delete the DOs storage once that job is done.
+   * Runs the cleanup after a wake-up that ran from the in-memory timer of the scheduler. Such
+   * a wake-up does not call `alarm`. The cleanup deletes storage only when the physical alarm
+   * is not set. The scheduler deletes it after it records the run, so the deletion cannot
+   * remove the tables before that record.
+   */
+  private onWakeUp(): void {
+    if (!this.alarmRunning) {
+      waitUntil(this.cleanUp());
+    }
+  }
+
+  /**
+   * Deletes the storage of the router after its close finishes. The close unsubscribes at
+   * senders through a durable call. A subscription that started before the close can still
+   * register a durable call. This schedules a wake-up while a call or a subscription is pending.
    */
   private async cleanUp(): Promise<void> {
+    this.cleaning ??= this.cleanUpOnce();
+    await this.cleaning;
+  }
+
+  /** Runs one cleanup, then lets the next caller start a new one. */
+  private async cleanUpOnce(): Promise<void> {
+    try {
+      await this.runCleanUp();
+    } finally {
+      this.cleaning = undefined;
+    }
+  }
+
+  private async runCleanUp(): Promise<void> {
     if (!(await this.durability.closeStarted())) {
       return;
     }
 
-    if (await this.durability.hasPendingWork()) {
+    if (this.subscriptions.isSubscribing() || (await this.durability.hasPendingWork())) {
       await this.durability.scheduleWakeUp();
 
       return;

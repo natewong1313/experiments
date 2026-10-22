@@ -7,7 +7,12 @@ import { retryDelay } from "./lifecycle-policy";
 import type { SessionLifecyclePolicy } from "./lifecycle-policy";
 import { phaseOf, SessionRecords } from "./records";
 
-type AlarmName = "syncCatalog" | "flushSubscribers" | "finishCreate" | "finishDispose";
+type AlarmName =
+  | "syncCatalog"
+  | "flushSubscribers"
+  | "checkSubscribers"
+  | "finishCreate"
+  | "finishDispose";
 
 export type SessionAlarms = DurabilityAlarms<AlarmName>;
 

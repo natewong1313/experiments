@@ -5,8 +5,8 @@ import { expect, it } from "vitest";
 import { RouterDatabase } from "../src/router/db/database";
 import { SubscriptionStore } from "../src/router/dependencies/subscription-store";
 import { SessionDatabase } from "../src/session/db/database";
-import { subscriberChannelsTable } from "../src/shared/db/fanout-schema";
-import { RouterFanout } from "../src/shared/fanout";
+import { closedRoutersTable, subscriberChannelsTable } from "../src/shared/db/fanout-schema";
+import { CHECK_INTERVAL_MS, CLOSED_ROUTER_TTL_MS, RouterFanout } from "../src/shared/fanout";
 import type { FanoutSender } from "../src/shared/fanout";
 import { newRouterDOName, sessionDOName } from "../src/shared/lookups";
 import { HOST_SENDER, sessionSender } from "../src/router/sender";
@@ -19,21 +19,43 @@ const NEW_REVISION = 2;
 const CHAT_REVISION = 10;
 const SESSION_REVISION = 9;
 
+type Gap = (router: string) => Promise<string[]>;
+
+type ScheduleCheck = (time: number) => Promise<void>;
+
+type FanoutOverrides = { gap?: Gap; scheduleCheck?: ScheduleCheck };
+
+async function noop(): Promise<void> {
+  await Promise.resolve();
+}
+
+async function noChannels(): Promise<string[]> {
+  return await Promise.resolve([]);
+}
+
 /** Creates a fanout over migrated session storage, with a fake sender. */
 async function fanout(
   ctx: DurableObjectState,
   send: FanoutSender<Item>["send"],
+  overrides: FanoutOverrides = {},
 ): Promise<RouterFanout<Item>> {
   const database = new SessionDatabase(ctx.storage);
   await database.migrate();
+  const { gap = noChannels, scheduleCheck = noop } = overrides;
+  // The fake gap handler identifies routers by name rather than by stub.
+  const names: Map<object, string> = new Map();
 
   return new RouterFanout<Item>({
     database,
-    router: (name) => env.CONNECTIONS.getByName(name),
-    sender: { send, gap: async () => await Promise.resolve([]) },
-    scheduleFlush: async () => {
-      await Promise.resolve();
+    router: (name) => {
+      const stub = env.CONNECTIONS.getByName(name);
+      names.set(stub, name);
+
+      return stub;
     },
+    sender: { send, gap: async (stub) => await gap(names.get(stub) ?? "") },
+    scheduleFlush: noop,
+    scheduleCheck,
   });
 }
 
@@ -212,4 +234,126 @@ it("removes only the subscriptions of the removed sender", async () => {
     { channel: ROOT_CHANNEL, sender: HOST_SENDER },
     { channel: "second", sender: second },
   ]);
+});
+
+it("removes the closed routers that a check finds, and keeps routers that fail the call", async () => {
+  const live = newRouterDOName(crypto.randomUUID());
+  const closed = newRouterDOName(crypto.randomUUID());
+  const unreachable = newRouterDOName(crypto.randomUUID());
+  const checks: number[] = [];
+
+  const result = await runInDurableObject(sessionStub(), async (_instance, ctx) => {
+    const pushes = await fanout(ctx, async () => await Promise.resolve([]), {
+      gap: async (router) => {
+        if (router === unreachable) {
+          throw new Error("Router is unreachable");
+        }
+
+        return await Promise.resolve(router === live ? ["first"] : []);
+      },
+      scheduleCheck: async (time) => {
+        checks.push(time);
+        await Promise.resolve();
+      },
+    });
+
+    for (const router of [live, closed, unreachable]) {
+      pushes.subscribe(router, "first", 0);
+    }
+
+    const start = Date.now();
+    await pushes.check(0);
+
+    return { start, routers: pushes.routers() };
+  });
+
+  expect(result.routers.toSorted()).toEqual([live, unreachable].toSorted());
+  expect(checks).toHaveLength(1);
+  expect(checks[0]).toBeGreaterThanOrEqual(result.start + CHECK_INTERVAL_MS);
+});
+
+it("does not replace a scheduled check after a restart", async () => {
+  const checks: number[] = [];
+
+  const scheduled = await runInDurableObject(sessionStub(), async (_instance, ctx) => {
+    async function scheduleCheck(time: number): Promise<void> {
+      checks.push(time);
+      await Promise.resolve();
+    }
+
+    const before = await fanout(ctx, async () => await Promise.resolve([]), { scheduleCheck });
+    await before.scheduleCheck();
+
+    const after = await fanout(ctx, async () => await Promise.resolve([]), { scheduleCheck });
+    await after.scheduleCheck();
+    const afterRestart = checks.length;
+    // With no subscribed routers, the check clears its marker without scheduling another alarm.
+    await after.check(0);
+    await after.scheduleCheck();
+
+    return { afterRestart, afterCheck: checks.length };
+  });
+
+  expect(scheduled).toEqual({ afterRestart: 1, afterCheck: 2 });
+});
+
+it("waits for a running check before the fanout is idle", async () => {
+  const router = newRouterDOName(crypto.randomUUID());
+  const reply = Promise.withResolvers<string[]>();
+  const events: string[] = [];
+
+  await runInDurableObject(sessionStub(), async (_instance, ctx) => {
+    const pushes = await fanout(ctx, async () => await Promise.resolve([]), {
+      gap: async () => {
+        const channels = await reply.promise;
+        events.push("check");
+
+        return channels;
+      },
+    });
+
+    pushes.subscribe(router, "first", 0);
+    const checking = pushes.check(0);
+
+    const idle = (async (): Promise<void> => {
+      await pushes.idle();
+      events.push("idle");
+    })();
+
+    reply.resolve([]);
+    await Promise.all([checking, idle]);
+  });
+
+  expect(events).toEqual(["check", "idle"]);
+});
+
+it("accepts a subscribe request from a closed router after the closed router expires", async () => {
+  const expired = newRouterDOName(crypto.randomUUID());
+  const recent = newRouterDOName(crypto.randomUUID());
+
+  const result = await runInDurableObject(sessionStub(), async (_instance, ctx) => {
+    const pushes = await fanout(ctx, async () => await Promise.resolve([]));
+    pushes.close(recent);
+    const closedAt = Date.now() - CLOSED_ROUTER_TTL_MS - 1;
+    new SessionDatabase(ctx.storage).orm
+      .insert(closedRoutersTable)
+      .values({ router: expired, closedAt })
+      .run();
+    // Expiry alone does not remove the record. Another close or subscriber check must delete it.
+    const later = newRouterDOName(crypto.randomUUID());
+    pushes.close(later);
+    pushes.subscribe(expired, "first", 0);
+
+    let rejection: string | undefined;
+
+    try {
+      pushes.subscribe(recent, "first", 0);
+    } catch (error) {
+      rejection = error instanceof Error ? error.message : String(error);
+    }
+
+    return { routers: pushes.routers(), rejection };
+  });
+
+  expect(result).toEqual({ routers: [expired], rejection: "Router is closed" });
 });

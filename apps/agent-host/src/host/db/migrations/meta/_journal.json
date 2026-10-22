@@ -8,6 +8,13 @@
       "when": 1792195115215,
       "tag": "0000_host",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792626200091,
+      "tag": "0001_subscriber_cleanup",
+      "breakpoints": true
     }
   ]
 }
