@@ -1,5 +1,5 @@
 import { parseChannel } from "../../shared/lookups";
-import { AHPError } from "../../shared/protocol";
+import { AHPError, isNotFound } from "../../shared/protocol";
 import { toAHPError } from "../../shared/rpc/errors";
 import type { AgentHostConnectionRouterDeps } from "../dependencies";
 import type { SenderSnapshot } from "../dependencies/remote-subscriptions";
@@ -24,6 +24,12 @@ export type HoldResult = "ready" | "held" | "full";
 type Setup = { subscriptions: ChannelSender[]; pushes: HeldPush[] };
 
 /**
+ * `view` sets the loaded history of each chat. If `skipsMissing` is true, a channel that its
+ * sender reports as not found gets no snapshot and does not fail the setup.
+ */
+type SetupOptions = { view?: AHPSubscribeView; skipsMissing: boolean };
+
+/**
  * Runs the subscriptions of one client connection. It requests the channel snapshots from the
  * senders and stores the subscriptions.
  *
@@ -35,7 +41,7 @@ type Setup = { subscriptions: ChannelSender[]; pushes: HeldPush[] };
 export class Subscriptions {
   private deps: AgentHostConnectionRouterDeps;
   private setup?: Setup;
-  // The `subscribe` calls that run now.
+  // The `subscribe` and `recover` calls that run now.
   private running = 0;
 
   constructor(deps: AgentHostConnectionRouterDeps) {
@@ -57,8 +63,36 @@ export class Subscriptions {
     frame: Frame,
     view?: AHPSubscribeView,
   ): Promise<SenderSnapshot[]> {
+    return await this.run(channels, frame, { view, skipsMissing: false });
+  }
+
+  /**
+   * Subscribes the client to the channels of a reconnect and returns their snapshots. Unlike
+   * `subscribe`, it omits each channel that its sender reports as not found. Any other failure
+   * rejects the whole recovery.
+   *
+   * @throws {AHPError} If a channel is not valid, a sender fails, or the connection closed.
+   */
+  async recover(channels: string[], frame: Frame): Promise<SenderSnapshot[]> {
+    return await this.run(channels, frame, { skipsMissing: true });
+  }
+
+  /**
+   * True while a `subscribe` or `recover` call runs. A call that started before a close can
+   * still register a durable call, so the router keeps its storage until the call ends.
+   */
+  isSubscribing(): boolean {
+    return this.running > 0;
+  }
+
+  /** Subscribes once to each distinct channel. */
+  private async run(
+    channels: string[],
+    frame: Frame,
+    options: SetupOptions,
+  ): Promise<SenderSnapshot[]> {
     // An invalid channel throws here, before the setup starts.
-    const subscriptions = channels.map((channel) => ({
+    const subscriptions = [...new Set(channels)].map((channel) => ({
       channel,
       sender: channelSender(parseChannel(channel)),
     }));
@@ -66,25 +100,17 @@ export class Subscriptions {
     this.running += 1;
 
     try {
-      return await this.subscribeAtSenders(subscriptions, frame, view);
+      return await this.subscribeAtSenders(subscriptions, frame, options);
     } finally {
       this.running -= 1;
     }
-  }
-
-  /**
-   * True while a `subscribe` call runs. A call that started before a close can still register
-   * a durable call, so the router keeps its storage until the call ends.
-   */
-  isSubscribing(): boolean {
-    return this.running > 0;
   }
 
   /** Starts the setup, subscribes at the senders, and stores the subscriptions. */
   private async subscribeAtSenders(
     subscriptions: ChannelSender[],
     frame: Frame,
-    view?: AHPSubscribeView,
+    { view, skipsMissing }: SetupOptions,
   ): Promise<SenderSnapshot[]> {
     const { remoteSubscriptions, subscriptionStore } = this.deps;
     this.startSetup(subscriptions);
@@ -100,7 +126,10 @@ export class Subscriptions {
       result.status === "fulfilled" ? [result.value] : [],
     );
 
-    const failure = results.find((result) => result.status === "rejected");
+    const failure = results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .find((result) => !(skipsMissing && isNotFound(toAHPError(result.reason))));
+
     const open = frame.isCurrent();
 
     if (!open) {

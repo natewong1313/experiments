@@ -25,6 +25,19 @@ export class ServerSequence {
   }
 
   /**
+   * Raises the stored serverSeq to `serverSeq` if the stored value is lower, and returns the
+   * stored value. After `reconnect`, the next action must follow the `lastSeenServerSeq` of the
+   * client.
+   */
+  advanceTo(serverSeq: number): number {
+    const last = Math.max(this.current(), serverSeq);
+
+    this.store(last);
+
+    return last;
+  }
+
+  /**
    * Increments the serverSeq by `count`.
    * Returns the range of serverSeq increments.
    */
@@ -33,12 +46,16 @@ export class ServerSequence {
     const first = current + 1;
     const last = current + count;
 
-    this.db.orm
-      .insert(connectionTable)
-      .values({ id: 1, serverSeq: last })
-      .onConflictDoUpdate({ target: connectionTable.id, set: { serverSeq: last } })
-      .run();
+    this.store(last);
 
     return [first, last];
+  }
+
+  private store(serverSeq: number): void {
+    this.db.orm
+      .insert(connectionTable)
+      .values({ id: 1, serverSeq })
+      .onConflictDoUpdate({ target: connectionTable.id, set: { serverSeq } })
+      .run();
   }
 }

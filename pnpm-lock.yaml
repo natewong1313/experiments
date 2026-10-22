@@ -182,8 +182,8 @@ importers:
         specifier: ^0.45.3
         version: 0.45.3(@cloudflare/workers-types@5.20260819.1)(sql.js@1.14.2)
       durability:
-        specifier: ^3.0.1
-        version: 3.0.1(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3))
+        specifier: ^4.3.0
+        version: 4.3.0(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3))
       durable-utils:
         specifier: ^0.3.7
         version: 0.3.7
@@ -685,8 +685,8 @@ packages:
   '@durability/storage@0.1.1':
     resolution: {integrity: sha512-FPJQwIOuUbAeI4/1xg/kW3a4iME8XwyGkTktyI0d9qbHplggtzdBVu2yw/YG+na53B0GoxL23+BDK7lcZY3M9w==}
 
-  '@durability/transforms@0.3.0':
-    resolution: {integrity: sha512-oUgveUD/h8lZtTVEzOK743DLcx8XVrfVFjR/Y2yiwrg6u/aoWO+gVTTTAxIhhK2Ii6Ro8JNYfNmhd0tF2GLlEA==}
+  '@durability/transforms@0.6.0':
+    resolution: {integrity: sha512-6DrFxttrPdruQD4u2veua/mbjc8mdOT4iXgT3Dhhjbv7z2dM2ceTHJsaSFXkbFgUCW11oTYz89xLqy5M5UN4vg==}
     peerDependencies:
       '@cloudflare/workers-types': ^4.20260702.1
       better-result: ^2.9.2
@@ -2705,8 +2705,8 @@ packages:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
 
-  durability@3.0.1:
-    resolution: {integrity: sha512-1bd4HoDLLdMCSCkKB5hnuG7b1JeaDBwN5OjxsxIdiYAqJTL4Oih3X20i1VVlwVvQas+Ib1ySKq0bPa6FzjE+rg==}
+  durability@4.3.0:
+    resolution: {integrity: sha512-6HCnpmu7FCu7BMvLqJXubf/UZzF7mJxjjjjJSHFEO6PicL9ZqNgyBWXVgT1B3Ql4/G9cNuRrSLY3Lw4b9pBH0w==}
     peerDependencies:
       '@cloudflare/workers-types': ^4.20260702.1
     peerDependenciesMeta:
@@ -4544,7 +4544,7 @@ snapshots:
 
   '@durability/storage@0.1.1': {}
 
-  '@durability/transforms@0.3.0(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3))':
+  '@durability/transforms@0.6.0(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3))':
     dependencies:
       '@babel/parser': 7.29.9
       '@standard-schema/spec': 1.1.0
@@ -5884,10 +5884,11 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  durability@3.0.1(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3)):
+  durability@4.3.0(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3)):
     dependencies:
       '@durability/storage': 0.1.1
-      '@durability/transforms': 0.3.0(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3))
+      '@durability/transforms': 0.6.0(@cloudflare/workers-types@5.20260819.1)(better-result@2.10.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.147.0(@cloudflare/workers-types@5.20260819.1)(@types/node@26.6.3))
+      '@standard-schema/spec': 1.1.0
       zod: 4.6.5
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260819.1

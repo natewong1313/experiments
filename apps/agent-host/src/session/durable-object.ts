@@ -34,7 +34,7 @@ import type { StubFor } from "../shared/stubs";
 import { errorMessage } from "../shared/errors";
 import { parseSessionDOName, requireName, sessionUri } from "../shared/lookups";
 import type { SessionDOName } from "../shared/lookups";
-import { AHPError, sessionAlreadyExists, sessionNotFound } from "../shared/protocol";
+import { AHPError, chatNotFound, sessionAlreadyExists, sessionNotFound } from "../shared/protocol";
 import { SingleFlight } from "../shared/single-flight";
 import { SessionDatabase } from "./db/database";
 import type { SessionRecord } from "./db/schema";
@@ -200,8 +200,8 @@ export abstract class AgentHostSession<
    * subscription can widen the loaded history of the chat. The other subscribers then receive
    * the added turns.
    *
-   * @throws {SessionSubscribeError} If the session does not exist or the channel does not
-   * belong to it.
+   * @throws {SessionSubscribeError} With the `SessionNotFound` code if the session does not
+   * exist, or with the `NotFound` code if the channel does not belong to it.
    */
   async subscribe(req: SessionSubscribeRequest): Promise<SessionSubscribeResponse> {
     try {
@@ -210,7 +210,7 @@ export abstract class AgentHostSession<
         const isChat = req.channel !== sessionUri(session.id);
 
         if (isChat && req.channel !== defaultChatOf(session)) {
-          throw new AHPError("Channel does not belong to this session");
+          throw chatNotFound();
         }
 
         // The first chat subscriber starts a window without publishing an action or advancing the revision.
@@ -253,7 +253,7 @@ export abstract class AgentHostSession<
   async fetchTurns(req: SessionFetchTurnsRequest): Promise<void> {
     try {
       if (req.channel !== defaultChatOf(this.storage.requireSession())) {
-        throw new AHPError("Channel does not belong to this session");
+        throw chatNotFound();
       }
 
       // The loaded turns go only to subscribers, so the router must subscribe first.
@@ -308,7 +308,7 @@ export abstract class AgentHostSession<
       const session = this.storage.requireSession();
 
       if (channel !== defaultChatOf(session)) {
-        throw new AHPError("Channel does not belong to this session");
+        throw chatNotFound();
       }
 
       await (action.type === "chat/turnStarted"

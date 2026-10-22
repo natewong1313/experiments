@@ -3,9 +3,9 @@
 A minimal AHP 0.9 host built from three kinds of Durable Object.
 Each session has one default chat and accepts one active text turn at a time.
 
-- An `AgentHostConnectionRouter` owns one client WebSocket. The Worker creates a new router for each
-  connection. The router answers `initialize` and `ping`, and counts the `serverSeq` of
-  its connection.
+- An `AgentHostConnectionRouter` owns one client WebSocket. The Worker creates a new router for
+  each connection. The router answers `initialize`, `reconnect`, and `ping`, and counts the
+  `serverSeq` of its connection.
 - The `AgentHostRoot` owns the session catalogue and the root channel.
 - An `AgentHostSession` owns one session: its ACP connection, its persisted conversation state,
   and the routers that subscribe to it.
@@ -41,7 +41,8 @@ and disposal.
 The host and each session send pushes to a router one at a time, in revision order. A push
 carries the revision before it, so a router can find a missing revision. A router ignores
 revisions that it already has. If a revision is missing, the router closes the WebSocket
-with code 1011, and the client initializes again. The senders keep no history of actions.
+with code 1011. The client then sends `reconnect` or `initialize` on a new connection. The
+senders keep no history of actions.
 
 Pushes are best effort. A sender stops pushing to a router that it cannot reach after its
 retries. After a restart, a sender finds the routers that did not receive its latest
@@ -98,7 +99,7 @@ session assigns a chat UUID when it is created.
 
 ## Supported behavior
 
-The host supports `initialize`, `ping`, `listSessions`, `createSession`,
+The host supports `initialize`, `reconnect`, `ping`, `listSessions`, `createSession`,
 `disposeSession`, `subscribe`, and `unsubscribe`. Creation waits for ACP setup.
 
 A repeated `createSession` with the same session ID, provider, and working directory waits
@@ -123,10 +124,17 @@ not duplicate the retained AHP transcript.
 Sessions remain until explicit disposal. Disposal stops the connection and removes
 AHP history. Backend-owned data follows the backend's own lifecycle.
 
-To recover a client connection, initialize a new connection, fetch the catalogue,
-and subscribe again. There is no `reconnect` handler or replay log. Each connection has
-its own `serverSeq`, and a router deletes its storage when its connection closes. There are no
-multiple chats, tool approval UI, resource APIs, terminals, authentication, or
+To recover a client connection, send `reconnect` instead of `initialize` on a new connection.
+The host keeps no replay log, so the result is always the `snapshot` variant. The result has a
+new snapshot of each requested channel that still exists, and omits the other channels. Each
+snapshot has `fromSeq` equal to `lastSeenServerSeq`, and the next action gets
+`lastSeenServerSeq + 1`. Chat snapshots contain all retained turns, because `reconnect` has no
+`view`. Clients replace their channel state and turn cursors, drop pending optimistic actions,
+and fetch the catalogue again. The host does not send a prompt again or restart a turn. A failed
+`reconnect` leaves the connection uninitialized, so the client can retry or initialize. A router
+deletes its storage when its connection closes.
+
+There are no multiple chats, tool approval UI, resource APIs, terminals, authentication, or
 automatic prompt retries. Agent tools may still run internally.
 
 ## Database layout

@@ -11,6 +11,8 @@ import type {
   InitializeParams as AHPInitializeParams,
   InitializeResult as AHPInitializeResult,
   ListSessionsResult as AHPListSessionsResult,
+  ReconnectParams as AHPReconnectParams,
+  ReconnectResult as AHPReconnectResult,
   Snapshot as AHPSnapshot,
   SubscribeResult as AHPSubscribeResult,
   SubscribeView as AHPSubscribeView,
@@ -22,6 +24,7 @@ import {
   FetchTurnsParamsSchema as AHPFetchTurnsParamsSchema,
   InitializeParamsSchema as AHPInitializeParamsSchema,
   ListSessionsParamsSchema as AHPListSessionsParamsSchema,
+  ReconnectParamsSchema as AHPReconnectParamsSchema,
   RootChannelParamsSchema as AHPRootChannelParamsSchema,
   SubscribeParamsSchema as AHPSubscribeParamsSchema,
 } from "@experiments/protocol-schemas/ahp";
@@ -34,6 +37,7 @@ import { AHPError } from "../../shared/protocol";
 import { toAHPError } from "../../shared/rpc/errors";
 import { SessionDispatchActionSchema } from "../../shared/rpc/session";
 import type { AgentHostConnectionRouterDeps } from "../dependencies";
+import type { SenderSnapshot } from "../dependencies/remote-subscriptions";
 import { CloseCode, send, sendError } from "../websockets";
 import type { Frame } from "./client-connection";
 import type { Subscriptions } from "./subscriptions";
@@ -43,17 +47,22 @@ const AttachmentSchema = z.object({ clientId: z.string().optional() }).nullable(
 type RequestResult =
   | AHPInitializeResult
   | AHPListSessionsResult
+  | AHPReconnectResult
   | AHPSubscribeResult
   | AHPFetchTurnsResult
   | null;
+
+function toSnapshots(snapshots: SenderSnapshot[], fromSeq: number): AHPSnapshot[] {
+  return snapshots.map(({ channel, state }) => ({ resource: channel, state, fromSeq }));
+}
 
 /**
  * Handles the client frames of one connection. It parses each frame, runs the AHP request or
  * notification, and sends the reply on the socket.
  *
- * The router answers `initialize` and `ping`, sends `listSessions` and root subscriptions to
- * the host, and sends all session requests, including `createSession` and `disposeSession`,
- * directly to the sessions.
+ * The router answers `initialize`, `reconnect`, and `ping`, sends `listSessions` and root
+ * subscriptions to the host, and sends all session requests, including `createSession` and
+ * `disposeSession`, directly to the sessions.
  */
 export class ClientRequestsRouter {
   private deps: AgentHostConnectionRouterDeps;
@@ -120,6 +129,10 @@ export class ClientRequestsRouter {
     switch (method) {
       case "initialize": {
         return await this.initialize(socket, AHPInitializeParamsSchema.parse(params), frame);
+      }
+
+      case "reconnect": {
+        return await this.reconnect(socket, AHPReconnectParamsSchema.parse(params), frame);
       }
 
       case "ping": {
@@ -226,14 +239,46 @@ export class ClientRequestsRouter {
       });
     }
 
-    const channels = [...new Set(params.initialSubscriptions)];
-    const snapshots = await this.subscribe(channels, frame);
+    const snapshots = await this.subscribe(params.initialSubscriptions ?? [], frame);
     socket.serializeAttachment({ clientId: params.clientId });
 
     return {
       protocolVersion: AHP_PROTOCOL_VERSION,
       serverSeq: this.deps.sequence.current(),
       snapshots,
+    };
+  }
+
+  /**
+   * Restores the subscriptions of an earlier connection with new snapshots.
+   * We do not support replaying right now, so we'll always return a snapshot instead of an action log.
+   *
+   * The router stores the client ID only after the snapshots load.
+   * Thus a failed reconnect leaves the connection uninitialized, and the client can retry or
+   * initialize.
+   */
+  private async reconnect(
+    socket: WebSocket,
+    params: AHPReconnectParams,
+    frame: Frame,
+  ): Promise<AHPReconnectResult> {
+    if (this.clientId(socket) !== undefined) {
+      throw new AHPError("Connection is already initialized");
+    }
+
+    // The next action gets `lastSeenServerSeq + 1`
+    if (params.lastSeenServerSeq >= Number.MAX_SAFE_INTEGER) {
+      throw new AHPError("No server sequence numbers remain after lastSeenServerSeq");
+    }
+
+    const recovered = await this.subscriptions.recover(params.subscriptions, frame);
+    // Each snapshot starts at lastSeenServerSeq, and the actions of this router follow it.
+    const fromSeq = this.deps.sequence.advanceTo(params.lastSeenServerSeq);
+    socket.serializeAttachment({ clientId: params.clientId });
+
+    return {
+      type: "snapshot",
+      snapshots: toSnapshots(recovered, fromSeq),
     };
   }
 
@@ -249,7 +294,7 @@ export class ClientRequestsRouter {
     const snapshots = await this.subscriptions.subscribe(channels, frame, view);
     const fromSeq = this.deps.sequence.current();
 
-    return snapshots.map(({ channel, state }) => ({ resource: channel, state, fromSeq }));
+    return toSnapshots(snapshots, fromSeq);
   }
 
   /** Returns the client ID set by `initialize`, or undefined before initialization. */

@@ -1,6 +1,7 @@
 import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import {
   ActionEnvelopeSchema,
+  ReconnectResultSchema,
   SessionStateSchema,
   SubscribeResultSchema,
   JsonRpcNotificationSchema,
@@ -9,6 +10,7 @@ import {
   type JsonRpcNotification,
   type JsonRpcReply,
   type JsonValue,
+  type Snapshot,
   type ChannelParams,
   type CreateSessionParams,
   type DispatchActionParams,
@@ -150,6 +152,17 @@ export async function initialize(peer: Peer, clientId = crypto.randomUUID()): Pr
   });
 
   return peer;
+}
+
+/** Sends `reconnect` and returns the snapshots of its result. */
+export async function reconnect(peer: Peer, params: ReconnectParams): Promise<Snapshot[]> {
+  const result = ReconnectResultSchema.parse(await peer.request("reconnect", params));
+
+  if (result.type !== "snapshot") {
+    throw new Error("Expected the snapshot variant");
+  }
+
+  return result.snapshots;
 }
 
 export async function connectPeer(hostId: string, clientId = crypto.randomUUID()): Promise<Peer> {

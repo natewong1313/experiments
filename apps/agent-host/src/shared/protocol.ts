@@ -29,6 +29,16 @@ export function sessionNotFound(): AHPError {
   return new AHPError("Session does not exist", AHPErrorCodes.SessionNotFound);
 }
 
+/** Returns the AHP error for a chat channel that its session does not have. */
+export function chatNotFound(): AHPError {
+  return new AHPError("Channel does not belong to this session", AHPErrorCodes.NotFound);
+}
+
+/** True if the error reports that a session or a chat channel does not exist. */
+export function isNotFound({ code }: AHPError): boolean {
+  return code === AHPErrorCodes.SessionNotFound || code === AHPErrorCodes.NotFound;
+}
+
 /** Returns the AHP error for a session ID that another session uses. */
 export function sessionAlreadyExists(): AHPError {
   return new AHPError("Session already exists", AHPErrorCodes.SessionAlreadyExists);

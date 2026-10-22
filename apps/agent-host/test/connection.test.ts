@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
+import * as z from "zod";
 import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
 import { RouterDatabase } from "../src/router/db/database";
 import type { HostSubscribeRootResponse } from "../src/shared/rpc/host";
@@ -147,6 +148,92 @@ function initialize(id: string): string {
       initialSubscriptions: [ROOT_CHANNEL],
     },
   });
+}
+
+/** The `lastSeenServerSeq` that the reconnect tests send. */
+const LAST_SEEN_SERVER_SEQ = 42;
+
+/** The revision of a root push that follows the snapshot in the reconnect tests. */
+const LIVE_REVISION = 2;
+
+/** The count of replies: the failed reconnect, the retry, and a subscribe after each. */
+const REPLIES_WITH_RETRY = 4;
+
+/** The count of client messages: the reconnect reply and the action of `LIVE_REVISION`. */
+const REPLY_AND_LIVE_ACTION = 2;
+
+function reconnect(id: string, subscriptions: string[], clientId = "reconnected"): string {
+  return JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    method: "reconnect",
+    params: {
+      channel: ROOT_CHANNEL,
+      clientId,
+      lastSeenServerSeq: LAST_SEEN_SERVER_SEQ,
+      subscriptions,
+    },
+  });
+}
+
+/** Returns a root action push of one revision. */
+function rootAction(revision: number): Parameters<AgentHostConnectionRouter["rootUpdate"]>[0] {
+  return {
+    after: revision - 1,
+    updates: [
+      {
+        revision,
+        kind: "action",
+        action: { type: "root/activeSessionsChanged", activeSessions: revision },
+      },
+    ],
+  };
+}
+
+/**
+ * Replaces the session namespace of the router with one whose sessions fail each subscription.
+ * The error has no missing-channel code, so a reconnect fails instead of omitting the channel.
+ */
+function useFailingSession(router: AgentHostConnectionRouter): void {
+  const session = {
+    subscribe: (): Promise<never> => Promise.reject(new Error("Session is unavailable")),
+    routerClosed: (): Promise<void> => Promise.resolve(),
+  };
+
+  Object.assign(router, { session: { getByName: (): typeof session => session } });
+}
+
+/** A root subscribe frame. The router rejects it while the connection is uninitialized. */
+function subscribeRoot(id: string): string {
+  return JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    method: "subscribe",
+    params: { channel: ROOT_CHANNEL },
+  });
+}
+
+/** Opens the client connection and records the messages that its client side receives. */
+async function connectClient(
+  router: AgentHostConnectionRouter,
+  ctx: DurableObjectState,
+): Promise<{ socket: WebSocket; received: unknown[] }> {
+  const response = await router.fetch(upgrade());
+  const client = response.webSocket;
+  const [socket] = ctx.getWebSockets();
+
+  if (!client || !socket) {
+    throw new Error("The router did not accept the WebSocket");
+  }
+
+  const received: unknown[] = [];
+  client.accept();
+  client.addEventListener("message", (event) => {
+    const text = z.string().parse(event.data);
+    received.push(JSON.parse(text));
+  });
+
+  return { socket, received };
 }
 
 it("does not run frames that wait behind a frame when the connection closes", async () => {
@@ -548,3 +635,109 @@ it("closes the connection when subscription setup buffers too many pushes", asyn
   expect(result).toEqual({ subscribed: [] });
   await waitForRouterCleanup(stub);
 });
+
+it("sends the reconnect snapshot before the held pushes and skips the actions it covers", async () => {
+  const received = await runInDurableObject(routerStub(), async (router, ctx) => {
+    const host = new HeldHost();
+    useHost(router, host);
+    const client = await connectClient(router, ctx);
+    const running = router.webSocketMessage(client.socket, reconnect("reconnect", [ROOT_CHANNEL]));
+    await host.started.promise;
+
+    // The snapshot has revision 1, so the router drops the push of revision 1.
+    await router.rootUpdate(rootAction(1));
+    await router.rootUpdate(rootAction(LIVE_REVISION));
+    host.revision = 1;
+    host.released.resolve(null);
+    await running;
+
+    await vi.waitFor(() => {
+      expect(client.received).toHaveLength(REPLY_AND_LIVE_ACTION);
+    });
+
+    return client.received;
+  });
+
+  expect(received).toEqual([
+    {
+      jsonrpc: "2.0",
+      id: "reconnect",
+      result: {
+        type: "snapshot",
+        snapshots: [
+          {
+            resource: ROOT_CHANNEL,
+            state: { agents: [], activeSessions: 1 },
+            fromSeq: LAST_SEEN_SERVER_SEQ,
+          },
+        ],
+      },
+    },
+    {
+      jsonrpc: "2.0",
+      method: "action",
+      params: {
+        channel: ROOT_CHANNEL,
+        action: { type: "root/activeSessionsChanged", activeSessions: LIVE_REVISION },
+        serverSeq: LAST_SEEN_SERVER_SEQ + 1,
+      },
+    },
+  ]);
+});
+
+it("undoes a failed reconnect and leaves the connection uninitialized for a retry", async () => {
+  const result = await runInDurableObject(routerStub(), async (router, ctx) => {
+    const host = failingHost(0);
+    useHost(router, host);
+    useFailingSession(router);
+    const { socket, received } = await connectClient(router, ctx);
+    const sessionChannel = `ahp-session:/${crypto.randomUUID()}`;
+
+    await router.webSocketMessage(socket, reconnect("failed", [ROOT_CHANNEL, sessionChannel]));
+    await router.webSocketMessage(socket, subscribeRoot("before retry"));
+    const serverSeq = new ServerSequence(new RouterDatabase(ctx.storage)).current();
+    await router.webSocketMessage(socket, reconnect("retry", [ROOT_CHANNEL]));
+    await router.webSocketMessage(socket, subscribeRoot("after retry"));
+
+    await vi.waitFor(() => {
+      expect(received).toHaveLength(REPLIES_WITH_RETRY);
+    });
+
+    return { received, serverSeq, unsubscribed: host.unsubscribed };
+  });
+
+  expect(result).toMatchObject({
+    received: [
+      { id: "failed", error: { message: "Session is unavailable" } },
+      { id: "before retry", error: { message: "Initialize the connection first" } },
+      { id: "retry", result: { type: "snapshot" } },
+      { id: "after retry", result: { snapshot: { resource: ROOT_CHANNEL } } },
+    ],
+    serverSeq: 0,
+    unsubscribed: [ROOT_CHANNEL],
+  });
+});
+
+it(
+  "closes the subscriptions of a reconnect when the connection closes during setup",
+  { timeout: RETRY_CLEANUP_TIMEOUT_MS },
+  async () => {
+    const stub = routerStub();
+    const host = new HeldHost();
+
+    await runInDurableObject(stub, async (router, ctx) => {
+      useHost(router, host);
+      const socket = await connect(router, ctx);
+
+      const running = router.webSocketMessage(socket, reconnect("reconnect", [ROOT_CHANNEL]));
+      await host.started.promise;
+      await router.webSocketClose(socket);
+      host.released.resolve(null);
+      await running;
+    });
+
+    // The close and the stopped subscription each close the router at the host.
+    await waitForRouterCleanup(stub);
+    expect(host.closes).toBe(CLOSES_WITH_LATE_SUBSCRIPTION);
+  },
+);

@@ -99,6 +99,7 @@ it("returns typed snapshots and named errors through the session RPC contract", 
     expect(wrongChannel).toMatchObject({
       name: "SessionSubscribeError",
       message: "Channel does not belong to this session",
+      code: AHPErrorCodes.NotFound,
     });
     const turnId = crypto.randomUUID();
     const clientId = crypto.randomUUID();

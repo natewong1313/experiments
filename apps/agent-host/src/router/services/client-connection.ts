@@ -130,8 +130,8 @@ export class ClientConnection {
   }
 
   /**
-   * Closes the socket with code 1011, then ends the connection. The client must initialize
-   * again to get new snapshots.
+   * Closes the socket with code 1011, then ends the connection. The client must reconnect or
+   * initialize on a new connection to get new snapshots.
    */
   async fail(reason: string): Promise<void> {
     const socket = await this.socket();

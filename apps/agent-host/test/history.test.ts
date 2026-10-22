@@ -11,10 +11,12 @@ import {
   ChatStateSchema,
   SubscribeResultSchema,
   type ActionEnvelope,
+  type ReconnectParams,
 } from "@experiments/protocol-schemas/ahp";
 import { FETCH_TURNS_PAGE } from "../src/session/chat/store";
+import { ROOT_CHANNEL } from "../src/shared/protocol";
 import { sessionDOName } from "../src/shared/lookups";
-import { connectPeer, createSession } from "./peer";
+import { connectPeer, createSession, openPeer, reconnect } from "./peer";
 import type { CreatedSession, Peer } from "./peer";
 import { changeSession } from "./storage";
 
@@ -159,6 +161,40 @@ it("widens the shared window for all subscribers and keeps it after a restart", 
       const loaded = loadedActions(peer).at(LAST);
       expect(loaded?.turns.map((turn) => turn.id)).toEqual(older);
     }
+  });
+});
+
+it("recovers all retained turns on reconnect and widens the window of other subscribers", async () => {
+  const hostId = crypto.randomUUID();
+  const clientId = crypto.randomUUID();
+  const old = await connectPeer(hostId, clientId);
+  const other = await connectPeer(hostId);
+  const session = await createSession(old);
+  const turnIds = await storeTurns(hostId, session, LONG_HISTORY);
+  const narrow = await subscribe(old, session.chat, NARROW);
+  expect(narrow.cursor).toBeDefined();
+
+  await subscribe(other, session.chat, NARROW);
+  old.close();
+
+  const params: ReconnectParams = {
+    channel: ROOT_CHANNEL,
+    clientId,
+    lastSeenServerSeq: old.actions.at(LAST)?.serverSeq ?? 0,
+    subscriptions: [session.chat],
+  };
+
+  const peer = await openPeer(hostId);
+  const [snapshot] = await reconnect(peer, params);
+  const state = ChatStateSchema.parse(snapshot?.state);
+
+  // `reconnect` has no view, so the snapshot has every turn and no cursor.
+  expect(state.turns.map((turn) => turn.id)).toEqual(turnIds);
+  expect(state.turnsNextCursor).toBeUndefined();
+  await vi.waitFor(() => {
+    expect(loadedActions(other).map((action) => action.turns.length)).toEqual([
+      LONG_HISTORY - NARROW,
+    ]);
   });
 });
 
