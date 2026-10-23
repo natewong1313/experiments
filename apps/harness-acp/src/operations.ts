@@ -5,9 +5,17 @@ import type {
   SessionUpdate,
   Usage as ACPUsage,
 } from "@agentclientprotocol/sdk";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { EntryRecord, SnapshotEvent, ToolSlot } from "@earendil-works/pi-durable";
 import type { PiOperationResult } from "agents/harness/pi";
-import { messageTextUpdates, toolCallEnd, toolCallOutput, toolCallStart } from "./acp-events";
+import {
+  textUpdates,
+  partialArgumentsOf,
+  toolCallEnd,
+  toolCallOutput,
+  toolCallPending,
+  toolCallStart,
+} from "./acp-events";
 
 /**
  * The `_meta` key of a prompt's operation ID. A prompt that repeats an operation ID reattaches to
@@ -80,10 +88,9 @@ export function replayUpdates(updates: readonly SessionUpdate[]): SessionUpdate[
 
 /**
  * Returns the output of the operation with `operationId` in `snapshot` as ACP updates, in the
- * order that the live event watch sends them. Each assistant message gives its text and thinking
- * in block order, then its tool calls. A started tool call appears with its result, or as failed
- * if Pi ended it without a result. A running tool call appears with its output so far, and a
- * tool call that waits to start appears when it starts. The generation in flight comes last.
+ * order that the live event watch sends them. Assistant content retains its block order.
+ * Tool calls include pending calls, running output, and completed results.
+ * Calls that ended without a result appear as failed. The generation in flight comes last.
  */
 export function operationUpdates(snapshot: SnapshotEvent, operationId: string): SessionUpdate[] {
   const answers = operationAnswers(snapshot.entries, operationId);
@@ -107,7 +114,22 @@ export function operationUpdates(snapshot: SnapshotEvent, operationId: string): 
   const updates = answers.entries.flatMap((entry) => answerUpdates(entry, results, slots));
   const inFlight = answers.current ? snapshot.generation?.message : undefined;
 
-  return inFlight ? [...updates, ...messageTextUpdates(inFlight)] : updates;
+  return inFlight ? [...updates, ...inFlightUpdates(inFlight)] : updates;
+}
+
+/**
+ * Returns the message in flight in content order. Its tool calls have not started yet.
+ */
+function inFlightUpdates(message: AssistantMessage): SessionUpdate[] {
+  return message.content.flatMap((block): SessionUpdate[] => {
+    if (block.type === "toolCall") {
+      return block.name === ""
+        ? []
+        : [toolCallPending(block.id, block.name, partialArgumentsOf(block) ?? block.arguments)];
+    }
+
+    return textUpdates(block.type, block.type === "text" ? block.text : block.thinking);
+  });
 }
 
 /** Returns the token usage of the committed answers of an operation, or undefined if none. */
@@ -160,8 +182,8 @@ function operationAnswers(
 }
 
 /**
- * Returns the updates of a committed assistant message: its text and thinking, then the tool
- * calls that started. Other entries give no updates, because their tool calls give the results.
+ * Returns committed assistant content in block order, with each tool call's current status.
+ * Other entries give no updates, because their tool calls give the results.
  */
 function answerUpdates(
   entry: EntryRecord,
@@ -174,8 +196,12 @@ function answerUpdates(
     return [];
   }
 
-  const calls = message.content.flatMap((block) => {
+  return message.content.flatMap((block): SessionUpdate[] => {
     if (block.type !== "toolCall") {
+      return textUpdates(block.type, block.type === "text" ? block.text : block.thinking);
+    }
+
+    if (block.name === "") {
       return [];
     }
 
@@ -183,21 +209,18 @@ function answerUpdates(
     const slot = slots.get(block.id);
     const start = toolCallStart(block.id, block.name, block.arguments);
 
-    // Pi ends a faulted or orphaned call without a result entry, which is a failure.
-    if (result || slot?.status === "done") {
-      return [start, toolCallEnd(block.id, result)];
+    if (slot?.status === "pending") {
+      return [toolCallPending(block.id, block.name, block.arguments)];
     }
 
-    if (slot?.status !== "running") {
-      return [];
+    if (result || slot?.status !== "running") {
+      return [start, toolCallEnd(block.id, result)];
     }
 
     return slot.output === undefined
       ? [start]
       : [start, toolCallOutput(block.id, slot.output, slot.details)];
   });
-
-  return [...messageTextUpdates(message), ...calls];
 }
 
 function isPromptOf(entry: EntryRecord, operationId: string): boolean {

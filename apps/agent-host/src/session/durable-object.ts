@@ -38,6 +38,7 @@ import type { SessionDOName } from "../shared/lookups";
 import { AHPError, chatNotFound, sessionAlreadyExists, sessionNotFound } from "../shared/protocol";
 import { SingleFlight } from "../shared/single-flight";
 import { SessionDatabase } from "./db/database";
+import { subscriberChannelsTable } from "./db/schema";
 import { durabilityAlarmScheduler } from "./alarm-scheduler";
 import type {
   SessionAlarmInfo,
@@ -58,6 +59,11 @@ import { defaultChatOf, phaseOf } from "./records";
 import type { ApplyOutcome, SessionChange } from "./records";
 import { SessionStorage } from "./storage";
 import { SessionTurns } from "./turns";
+
+type SessionObjectInspection = {
+  exists: boolean;
+  routers: { name: string; channels: string[] }[];
+};
 
 export type { SessionLifecyclePolicy } from "./lifecycle-policy";
 
@@ -185,6 +191,28 @@ export abstract class AgentHostSession<
 
   protected getWorkingDirectory(): string {
     return "/";
+  }
+
+  protected inspectObjects(): SessionObjectInspection {
+    if (!this.storage.session()) {
+      return { exists: false, routers: [] };
+    }
+
+    const subscriptions = this.db.orm
+      .select({ name: subscriberChannelsTable.router, channel: subscriberChannelsTable.channel })
+      .from(subscriberChannelsTable)
+      .orderBy(subscriberChannelsTable.router, subscriberChannelsTable.channel)
+      .all();
+
+    const routers: Map<string, SessionObjectInspection["routers"][number]> = new Map();
+
+    for (const { name, channel } of subscriptions) {
+      const router = routers.get(name) ?? { name, channels: [] };
+      router.channels.push(channel);
+      routers.set(name, router);
+    }
+
+    return { exists: true, routers: [...routers.values()] };
   }
 
   /**

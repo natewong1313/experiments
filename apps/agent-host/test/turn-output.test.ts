@@ -93,6 +93,26 @@ function toolStart(toolCallId: string): TurnUpdate {
   };
 }
 
+function toolPending(toolCallId: string, partialInput: string): TurnUpdate {
+  return {
+    sessionUpdate: "tool_call_update",
+    toolCallId,
+    status: "pending",
+    rawInput: partialInput,
+  };
+}
+
+function toolPendingStart(toolCallId: string, partialInput: string): TurnUpdate {
+  return {
+    sessionUpdate: "tool_call",
+    toolCallId,
+    title: "read",
+    name: "read",
+    status: "pending",
+    rawInput: partialInput,
+  };
+}
+
 function toolEnd(toolCallId: string, output: string): TurnUpdate {
   return {
     sessionUpdate: "tool_call_update",
@@ -198,11 +218,81 @@ it("completes a stored running tool call from a snapshot, and adds the text afte
   expect(actions[1]).toMatchObject({ part: { kind: "markdown", content: "Done" } });
 });
 
+it("shows a tool call while the model streams its parameters", async () => {
+  const { output, actions } = outputOf();
+
+  for (const update of [
+    toolPendingStart("call", '{"path"'),
+    toolPending("call", '{"path":"/a"}'),
+    toolStart("call"),
+    toolEnd("call", "file text"),
+  ]) {
+    // oxlint-disable-next-line no-await-in-loop -- the updates arrive in order
+    await output.write({ kind: "live", update });
+  }
+
+  expect(actions.map((action) => action.type)).toEqual([
+    "chat/toolCallStart",
+    "chat/toolCallDelta",
+    "chat/toolCallDelta",
+    "chat/toolCallReady",
+    "chat/toolCallComplete",
+  ]);
+  expect(actions[1]).toMatchObject({ toolCallId: "call", content: '{"path"' });
+  expect(actions[2]).toMatchObject({ toolCallId: "call", content: ':"/a"}' });
+  expect(actions[3]).toMatchObject({
+    toolCallId: "call",
+    toolInput: JSON.stringify({ path: "/a" }),
+  });
+});
+
 it("ignores an update of a tool call that never started", async () => {
   const { output, actions } = outputOf();
   await output.write({ kind: "live", update: toolEnd("unknown", "text") });
 
   expect(actions).toEqual([]);
+});
+
+it("replaces pending argument snapshots without appending JSON documents", async () => {
+  const { output, actions } = outputOf();
+
+  const first: TurnUpdate = {
+    sessionUpdate: "tool_call",
+    toolCallId: "call",
+    title: "exec",
+    status: "pending",
+    rawInput: { command: "git" },
+  };
+
+  const next: TurnUpdate = {
+    sessionUpdate: "tool_call_update",
+    toolCallId: "call",
+    status: "pending",
+    rawInput: { command: "git status" },
+  };
+
+  await output.write({ kind: "live", update: first });
+  await output.write({ kind: "live", update: next });
+
+  expect(actions.map((action) => action.type)).toEqual([
+    "chat/toolCallStart",
+    "chat/toolCallDelta",
+    "chat/toolCallDelta",
+  ]);
+  expect(actions[2]).toMatchObject({ _meta: { "acp.partialInput": '{"command":"git status"}' } });
+  expect(actions[2]).not.toHaveProperty("content");
+  const parts = partsAfter([], actions);
+  const replay = outputOf(parts);
+  await replay.output.write({ kind: "replay", updates: [first, next] });
+  expect(replay.actions).toEqual([]);
+
+  await output.write({ kind: "live", update: { ...next, status: "in_progress" } });
+  const ready = partsAfter([], actions);
+  expect(ready).toMatchObject([
+    {
+      toolCall: { status: "running", toolInput: '{"command":"git status"}' },
+    },
+  ]);
 });
 
 it("keeps the parts of a replay that differs from the stored text when it replays again", async () => {

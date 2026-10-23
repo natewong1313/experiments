@@ -1,9 +1,11 @@
+import * as z from "zod";
 import type {
   SessionConfigOption,
   SessionUpdate,
   ToolCall,
   ToolKind,
 } from "@agentclientprotocol/sdk";
+import { copyJson, type JsonValue } from "@earendil-works/chord";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentEvent, EntryRecord, SnapshotEvent } from "@earendil-works/pi-durable";
 import { boundedRaw, textChunks, textTail } from "./frame-limits";
@@ -26,6 +28,10 @@ const toolKinds: Map<string, ToolKind> = new Map([
 ]);
 
 type TextKind = "text" | "thinking";
+
+const PartialArgumentsSchema = z.object({ partialArguments: z.string().min(1).optional() });
+
+type ToolBlock = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
 
 /** Returns the updates that carry `text` of an assistant block, each small enough for a frame. */
 export function textUpdates(kind: TextKind, text: string): SessionUpdate[] {
@@ -56,23 +62,70 @@ export function toolCallStart(
   toolName: string,
   args: unknown,
 ): Extract<SessionUpdate, { sessionUpdate: "tool_call" }> {
-  return { sessionUpdate: "tool_call", ...startFields(toolCallId, toolName, args) };
+  return {
+    sessionUpdate: "tool_call",
+    ...startFields(toolCallId, toolName, args, "in_progress"),
+  };
+}
+
+/**
+ * Returns the update that creates a tool call while the model still generates its parameters.
+ * `partialInput` holds the generated parameter text or parsed arguments.
+ */
+export function toolCallPending(
+  toolCallId: string,
+  toolName: string,
+  partialInput?: unknown,
+): Extract<SessionUpdate, { sessionUpdate: "tool_call" }> {
+  return {
+    sessionUpdate: "tool_call",
+    ...startFields(toolCallId, toolName, partialInput, "pending"),
+  };
+}
+
+/** Returns the update that carries the current parameters of a pending tool call. */
+export function toolCallPendingUpdate(
+  toolCallId: string,
+  partialInput: unknown,
+): Extract<SessionUpdate, { sessionUpdate: "tool_call_update" }> {
+  return {
+    sessionUpdate: "tool_call_update",
+    toolCallId,
+    status: "pending",
+    rawInput: boundedRaw(partialInput),
+  };
 }
 
 /** Returns the update that marks a tool call that the client already has as started again. */
 function toolCallRestart(toolCallId: string, toolName: string, args: unknown): SessionUpdate {
-  return { sessionUpdate: "tool_call_update", ...startFields(toolCallId, toolName, args) };
+  return {
+    sessionUpdate: "tool_call_update",
+    ...startFields(toolCallId, toolName, args, "in_progress"),
+  };
 }
 
-function startFields(toolCallId: string, toolName: string, args: unknown): ToolCall {
+function startFields(
+  toolCallId: string,
+  toolName: string,
+  args: unknown,
+  status: "pending" | "in_progress",
+): ToolCall {
   return {
     toolCallId,
     title: toolName,
     name: toolName,
     kind: toolKinds.get(toolName) ?? "other",
-    status: "in_progress",
+    status,
     rawInput: boundedRaw(args),
   };
+}
+
+/**
+ * Returns the parameter text that the model has generated for a tool call block so far.
+ * Pi holds it outside the assistant message type, so read it defensively.
+ */
+export function partialArgumentsOf(block: ToolBlock): string | undefined {
+  return PartialArgumentsSchema.safeParse(block).data?.partialArguments;
 }
 
 /** Returns the update that carries the output of a running tool call so far. */
@@ -94,7 +147,7 @@ export function toolCallOutput(
  * Returns the update that ends a tool call with the tool result in `entry`. A call without a
  * result failed.
  */
-export function toolCallEnd(toolCallId: string, entry: EntryRecord | undefined): SessionUpdate {
+export function toolCallEnd(toolCallId: string, entry?: EntryRecord): SessionUpdate {
   const result = entry?.model?.[0];
 
   if (result?.role !== "toolResult") {
@@ -122,9 +175,14 @@ export function toolCallEnd(toolCallId: string, entry: EntryRecord | undefined):
 // AcpEventUpdates
 export class AcpEventUpdates {
   private readonly sentTextLengths: Map<number, number> = new Map();
+  private readonly toolBlocks: Map<number, { block: ToolBlock; input: JsonValue }> = new Map();
   private readonly currentToolOutputs: Map<string, string> = new Map();
   // The tool calls that the client already has. A later start of one only updates it.
   private readonly startedTools: Set<string> = new Set();
+  // The tool calls that the client has while the model still generates their parameters.
+  private readonly pendingTools: Set<string> = new Set();
+  // The parameter text that the client has for each pending tool call.
+  private readonly pendingInputs: Map<string, string> = new Map();
   private readonly configOptionsOf?: ConfigOptionsOf;
   private currentModel?: SessionModel;
 
@@ -140,9 +198,31 @@ export class AcpEventUpdates {
       if (part.type === "text" || part.type === "thinking") {
         this.sentTextLengths.set(index, (part.type === "text" ? part.text : part.thinking).length);
       }
+
+      if (part.type === "toolCall" && part.name !== "") {
+        this.toolBlocks.set(index, { block: part, input: copyJson(part.arguments) });
+        this.pendingTools.add(part.id);
+        const input = partialArgumentsOf(part) ?? part.arguments;
+        this.pendingInputs.set(part.id, JSON.stringify(input));
+      }
     }
 
+    const committedMessages = (snapshot?.entries ?? []).flatMap((entry) => entry.model ?? []);
+
+    const committedBlocks = committedMessages.flatMap((message) =>
+      message.role === "assistant" ? message.content : [],
+    );
+
     for (const tool of snapshot?.tools ?? []) {
+      if (
+        tool.status === "pending" &&
+        committedBlocks.some(
+          (block) => block.type === "toolCall" && block.id === tool.callId && block.name !== "",
+        )
+      ) {
+        this.pendingTools.add(tool.callId);
+      }
+
       if (tool.status !== "pending") {
         this.startedTools.add(tool.callId);
       }
@@ -160,7 +240,7 @@ export class AcpEventUpdates {
       }
 
       case "message_start": {
-        return this.onMessageStart();
+        return this.onMessageStart(event);
       }
 
       case "message_end": {
@@ -181,6 +261,11 @@ export class AcpEventUpdates {
 
       case "tool_execution_end": {
         return this.onToolExecutionEnd(event);
+      }
+
+      case "auto_retry_start":
+      case "run_end": {
+        return this.failPendingTools();
       }
 
       default: {
@@ -205,10 +290,39 @@ export class AcpEventUpdates {
     return [{ sessionUpdate: "config_option_update", configOptions: this.configOptionsOf(model) }];
   }
 
-  private onMessageStart(): SessionUpdate[] {
+  private onMessageStart(event: Extract<AgentEvent, { type: "message_start" }>): SessionUpdate[] {
+    if (event.message.role !== "assistant") {
+      return [];
+    }
+
     this.sentTextLengths.clear();
 
-    return [];
+    // A new message ends the earlier attempt. Its unstarted tool calls have no result and must stop appearing as pending.
+    return [...this.failPendingTools(), ...this.onMessage(event.message)];
+  }
+
+  private onMessage(message: AssistantMessage): SessionUpdate[] {
+    this.toolBlocks.clear();
+
+    return message.content.flatMap((block, index) => this.onBlock(block, index));
+  }
+
+  private onBlock(block: AssistantMessage["content"][number], index: number): SessionUpdate[] {
+    if (block.type === "toolCall") {
+      this.sentTextLengths.delete(index);
+      const input = copyJson(block.arguments);
+      this.toolBlocks.set(index, { block, input });
+
+      return this.onToolCallBlock(block, partialArgumentsOf(block) ?? input);
+    }
+
+    this.toolBlocks.delete(index);
+
+    return this.convertTextUpdate(
+      block.type,
+      block.type === "text" ? block.text : block.thinking,
+      index,
+    );
   }
 
   private onMessageEnd(event: Extract<AgentEvent, { type: "message_end" }>): SessionUpdate[] {
@@ -231,22 +345,24 @@ export class AcpEventUpdates {
 
   private onMessageUpdate(event: Extract<AgentEvent, { type: "message_update" }>): SessionUpdate[] {
     return event.changes.flatMap((change): SessionUpdate[] => {
+      if (change.type === "message") {
+        return this.onMessage(change.message);
+      }
+
       if ("block" in change) {
-        const { block, contentIndex } = change;
+        return this.onBlock(change.block, change.contentIndex);
+      }
 
-        if (block.type !== "text" && block.type !== "thinking") {
-          this.sentTextLengths.delete(contentIndex);
+      if (change.type === "toolcall_delta") {
+        const tool = this.toolBlocks.get(change.contentIndex);
 
+        if (!tool) {
           return [];
         }
 
-        const textContent = block.type === "text" ? block.text : block.thinking;
+        tool.input = appendArgument(tool.input, change.path, change.delta);
 
-        return this.convertTextUpdate(block.type, textContent, contentIndex);
-      }
-
-      if (change.type !== "text_delta" && change.type !== "thinking_delta") {
-        return [];
+        return this.onToolCallBlock(tool.block, tool.input);
       }
 
       this.sentTextLengths.set(
@@ -264,14 +380,58 @@ export class AcpEventUpdates {
     const { toolCallId, toolName, args } = event;
     this.currentToolOutputs.delete(toolCallId);
 
-    // ACP creates a tool call once. Pi starts a call again after a restart cut it off.
-    if (this.startedTools.has(toolCallId)) {
+    const pending = this.pendingTools.delete(toolCallId);
+    this.pendingInputs.delete(toolCallId);
+
+    // ACP creates each tool call once. A generated call or a call resumed after restart already exists on the client.
+    if (pending || this.startedTools.has(toolCallId)) {
+      this.startedTools.add(toolCallId);
+
       return [toolCallRestart(toolCallId, toolName, args)];
     }
 
     this.startedTools.add(toolCallId);
 
     return [toolCallStart(toolCallId, toolName, args)];
+  }
+
+  /**
+   * Creates a pending tool call or sends its current parameter snapshot.
+   */
+  private onToolCallBlock(block: ToolBlock, input: JsonValue): SessionUpdate[] {
+    // A call that runs already has its final parameters.
+    if (this.startedTools.has(block.id) || block.name === "") {
+      return [];
+    }
+
+    const serialized = JSON.stringify(input);
+
+    if (!this.pendingTools.has(block.id)) {
+      this.pendingTools.add(block.id);
+
+      this.pendingInputs.set(block.id, serialized);
+
+      return [toolCallPending(block.id, block.name, input)];
+    }
+
+    if (serialized === this.pendingInputs.get(block.id)) {
+      return [];
+    }
+
+    this.pendingInputs.set(block.id, serialized);
+
+    return [toolCallPendingUpdate(block.id, input)];
+  }
+
+  /** Ends every pending tool call as failed, because the attempt that generated it ended. */
+  private failPendingTools(): SessionUpdate[] {
+    const updates = [...this.pendingTools].map((toolCallId) => toolCallEnd(toolCallId));
+
+    this.pendingTools.clear();
+    this.pendingInputs.clear();
+    this.toolBlocks.clear();
+
+    return updates;
   }
 
   private onToolExecutionUpdate(
@@ -302,6 +462,8 @@ export class AcpEventUpdates {
     event: Extract<AgentEvent, { type: "tool_execution_end" }>,
   ): SessionUpdate[] {
     this.currentToolOutputs.delete(event.toolCallId);
+    this.pendingTools.delete(event.toolCallId);
+    this.pendingInputs.delete(event.toolCallId);
 
     return [toolCallEnd(event.toolCallId, event.entry)];
   }
@@ -313,3 +475,35 @@ export class AcpEventUpdates {
     return textUpdates(type, remaining);
   }
 }
+
+// JsonValue is validated by copyJson before path traversal.
+/* oxlint-disable anti-slop/no-runtime-typeof */
+function appendArgument(
+  value: JsonValue,
+  path: readonly (string | number)[],
+  delta: string,
+): JsonValue {
+  const [key, ...rest] = path;
+
+  if (key === undefined) {
+    return typeof value === "string" ? value + delta : value;
+  }
+
+  if (Array.isArray(value)) {
+    return typeof key === "number"
+      ? value.map((item, index) => (index === key ? appendArgument(item, rest, delta) : item))
+      : value;
+  }
+
+  if (value !== null && typeof value === "object" && Object.hasOwn(value, key)) {
+    const child = value[key];
+
+    if (child !== undefined) {
+      return { ...value, [key]: appendArgument(child, rest, delta) };
+    }
+  }
+
+  return value;
+}
+
+/* oxlint-enable anti-slop/no-runtime-typeof */

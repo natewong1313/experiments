@@ -19,10 +19,11 @@ import {
   RequestError,
 } from "@agentclientprotocol/sdk";
 import type { OpenCodeHarness } from "agents/harness/opencode";
+import type { PiHarness } from "agents/harness/pi";
+import type { AcpDiagnosticListener } from "./diagnostics";
 import type { AcpHarness, HarnessSession, SessionWatch } from "./harness";
 import { piHarness } from "./pi";
 import { openCodeHarness } from "./opencode";
-import type { PiHarness } from "agents/harness/pi";
 import { MODEL_CONFIG_ID, modelConfigOptions, modelOf } from "./model-option";
 import type { AcpModel } from "./model-option";
 import { OPERATION_ID_META, operationIdOf, replayUpdates } from "./operations";
@@ -33,6 +34,7 @@ type AcpConnectParams = {
   harness: PiHarness | OpenCodeHarness;
   cwd: string;
   name?: string;
+  onDiagnostic?: AcpDiagnosticListener;
   /**
    * The models that a client can select with the `model` session config option.
    * Each model must be available in the configured harness.
@@ -52,6 +54,8 @@ const CURRENT_VERSION = "1.4.0";
 
 export type { AcpModel } from "./model-option";
 
+export type { AcpDiagnostic } from "./diagnostics";
+
 export { modelValue } from "./model-option";
 
 // Make an ACP agent connection for one WebSocket.
@@ -69,9 +73,19 @@ class AcpAgent {
   private attachedSessions: Map<string, AttachedSession> = new Map();
   private runningPrompts: Set<string> = new Set();
 
-  constructor({ socket, harness, cwd, name = DEFAULT_NAME, models = [] }: AcpConnectParams) {
+  constructor({
+    socket,
+    harness,
+    cwd,
+    name = DEFAULT_NAME,
+    models = [],
+    onDiagnostic,
+  }: AcpConnectParams) {
+    // The diagnostics observe Pi harness events, so the OpenCode harness ignores them.
     this.harness =
-      "opencode" in harness ? openCodeHarness(harness, models) : piHarness(harness, models);
+      "opencode" in harness
+        ? openCodeHarness(harness, models)
+        : piHarness(harness, models, onDiagnostic);
     this.cwd = cwd;
     this.name = name;
     this.models = models;

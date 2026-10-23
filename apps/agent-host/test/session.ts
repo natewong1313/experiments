@@ -19,6 +19,7 @@ import type {
 import { TEST_AGENT } from "./host";
 import type { SessionSubscribeRequest, SessionSubscribeResponse } from "../src/shared/rpc/session";
 import type { TestEnv } from "./worker";
+import { evictObject } from "../examples/web/src/host/debug-eviction";
 
 const INTERNAL_ERROR = -32_603;
 
@@ -189,6 +190,14 @@ export class AgentSession extends BaseSession<TestEnv> {
 
   router = this.env.CONNECTIONS;
   host = this.env.COORDINATORS;
+
+  inspectObjects(): ReturnType<BaseSession["inspectObjects"]> {
+    return super.inspectObjects();
+  }
+
+  evict(): void {
+    evictObject(this.ctx);
+  }
 
   protected getAgentInfo(): AHPAgentInfo {
     return TEST_AGENT;

@@ -1,0 +1,6 @@
+@import "@fontsource/armata";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Armata", sans-serif;
+}

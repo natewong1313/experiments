@@ -25,15 +25,21 @@ export type ToolCall = {
   title: string;
   status: ACPToolCallStatus;
   input?: unknown;
+  /** The parameter text that the model streamed while the call is pending. */
+  partialInput?: string;
   content?: AHPToolResultContent[];
 };
 
 /**
  * How far the AHP part of a tool call has advanced: `streaming` before it runs, `running` while
  * it runs, and `ended` once it completed or failed. `contentKey` identifies the content that a
- * running part shows.
+ * running part shows. `partial` holds the parameter text that a streaming part shows.
  */
-export type ToolProgress = { stage: "streaming" | "running" | "ended"; contentKey?: string };
+export type ToolProgress = {
+  stage: "streaming" | "running" | "ended";
+  contentKey?: string;
+  partial?: string;
+};
 
 /** The progress of a tool call part after some actions, and those actions. */
 export type ToolAdvance = { progress: ToolProgress; actions: AHPChatAction[] };
@@ -52,22 +58,45 @@ export function mergeToolCall(
 
   const name = update.name ?? previous?.name ?? update.title ?? update.toolCallId;
   const content = update.content ? toolContentOf(update.content) : previous?.content;
-  const input = update.rawInput ?? previous?.input;
+
+  const reported = update.rawInput;
+  const status = update.status ?? previous?.status ?? "pending";
+
+  let partialInput = previous?.partialInput;
+
+  if (isPartialInput(reported)) {
+    partialInput = reported;
+  } else if (reported !== undefined && status === "pending") {
+    partialInput = JSON.stringify(reported);
+  }
+
+  const input = isPartialInput(reported) ? previous?.input : (reported ?? previous?.input);
 
   return {
     toolCallId: update.toolCallId,
     name,
     title: update.title ?? previous?.title ?? name,
-    status: update.status ?? previous?.status ?? "pending",
+    status,
     ...(input !== undefined && { input }),
+    ...(partialInput !== undefined && { partialInput }),
     ...(content !== undefined && { content }),
   };
+}
+
+function isPartialInput(input: unknown): input is string {
+  return typeof input === "string";
 }
 
 /** Returns the progress of a stored tool call part. */
 export function progressOf(toolCall: AHPToolCallState): ToolProgress {
   if (toolCall.status === AHPToolCallStatus.Streaming) {
-    return { stage: "streaming" };
+    const snapshot = toolCall._meta?.["acp.partialInput"];
+    const partial = isPartialInput(snapshot) ? snapshot : toolCall.partialInput;
+
+    return {
+      stage: "streaming",
+      ...(partial !== undefined && { partial }),
+    };
   }
 
   if (toolCall.status !== AHPToolCallStatus.Running) {
@@ -104,13 +133,33 @@ export function advanceToolCall(
     });
   }
 
+  if (next.stage === "streaming") {
+    const partial = call.partialInput;
+
+    if (partial !== undefined && partial !== next.partial) {
+      const previous = next.partial ?? "";
+      const added = partial.startsWith(previous) ? partial.slice(previous.length) : undefined;
+
+      next = { stage: "streaming", partial };
+
+      actions.push({
+        type: AHPActionType.ChatToolCallDelta,
+        ...base,
+        ...(added !== undefined && added !== "" && { content: added }),
+        _meta: { "acp.partialInput": partial },
+      });
+    }
+  }
+
   if (next.stage === "streaming" && call.status !== "pending") {
+    const toolInput = call.input === undefined ? call.partialInput : JSON.stringify(call.input);
+
     next = { stage: "running" };
     actions.push({
       type: AHPActionType.ChatToolCallReady,
       ...base,
       invocationMessage: call.title,
-      ...(call.input !== undefined && { toolInput: JSON.stringify(call.input) }),
+      ...(toolInput !== undefined && { toolInput }),
       confirmed: AHPToolCallConfirmationReason.NotNeeded,
     });
   }

@@ -1,13 +1,19 @@
 import type { SessionUpdate } from "@agentclientprotocol/sdk";
 import type { PiHarness, PiSession } from "agents/harness/pi";
 import { AcpEventUpdates } from "./acp-events";
+import { AcpDiagnostics } from "./diagnostics";
+import type { AcpDiagnostic } from "./diagnostics";
 import { textChunks } from "./frame-limits";
 import type { AcpHarness, HarnessSession } from "./harness";
 import type { AcpModel } from "./model-option";
 import { modelConfigOptions } from "./model-option";
 import { operationUpdates, operationUsage, promptEntry, responseOf } from "./operations";
 
-export function piHarness(harness: PiHarness, models: readonly AcpModel[]): AcpHarness {
+export function piHarness(
+  harness: PiHarness,
+  models: readonly AcpModel[],
+  onDiagnostic?: (diagnostic: AcpDiagnostic) => void,
+): AcpHarness {
   function wrap(session: PiSession): HarnessSession {
     return {
       id: session.id,
@@ -89,6 +95,10 @@ export function piHarness(harness: PiHarness, models: readonly AcpModel[]): AcpH
             : undefined,
         );
 
+        const diagnostics = onDiagnostic
+          ? new AcpDiagnostics({ sessionId: session.id, onDiagnostic })
+          : undefined;
+
         let delivery = Promise.resolve();
 
         return {
@@ -98,12 +108,15 @@ export function piHarness(harness: PiHarness, models: readonly AcpModel[]): AcpH
             watch.start((events) => {
               delivery = (async (): Promise<void> => {
                 for (const event of events) {
+                  diagnostics?.record(event);
+
                   for (const update of updates.update(event)) {
                     if (signal.aborted) {
                       return;
                     }
 
                     await send(update);
+                    diagnostics?.recordForwarded(update.sessionUpdate);
                   }
                 }
               })();

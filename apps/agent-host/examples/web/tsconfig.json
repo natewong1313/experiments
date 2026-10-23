@@ -1,0 +1,19 @@
+{
+  "extends": "@experiments/typescript-config/base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "paths": {
+      "~/*": ["./src/web/*"]
+    },
+    "types": ["@cloudflare/workers-types", "./worker-configuration.d.ts"],
+    // The agent-host Durable Objects are consumed as unbuilt TypeScript, so
+    // the type-checker follows into @experiments/agent-host source that uses
+    // ambient const enums. Mirrors the basic example's tsconfig.
+    "isolatedModules": false,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "worker-configuration.d.ts"]
+}
