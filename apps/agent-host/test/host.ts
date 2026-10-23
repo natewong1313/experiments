@@ -5,7 +5,6 @@ import type {
   HostSessionRemovedRequest,
 } from "../src/shared/rpc/host";
 import type { AgentInfo as AHPAgentInfo } from "@microsoft/agent-host-protocol";
-import type { AgentHostConnectionRouter } from "./router";
 import type { TestEnv } from "./worker";
 
 export const TEST_AGENT: AHPAgentInfo = {
@@ -18,7 +17,7 @@ export const TEST_AGENT: AHPAgentInfo = {
   ],
 };
 
-export class AgentHost extends BaseHost<TestEnv, AgentHostConnectionRouter> {
+export class AgentHost extends BaseHost<TestEnv> {
   private removalsFail = false;
   private createGate?: ReturnType<typeof Promise.withResolvers<null>>;
 

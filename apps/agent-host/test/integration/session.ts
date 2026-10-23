@@ -19,8 +19,6 @@ import { LifecycleSessionAlarms, websocketStream } from "../../src/helpers";
 import { AGENT_INFO, FAUX_MODELS } from "./agent";
 import type { IntegrationEnv } from "./agent";
 import { GATE_TOOL } from "./gate";
-import type { AgentHostConnectionRouter } from "./router";
-import type { AgentHostRoot } from "./root";
 import { workspaceOf, workspaceToolsOf } from "./workspace";
 
 const LAST = -1;
@@ -29,11 +27,7 @@ const LAST = -1;
  * The example session with Faux models, a gate tool that waits for the test, and methods that
  * tests call to script and inspect it.
  */
-export class AgentHostSession extends BaseAgentHostSession<
-  IntegrationEnv,
-  AgentHostConnectionRouter,
-  AgentHostRoot
-> {
+export class AgentHostSession extends BaseAgentHostSession<IntegrationEnv> {
   router = this.env.AGENT_ROUTER;
   host = this.env.AGENT_HOST;
 

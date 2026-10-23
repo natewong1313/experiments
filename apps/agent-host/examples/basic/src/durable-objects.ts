@@ -28,27 +28,19 @@ const MODELS: AcpModel[] = [
   { provider: CLOUDFLARE_PROVIDER_ID, id: "@cf/moonshotai/kimi-k2.7-code", name: "Kimi K2.7 Code" },
 ];
 
-export class AgentHostConnectionRouter extends BaseConnectionRouter<
-  Env,
-  AgentHostRoot,
-  AgentHostSession
-> {
+export class AgentHostConnectionRouter extends BaseConnectionRouter<Env> {
   host = this.env.AGENT_HOST;
   session = this.env.AGENT_SESSION;
 }
 
-export class AgentHostRoot extends BaseAgentHostRoot<Env, AgentHostConnectionRouter> {
+export class AgentHostRoot extends BaseAgentHostRoot<Env> {
   router = this.env.AGENT_ROUTER;
   getAgentInfo(): AgentInfo {
     return piAgent();
   }
 }
 
-export class AgentHostSession extends BaseAgentHostSession<
-  Env,
-  AgentHostConnectionRouter,
-  AgentHostRoot
-> {
+export class AgentHostSession extends BaseAgentHostSession<Env> {
   router = this.env.AGENT_ROUTER;
   host = this.env.AGENT_HOST;
 

@@ -17,8 +17,6 @@ import type {
   Stream as ACPStream,
 } from "@agentclientprotocol/sdk";
 import { TEST_AGENT } from "./host";
-import type { AgentHost } from "./host";
-import type { AgentHostConnectionRouter } from "./router";
 import type { SessionSubscribeRequest, SessionSubscribeResponse } from "../src/shared/rpc/session";
 import type { TestEnv } from "./worker";
 
@@ -175,7 +173,7 @@ type TestStream = {
   drop?(): void;
 };
 
-export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter, AgentHost> {
+export class AgentSession extends BaseSession<TestEnv> {
   private cancellations = 0;
   private setup?: ReturnType<typeof Promise.withResolvers<boolean>>;
   private subscribeGate?: ReturnType<typeof Promise.withResolvers<null>>;

@@ -1,5 +1,54 @@
 # Agent host
 
+This package implements the [Agent Host Protocol](https://microsoft.github.io/agent-host-protocol/) on the Cloudflare dev platform using durable objects.
+
+This allows you to build your factory using any combination of harnesses and handles all the nuances of multiple client connections + durability and delivery guarantees. You can set this up in only a handful of lines of code, view the examples directory for more information.
+
+As long as your harness can speak ACP over websockets, it's supported. It doesn't matter if you are using a durable object based harness or one thats running in a container. Pseudo setup below
+
+```typescript
+export class AgentHostConnectionRouter extends BaseConnectionRouter<Env> {
+  host = this.env.AGENT_HOST;
+  session = this.env.AGENT_SESSION;
+}
+
+export class AgentHostRoot extends BaseAgentHostRoot<Env> {
+  router = this.env.AGENT_ROUTER;
+
+  getAgentInfo(): AgentInfo {
+    return agentInfo;
+  }
+}
+
+export class AgentHostSession extends BaseAgentHostSession<Env> {
+  router = this.env.AGENT_ROUTER;
+  host = this.env.AGENT_HOST;
+
+  getAgentInfo(): AgentInfo {
+    return agentInfo;
+  }
+
+  getWorkingDirectory(): string {
+    return this.env.WORKSPACE_DIR;
+  }
+
+  async connectAgent(_sessionId: string): Promise<ACPStream> {
+    await this.lifecycle.start();
+
+    const { 0: client, 1: server } = new WebSocketPair();
+
+    // here, you give your running agent the websocket connection so that
+    // it can stream in incoming ACP events.
+    connectAgentToAcp({ server });
+
+    // this is a helper provided by @experiments/agent-host/helpers
+    return websocketStream(client);
+  }
+}
+```
+
+# Slop low level overview
+
 A minimal AHP 0.9 host built from three kinds of Durable Object.
 Each session has one default chat and accepts one active text turn at a time.
 

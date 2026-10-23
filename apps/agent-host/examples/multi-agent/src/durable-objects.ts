@@ -21,27 +21,19 @@ import { JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 import { createPiHarness, createOpenCodeHarness, MODELS } from "./harness";
 import type { MultiAgentEnv } from "./env";
 
-export class AgentHostConnectionRouter extends BaseConnectionRouter<
-  MultiAgentEnv,
-  AgentHostRoot,
-  AgentHostSession
-> {
+export class AgentHostConnectionRouter extends BaseConnectionRouter<MultiAgentEnv> {
   host = this.env.AGENT_HOST;
   session = this.env.AGENT_SESSION;
 }
 
-export class AgentHostRoot extends BaseAgentHostRoot<MultiAgentEnv, AgentHostConnectionRouter> {
+export class AgentHostRoot extends BaseAgentHostRoot<MultiAgentEnv> {
   router = this.env.AGENT_ROUTER;
   getAgentInfo(): AgentInfo[] {
     return [agentInfo("pi"), agentInfo("opencode")];
   }
 }
 
-export class AgentHostSession extends BaseAgentHostSession<
-  MultiAgentEnv,
-  AgentHostConnectionRouter,
-  AgentHostRoot
-> {
+export class AgentHostSession extends BaseAgentHostSession<MultiAgentEnv> {
   router = this.env.AGENT_ROUTER;
   host = this.env.AGENT_HOST;
 
