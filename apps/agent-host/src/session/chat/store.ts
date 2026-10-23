@@ -11,6 +11,8 @@ import type {
   ChatSummary as AHPChatSummary,
   ChatTruncatedAction as AHPChatTruncatedAction,
   ChatTurnsLoadedAction as AHPChatTurnsLoadedAction,
+  ModelSelection as AHPModelSelection,
+  ResponsePart as AHPResponsePart,
   Turn as AHPTurn,
 } from "@microsoft/agent-host-protocol";
 import { AHPError } from "../../shared/protocol";
@@ -18,7 +20,7 @@ import type { SessionDatabaseOrm } from "../db/database";
 import { chatsTable } from "../db/schema";
 import type { ChatMetadata, ChatRecord } from "../db/schema";
 import { TurnRows, UNLOADED_MESSAGE } from "./turn-rows";
-import type { LoadedPart, MarkdownText, PartSelection, TurnHeader } from "./turn-rows";
+import type { LoadedPart, PartSelection, TurnHeader } from "./turn-rows";
 
 /** The number of older turns that one `fetchTurns` call loads. */
 export const FETCH_TURNS_PAGE = 50;
@@ -26,14 +28,15 @@ export const FETCH_TURNS_PAGE = 50;
 export type NewChat = { summary: AHPChatSummary; metadata: ChatMetadata };
 
 /**
- * The active turn of a chat, for a prompt that continues it: its AHP ID, the text of its
- * message, its start, and its last markdown part.
+ * A prompt uses this active turn data to continue after a restart.
+ * Response parts include their streamed text.
  */
 export type ActiveTurnText = {
   turnId: string;
   text: string;
+  model?: AHPModelSelection;
   startedAt: string | null;
-  markdown?: MarkdownText;
+  parts: AHPResponsePart[];
 };
 
 /** Returns true if a router subscribes to the chat channel. */
@@ -159,17 +162,19 @@ export class ChatStore {
   activeTurn(chat: string): ActiveTurnText | undefined {
     const { activeTurn } = this.require(chat);
     const header = activeTurn === null ? undefined : this.turns.header(activeTurn);
-    const message = activeTurn === null ? undefined : this.turns.message(activeTurn);
+    const loaded = header && this.turns.load(chat, header.position, header.position + 1);
+    const turn = loaded?.activeTurn;
 
-    if (activeTurn === null || !header || !message) {
+    if (!header || !turn) {
       return;
     }
 
     return {
       turnId: header.turnId,
-      text: message.text,
+      text: turn.message.text,
+      ...(turn.message.model && { model: turn.message.model }),
       startedAt: header.startedAt,
-      markdown: this.turns.lastMarkdown(activeTurn),
+      parts: turn.responseParts,
     };
   }
 

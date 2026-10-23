@@ -3,14 +3,18 @@ import {
   client as acpClient,
   methods as acpMethods,
   PROTOCOL_VERSION as ACP_PROTOCOL_VERSION,
+  RequestError as ACPRequestError,
 } from "@agentclientprotocol/sdk";
 import type {
   ClientConnection as ACPClientConnection,
+  SessionConfigOption as ACPSessionConfigOption,
   SessionNotification as ACPSessionNotification,
+  SessionUpdate as ACPSessionUpdate,
   Stream as ACPStream,
   PromptResponse as ACPPromptResponse,
 } from "@agentclientprotocol/sdk";
 import { untilAborted } from "../shared/abort";
+import { OutputQueue } from "./output-queue";
 
 type OpenOptions = {
   stream(): Promise<ACPStream>;
@@ -19,15 +23,39 @@ type OpenOptions = {
    * Selects an existing ACP session to load. If null then we start a new session.
    */
   sessionId: string | null;
+  /**
+   * The model IDs that messages can select. The agent's `model` config option must offer each
+   * of them, or the connection fails.
+   */
+  models: readonly string[];
 };
 
-/**
- * Text of a prompt. A `snapshot` holds all the text of the prompt so far and replaces the text
- * that the handler has. A `delta` continues the text.
- */
-export type PromptText = { kind: "snapshot" | "delta"; text: string };
+/** The ACP updates that make up the output of a prompt: text, thinking, and tool calls. */
+export type TurnUpdate = Extract<
+  ACPSessionUpdate,
+  {
+    sessionUpdate: "agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update";
+  }
+>;
 
-type TextHandler = (text: PromptText) => Promise<void>;
+/**
+ * Output of a prompt. A `replay` holds all the output of the prompt so far and replaces the
+ * output that the handler has. A `live` update adds new output.
+ */
+export type PromptOutput =
+  | { kind: "replay"; updates: TurnUpdate[] }
+  | { kind: "live"; update: TurnUpdate };
+
+type OutputHandler = (output: PromptOutput) => Promise<void>;
+
+type ACPSelectConfigOption = Extract<ACPSessionConfigOption, { type: "select" }>;
+
+const TURN_UPDATES: ReadonlySet<ACPSessionUpdate["sessionUpdate"]> = new Set([
+  "agent_message_chunk",
+  "agent_thought_chunk",
+  "tool_call",
+  "tool_call_update",
+]);
 
 type PromptOptions = {
   /**
@@ -46,14 +74,17 @@ type ConnectedSession = {
   sessionId: string;
   // True if the agent runs each operation ID once.
   supportsOperations: boolean;
+  // The session config options of the agent, as of its last response or update.
+  configOptions: ACPSessionConfigOption[];
   /**
-   * Receives text while a prompt is active. Text outside a prompt, including session/load replay, is ignored.
+   * Receives output while a prompt is active. Output outside a prompt, including session/load
+   * replay, is ignored.
    */
-  onText?: TextHandler;
+  output?: OutputQueue<PromptOutput>;
   // True while a prompt with an operation ID waits for the end of its replay.
   replaying?: boolean;
-  // The replayed text so far. Undefined before the first replay chunk.
-  replayed?: string;
+  // The replayed updates so far. Undefined before the first replay update.
+  replayed?: TurnUpdate[];
 };
 
 /**
@@ -63,10 +94,10 @@ type ConnectedSession = {
 const OPERATION_ID_META = "agent-host/operationId";
 
 /**
- * The `_meta` key of the chunks that replay all the text of a prompt with an operation ID so
- * far. Its value is `{ start, end }`, which marks the first and the last chunk of the replay.
- * The agent replays every such prompt before its other updates, with one empty chunk for a new
- * operation.
+ * The `_meta` key for replay updates of a prompt with an operation ID.
+ * Each replay update has a `{ start, end }` value. These fields mark the first and last replay updates.
+ * The agent replays all prompt output so far before sending later updates.
+ * A new operation replays one empty text chunk.
  */
 const REPLAY_META = "agent-host/replay";
 
@@ -109,15 +140,47 @@ export class AgentConnection {
     }
   }
 
+  /**
+   * Selects the session model by its value in the agent's `model` config option.
+   * If the model is already selected, no request is sent.
+   *
+   * @throws {ACPRequestError} If the agent has no model option or does not offer `model`.
+   */
+  async setModel(model: string): Promise<void> {
+    const session = this.connected();
+
+    if (!session) {
+      throw new Error("Agent is not connected");
+    }
+
+    const option = modelOption(session.configOptions);
+
+    if (!option || !optionValues(option).includes(model)) {
+      throw ACPRequestError.invalidParams(undefined, `Agent does not offer model ${model}`);
+    }
+
+    if (option.currentValue === model) {
+      return;
+    }
+
+    const response = await session.connection.agent.request(
+      acpMethods.agent.session.setConfigOption,
+      { sessionId: session.sessionId, configId: option.id, value: model },
+    );
+
+    session.configOptions = response.configOptions;
+  }
+
   /** Returns true if the connected agent runs each operation ID once. */
   supportsOperations(): boolean {
     return this.connected()?.supportsOperations === true;
   }
 
   /**
-   * Sends a text prompt and forwards its text updates until the request settles. A prompt with
-   * an operation ID first gets a `snapshot` of all its text so far, then `delta` text. Other
-   * prompts get only `delta` text.
+   * Sends a text prompt and forwards its output until the request settles.
+   * For a prompt with an operation ID, the handler first receives a `replay` of all output so
+   * far, then each `live` update. Other prompts get only live updates. The handler runs for one
+   * output at a time, in order, and the request returns after it ran for all of them.
    * The caller must wait for this request to settle before starting another prompt.
    *
    * @throws {Error} If no connection is available, or if `options` reattaches to an agent that
@@ -125,7 +188,7 @@ export class AgentConnection {
    */
   async prompt(
     text: string,
-    onText: TextHandler,
+    onOutput: OutputHandler,
     options: PromptOptions = {},
   ): Promise<ACPPromptResponse> {
     const session = this.connected();
@@ -140,21 +203,31 @@ export class AgentConnection {
       throw new Error("Agent cannot reattach to a prompt");
     }
 
-    session.onText = onText;
+    const output = new OutputQueue(onOutput);
+    session.output = output;
     session.replaying = operationId !== undefined && session.supportsOperations;
+    let response: ACPPromptResponse;
 
     try {
-      return await session.connection.agent.request(acpMethods.agent.session.prompt, {
+      response = await session.connection.agent.request(acpMethods.agent.session.prompt, {
         sessionId: session.sessionId,
         prompt: [{ type: "text", text }],
         ...(operationId !== undefined &&
           session.supportsOperations && { _meta: { [OPERATION_ID_META]: operationId } }),
       });
+    } catch (error) {
+      await output.drain().catch(() => null);
+      throw error;
     } finally {
-      session.onText = undefined;
+      session.output = undefined;
       session.replaying = undefined;
       session.replayed = undefined;
     }
+
+    // The agent sends the output of a prompt before its response, so the queue has all of it.
+    await output.drain();
+
+    return response;
   }
 
   /**
@@ -216,8 +289,8 @@ export class AgentConnection {
     let opened: ConnectedSession | undefined;
 
     const connection = acpClient({ name: "agent-host" })
-      .onNotification(acpMethods.client.session.update, async ({ params }) => {
-        await this.receive(opened, params);
+      .onNotification(acpMethods.client.session.update, ({ params }) => {
+        this.receive(opened, params);
       })
       .connect(stream);
 
@@ -229,9 +302,10 @@ export class AgentConnection {
 
     try {
       signal.throwIfAborted();
-      const { sessionId, supportsOperations } = await this.initialize(connection, options);
+      const initialized = await this.initialize(connection, options);
+      requireModels(initialized.configOptions, options.models);
       signal.throwIfAborted();
-      opened = { connection, sessionId, supportsOperations };
+      opened = { connection, ...initialized };
       this.current = opened;
 
       return opened;
@@ -252,7 +326,7 @@ export class AgentConnection {
   private async initialize(
     connection: ACPClientConnection,
     options: OpenOptions,
-  ): Promise<{ sessionId: string; supportsOperations: boolean }> {
+  ): Promise<Pick<ConnectedSession, "sessionId" | "supportsOperations" | "configOptions">> {
     const initialized = await connection.agent.request(acpMethods.agent.initialize, {
       protocolVersion: ACP_PROTOCOL_VERSION,
       clientCapabilities: {},
@@ -266,47 +340,59 @@ export class AgentConnection {
         mcpServers: [],
       });
 
-      return { sessionId: created.sessionId, supportsOperations };
+      return {
+        sessionId: created.sessionId,
+        supportsOperations,
+        configOptions: created.configOptions ?? [],
+      };
     }
 
     if (initialized.agentCapabilities?.loadSession !== true) {
       throw new Error("Agent does not support loading a persisted session");
     }
 
-    await connection.agent.request(acpMethods.agent.session.load, {
+    const loaded = await connection.agent.request(acpMethods.agent.session.load, {
       sessionId: options.sessionId,
       cwd: options.cwd,
       mcpServers: [],
     });
 
-    return { sessionId: options.sessionId, supportsOperations };
+    return {
+      sessionId: options.sessionId,
+      supportsOperations,
+      configOptions: loaded.configOptions ?? [],
+    };
   }
 
   /**
-   * Forwards text chunks only when they match the session with an active prompt handler.
-   * Updates received before initialization or outside a prompt are ignored. A prompt with an
-   * operation ID ignores the chunks before its replay, which repeats their text, and joins the
-   * replay chunks into one snapshot.
+   * Stores session config updates and forwards output to the active prompt handler.
+   * The handler receives no output before initialization or outside a prompt.
+   * For operation-ID prompts, output before the replay is ignored because the replay includes it.
+   * The replay updates form one replay. The connection handles notifications concurrently, so
+   * this method only queues the output, in the order that the notifications arrive.
    */
-  private async receive(
+  private receive(
     session: ConnectedSession | undefined,
     notification: ACPSessionNotification,
-  ): Promise<void> {
+  ): void {
     const { update } = notification;
 
-    if (
-      !session?.onText ||
-      notification.sessionId !== session.sessionId ||
-      update.sessionUpdate !== "agent_message_chunk" ||
-      update.content.type !== "text"
-    ) {
+    if (!session || notification.sessionId !== session.sessionId) {
       return;
     }
 
-    const { text } = update.content;
+    if (update.sessionUpdate === "config_option_update") {
+      session.configOptions = update.configOptions;
+
+      return;
+    }
+
+    if (!session.output || !isTurnUpdate(update)) {
+      return;
+    }
 
     if (session.replaying !== true) {
-      await session.onText({ kind: "delta", text });
+      session.output.push({ kind: "live", update });
 
       return;
     }
@@ -314,24 +400,67 @@ export class AgentConnection {
     const marker = ReplayMarkerSchema.safeParse(update._meta?.[REPLAY_META]).data;
 
     if (marker?.start === true) {
-      session.replayed = "";
+      session.replayed = [];
     }
 
-    if (!marker || session.replayed === undefined) {
+    if (!marker || !session.replayed) {
       return;
     }
 
-    session.replayed += text;
+    session.replayed.push(update);
 
     if (!marker.end) {
       return;
     }
 
-    const snapshot = session.replayed;
+    const updates = session.replayed;
     session.replaying = false;
     session.replayed = undefined;
-    await session.onText({ kind: "snapshot", text: snapshot });
+    session.output.push({ kind: "replay", updates });
   }
+}
+
+/** Returns the select config option of the agent with category `model`, if it has one. */
+function modelOption(
+  configOptions: readonly ACPSessionConfigOption[],
+): ACPSelectConfigOption | undefined {
+  return configOptions.find(
+    (option): option is ACPSelectConfigOption =>
+      option.category === "model" && option.type === "select",
+  );
+}
+
+/**
+ * Checks that the agent offers each model that messages can select. A host and an agent with
+ * different model lists would fail every turn that selects a missing model.
+ *
+ * @throws {ACPRequestError} If the agent does not offer one of `models`.
+ */
+function requireModels(
+  configOptions: readonly ACPSessionConfigOption[],
+  models: readonly string[],
+): void {
+  const option = modelOption(configOptions);
+  const offered = new Set(option ? optionValues(option) : []);
+  const missing = models.filter((model) => !offered.has(model));
+
+  if (missing.length > 0) {
+    throw ACPRequestError.invalidParams(
+      undefined,
+      `Agent does not offer models ${missing.join(", ")} that the agent info lists`,
+    );
+  }
+}
+
+function isTurnUpdate(update: ACPSessionUpdate): update is TurnUpdate {
+  return TURN_UPDATES.has(update.sessionUpdate);
+}
+
+/** Returns the values of a select config option, also from its groups. */
+function optionValues(option: ACPSelectConfigOption): string[] {
+  return option.options.flatMap((entry) =>
+    "group" in entry ? entry.options.map((grouped) => grouped.value) : [entry.value],
+  );
 }
 
 /**

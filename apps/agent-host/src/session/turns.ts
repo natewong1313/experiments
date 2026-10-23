@@ -1,5 +1,6 @@
 import { waitUntil } from "cloudflare:workers";
 import { RequestError as ACPRequestError } from "@agentclientprotocol/sdk";
+import type { Usage as ACPUsage } from "@agentclientprotocol/sdk";
 import {
   ActionType as AHPActionType,
   MessageKind as AHPMessageKind,
@@ -10,6 +11,9 @@ import type {
   ActionOrigin as AHPActionOrigin,
   ChatAction as AHPChatAction,
   ChatTurnStartedAction as AHPChatTurnStartedAction,
+  ModelSelection as AHPModelSelection,
+  SessionModelInfo as AHPSessionModelInfo,
+  UsageInfo as AHPUsageInfo,
 } from "@microsoft/agent-host-protocol";
 import type {
   ChatTurnCancelledAction as TurnCancelledRequest,
@@ -38,10 +42,23 @@ type SessionTurnsOptions = {
   scheduleContinue(time: number): Promise<void>;
   /** Returns the alarm timing of the open storage. */
   policy(): SessionLifecyclePolicy;
+  /** Returns the models that a message can select. */
+  models(): readonly AHPSessionModelInfo[];
 };
 
-/** The prompt of one turn: its AHP ID, the text that the agent receives, and its start time. */
-type TurnPrompt = { turnId: string; text: string; startedAt: number };
+/** The `_meta` key of the full ACP usage of a turn. */
+const ACP_USAGE_META = "agent-host/acpUsage";
+
+/**
+ * The prompt of one turn: its AHP ID, the text that the agent receives, the model that its
+ * message selects, and its start time.
+ */
+type TurnPrompt = {
+  turnId: string;
+  text: string;
+  model?: AHPModelSelection;
+  startedAt: number;
+};
 
 /**
  * Runs the chat turns of one session against its agent connection.
@@ -69,24 +86,34 @@ export class SessionTurns {
 
   /**
    * Validates a user text message, records the turn, and starts the prompt in the background.
+   * A message can select one of the agent's models, which the session keeps for later turns.
    */
   async start(request: TurnStartedRequest, origin: AHPActionOrigin): Promise<void> {
     const { message } = request;
 
-    if (
-      message.origin.kind !== "user" ||
-      (message.attachments?.length ?? 0) > 0 ||
-      message.model ||
-      message.agent
-    ) {
+    if (message.origin.kind !== "user" || (message.attachments?.length ?? 0) > 0 || message.agent) {
       throw new Error("Only user text messages are supported");
+    }
+
+    const { model } = message;
+
+    if (model && !this.options.models().some((candidate) => candidate.id === model.id)) {
+      throw new Error(`Unknown model ${model.id}`);
+    }
+
+    if (model?.config && Object.keys(model.config).length > 0) {
+      throw new Error("Model config is not supported");
     }
 
     const action: AHPChatTurnStartedAction = {
       type: AHPActionType.ChatTurnStarted,
       turnId: request.turnId,
       startedAt: request.startedAt,
-      message: { text: message.text, origin: { kind: AHPMessageKind.User } },
+      message: {
+        text: message.text,
+        origin: { kind: AHPMessageKind.User },
+        ...(model && { model: { id: model.id } }),
+      },
     };
 
     // The alarm comes before the turn, so a restart continues every recorded turn.
@@ -133,7 +160,13 @@ export class SessionTurns {
     }
 
     if (admission.claimed) {
-      const prompt = { turnId: action.turnId, text: message.text, startedAt: Date.now() };
+      const prompt: TurnPrompt = {
+        turnId: action.turnId,
+        text: message.text,
+        ...(model && { model: { id: model.id } }),
+        startedAt: Date.now(),
+      };
+
       waitUntil(this.runPrompt(prompt, false));
     }
   }
@@ -248,21 +281,33 @@ export class SessionTurns {
         throw new Error("Turn interrupted by session restart");
       }
 
-      const output = await this.openOutput(prompt, reattach);
+      const output = this.openOutput(turnId);
 
       if (!output) {
         return;
       }
 
+      if (prompt.model) {
+        await this.options.agent.setModel(prompt.model.id);
+      }
+
       const response = await this.options.agent.prompt(
         prompt.text,
-        async (text) => {
-          await output.write(text);
+        async (update) => {
+          await output.write(update);
         },
         { operationId: turnId, reattach },
       );
 
       this.failures = 0;
+
+      if (response.usage) {
+        await this.applyToTurn(turnId, {
+          type: AHPActionType.ChatUsage,
+          turnId,
+          usage: usageOf(response.usage, prompt.model?.id),
+        });
+      }
 
       await this.applyToTurn(turnId, {
         type:
@@ -306,29 +351,14 @@ export class SessionTurns {
   }
 
   /**
-   * Returns the output of a prompt run, or undefined if the turn is no longer active. A new turn
-   * gets an empty markdown part. A reattaching run continues the last markdown part of the turn.
+   * Returns a writer for the active turn, or undefined if the turn is no longer active.
+   * The writer reconciles the agent's replay with stored parts when a prompt reattaches.
    */
-  private async openOutput(prompt: TurnPrompt, reattach: boolean): Promise<TurnOutput | undefined> {
-    const { turnId } = prompt;
-    const stored = reattach ? this.options.activeTurn() : undefined;
+  private openOutput(turnId: string): TurnOutput | undefined {
+    const stored = this.options.activeTurn();
 
-    if (reattach && stored?.turnId !== turnId) {
-      return;
-    }
-
-    if (stored?.markdown) {
-      return new TurnOutput(turnId, stored.markdown, this.applyToTurn.bind(this));
-    }
-
-    const responding = await this.applyToTurn(turnId, {
-      type: AHPActionType.ChatResponsePart,
-      turnId,
-      part: { kind: AHPResponsePartKind.Markdown, id: turnId, content: "" },
-    });
-
-    return responding
-      ? new TurnOutput(turnId, { id: turnId, content: "" }, this.applyToTurn.bind(this))
+    return stored?.turnId === turnId
+      ? new TurnOutput(turnId, stored.parts, this.applyToTurn.bind(this))
       : undefined;
   }
 
@@ -372,6 +402,23 @@ export class SessionTurns {
   }
 }
 
+/**
+ * Returns the AHP usage of a prompt run on `model`. AHP has fields for input, output, and cache
+ * read tokens. The full ACP usage, with its total, thought, and cache write tokens, is under
+ * `_meta["agent-host/acpUsage"]`.
+ */
+function usageOf(usage: ACPUsage, model: string | undefined): AHPUsageInfo {
+  const cacheReadTokens = usage.cachedReadTokens ?? undefined;
+
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    ...(cacheReadTokens !== undefined && { cacheReadTokens }),
+    ...(model !== undefined && { model }),
+    _meta: { [ACP_USAGE_META]: usage },
+  };
+}
+
 /** Returns the prompt that continues a stored turn. The duration counts from its start. */
 function promptOf(turn: ActiveTurnText): TurnPrompt {
   const startedAt = turn.startedAt === null ? Number.NaN : Date.parse(turn.startedAt);
@@ -379,6 +426,7 @@ function promptOf(turn: ActiveTurnText): TurnPrompt {
   return {
     turnId: turn.turnId,
     text: turn.text,
+    ...(turn.model && { model: turn.model }),
     startedAt: Number.isFinite(startedAt) ? Math.min(startedAt, Date.now()) : Date.now(),
   };
 }

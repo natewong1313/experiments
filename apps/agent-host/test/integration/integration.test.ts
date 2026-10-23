@@ -15,13 +15,18 @@ import {
   SessionStateSchema,
   type ChatAction,
 } from "@experiments/protocol-schemas/ahp";
-import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import {
+  fauxAssistantMessage,
+  fauxText,
+  fauxThinking,
+  fauxToolCall,
+} from "@earendil-works/pi-ai/providers/faux";
 import { GATE_TOOL } from "./gate";
-import type { AgentSession } from "./worker";
+import type { AgentHostSession } from "./worker";
 import type { DurableObjectNamespace as WorkerNamespace } from "@cloudflare/workers-types";
 
 type TestEnv = {
-  AGENT_SESSION: WorkerNamespace<AgentSession>;
+  AGENT_SESSION: WorkerNamespace<AgentHostSession>;
 };
 
 const server = createTestHarness({
@@ -104,16 +109,32 @@ async function createSession(
   };
 }
 
-function startTurn(client: AhpClient, chat: string, text: string): string {
+/** Starts a turn with `text`. The message selects `model` if it is given. */
+function startTurn(client: AhpClient, chat: string, text: string, model?: string): string {
   const turnId = crypto.randomUUID();
   client.dispatch(chat, {
     type: ActionType.ChatTurnStarted,
     turnId,
     startedAt: new Date().toISOString(),
-    message: { text, origin: { kind: MessageKind.User } },
+    message: {
+      text,
+      origin: { kind: MessageKind.User },
+      ...(model !== undefined && { model: { id: model } }),
+    },
   });
 
   return turnId;
+}
+
+/** Returns text from a markdown part or delta action. Other actions return an empty string. */
+function markdownOf(action: ChatAction): string {
+  if (action.type === "chat/delta") {
+    return action.content;
+  }
+
+  return action.type === "chat/responsePart" && action.part.kind === "markdown"
+    ? action.part.content
+    : "";
 }
 
 async function collectTurn(subscription: Subscription, turnId: string): Promise<ChatAction[]> {
@@ -162,10 +183,7 @@ it("streams a Faux response through Pi and ACP to two WebSocket clients", async 
 
   expect(firstActions).toEqual(secondActions);
 
-  const text = firstActions
-    .filter((action) => action.type === "chat/delta")
-    .map((action) => action.content)
-    .join("");
+  const text = firstActions.map((action) => markdownOf(action)).join("");
 
   expect(text).toBe("Hello from Faux.");
   const listed = await second.request("listSessions", { channel: "ahp-root://" });
@@ -192,6 +210,39 @@ it("executes a scripted write tool against the real workspace", async () => {
   await collectTurn(subscription, startTurn(client, session.chat, "Write hello.txt."));
 
   expect(await session.stub.readFile("/workspace/hello.txt")).toBe("Written by Pi.");
+});
+
+it("records thinking and tool calls, and runs a turn on the model that its message selects", async () => {
+  const hostId = crypto.randomUUID();
+  const client = await connect(hostId);
+  const session = await createSession(client, hostId);
+
+  const thinking = fauxThinking("Write the plan.");
+  const write = fauxToolCall("write", { path: "/workspace/plan.txt", content: "Plan." });
+  await session.stub.setResponses([
+    fauxAssistantMessage([thinking, write], { stopReason: "toolUse" }),
+    fauxAssistantMessage("Done."),
+  ]);
+
+  const { subscription } = await client.subscribe(session.chat);
+  const turnId = startTurn(client, session.chat, "Write the plan.", "faux/other");
+  await collectTurn(subscription, turnId);
+  expect(await session.stub.lastModel()).toBe("other");
+
+  const snapshot = await client.subscribe(session.chat);
+  const state = ChatStateSchema.parse(snapshot.result.snapshot?.state);
+  expect(state.turns).toMatchObject([
+    {
+      id: turnId,
+      state: "complete",
+      responseParts: [
+        { kind: "reasoning", content: "Write the plan." },
+        { kind: "toolCall", toolCall: { status: "completed", toolName: "write", success: true } },
+        { kind: "markdown", content: "Done." },
+      ],
+    },
+  ]);
+  expect(state.turns[0]?.usage?.outputTokens).toBeGreaterThan(0);
 });
 
 it("retains history after a restart and continues through ACP session load", async () => {
@@ -260,8 +311,8 @@ it(
     for await (const event of subscription) {
       const action = event.type === "action" ? ChatActionSchema.parse(event.params.action) : null;
 
-      if (action?.type === "chat/delta" && action.turnId === turnId) {
-        streamed += action.content;
+      if (action && "turnId" in action && action.turnId === turnId) {
+        streamed += markdownOf(action);
       }
 
       if (streamed === "Before restart. ") {
@@ -302,7 +353,11 @@ it(
       {
         id: turnId,
         state: "complete",
-        responseParts: [{ kind: "markdown", content: "Before restart. After restart." }],
+        responseParts: [
+          { kind: "markdown", content: "Before restart. " },
+          { kind: "toolCall", toolCall: { status: "completed", toolName: GATE_TOOL } },
+          { kind: "markdown", content: "After restart." },
+        ],
       },
     ]);
   },

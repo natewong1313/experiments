@@ -7,7 +7,10 @@ import {
   AhpErrorCodes as AHPErrorCodes,
   JsonRpcErrorCodes as AHPJsonRpcErrorCodes,
 } from "@microsoft/agent-host-protocol";
-import type { AgentInfo as AHPAgentInfo } from "@microsoft/agent-host-protocol";
+import type {
+  AgentInfo as AHPAgentInfo,
+  SessionModelInfo as AHPSessionModelInfo,
+} from "@microsoft/agent-host-protocol";
 import {
   SessionCreateError,
   SessionDispatchError,
@@ -152,6 +155,7 @@ export abstract class AgentHostSession<
       await this.storage.alarms()?.schedule("continueTurn", time);
     },
     policy: (): SessionLifecyclePolicy => this.storage.requireOpen().policy,
+    models: (): readonly AHPSessionModelInfo[] => this.getAgentInfo().models,
   });
   // The creation and the disposal that run now, keyed by default chat.
   // Callers for the same creation wait for them.
@@ -663,6 +667,7 @@ export abstract class AgentHostSession<
       stream: (): Promise<ACPStream> => this.connectAgent(session.id),
       cwd: session.cwd,
       sessionId: session.acpSessionId,
+      models: this.getAgentInfo().models.map((model) => model.id),
     });
 
     // A dispose can start while the agent connection opens.

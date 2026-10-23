@@ -1,7 +1,12 @@
-import type { PromptRequest, PromptResponse, SessionUpdate } from "@agentclientprotocol/sdk";
-import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
-import type { EntryRecord, SnapshotEvent } from "@earendil-works/pi-durable";
+import type {
+  PromptRequest,
+  PromptResponse,
+  SessionUpdate,
+  Usage as ACPUsage,
+} from "@agentclientprotocol/sdk";
+import type { EntryRecord, SnapshotEvent, ToolSlot } from "@earendil-works/pi-durable";
 import type { PiOperationResult } from "agents/harness/pi";
+import { messageTextUpdates, toolCallEnd, toolCallOutput, toolCallStart } from "./acp-events";
 
 /**
  * The `_meta` key of a prompt's operation ID. A prompt that repeats an operation ID reattaches to
@@ -11,20 +16,14 @@ import type { PiOperationResult } from "agents/harness/pi";
 export const OPERATION_ID_META = "agent-host/operationId";
 
 /**
- * The `_meta` key of the updates that open a prompt with an operation ID. Before any other
- * update of the prompt, the agent sends all the text of the operation so far as one or more
- * `agent_message_chunk` updates, with `{ start, end }` under this key: `start` on the first
- * chunk and `end` on the last. A new operation sends one empty chunk with both. The client
- * replaces the text that it received for the operation with the replay, and treats each later
- * chunk as new text.
+ * The `_meta` key for replay updates of a prompt with an operation ID.
+ * Before other prompt updates, the agent replays all operation output so far, in order.
+ * The replay includes text, thinking, and tool call updates. Each update has `{ start, end }` under this key.
+ * `start` marks the first replay update, and `end` marks the last.
+ * A new operation replays one empty `agent_message_chunk`.
+ * The client replaces its previous operation output with the replay. Later updates add new output.
  */
 export const REPLAY_META = "agent-host/replay";
-
-/**
- * The most UTF-16 code units in one chunk. JSON escapes one code unit to at most 6 bytes, so a
- * chunk stays far below the 1 MiB frame limit of the transports.
- */
-const MAX_CHUNK_LENGTH = 65_536;
 
 /** The transcript entry kind of a prompt with an operation ID. Its data holds the ID. */
 const PROMPT_ENTRY_KIND = "acp.prompt";
@@ -48,80 +47,154 @@ export function promptEntry(operationId: string): {
 }
 
 /**
- * Returns the ACP stop reason of a settled operation.
+ * Returns the ACP response of a settled operation, with the token usage of its answers.
  *
  * @throws {Error} If pi did not answer for another reason than an abort.
  */
-export function stopReasonOf(result: PiOperationResult): PromptResponse {
+export function responseOf(result: PiOperationResult, usage?: ACPUsage): PromptResponse {
   if (result.status === "done") {
-    return { stopReason: "end_turn" };
+    return { stopReason: "end_turn", ...(usage && { usage }) };
   }
 
   if (result.reason === "aborted") {
-    return { stopReason: "cancelled" };
+    return { stopReason: "cancelled", ...(usage && { usage }) };
   }
 
   throw new Error(result.reason ?? "Pi did not answer the prompt");
 }
 
-/** Returns the updates that replay all the text of an operation so far. */
-export function replayUpdates(text: string): SessionUpdate[] {
-  const chunks = textChunks(text);
+/** Marks `updates` as the replay of an operation. An empty replay is one empty text chunk. */
+export function replayUpdates(updates: readonly SessionUpdate[]): SessionUpdate[] {
+  const replayed: SessionUpdate[] =
+    updates.length === 0
+      ? [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "" } }]
+      : [...updates];
 
-  return chunks.map((chunk, index) => ({
-    sessionUpdate: "agent_message_chunk",
-    content: { type: "text", text: chunk },
-    _meta: { [REPLAY_META]: { start: index === 0, end: index === chunks.length - 1 } },
+  return replayed.map((update, index) => ({
+    ...update,
+    _meta: { [REPLAY_META]: { start: index === 0, end: index === replayed.length - 1 } },
   }));
 }
 
 /**
- * Splits `text` into chunks of at most `MAX_CHUNK_LENGTH` code units without splitting a
- * surrogate pair. Empty text gives one empty chunk.
+ * Returns the output of the operation with `operationId` in `snapshot` as ACP updates, in the
+ * order that the live event watch sends them. Each assistant message gives its text and thinking
+ * in block order, then its tool calls. A started tool call appears with its result, or as failed
+ * if Pi ended it without a result. A running tool call appears with its output so far, and a
+ * tool call that waits to start appears when it starts. The generation in flight comes last.
  */
-export function textChunks(text: string): string[] {
-  const chunks: string[] = [];
-  let start = 0;
+export function operationUpdates(snapshot: SnapshotEvent, operationId: string): SessionUpdate[] {
+  const answers = operationAnswers(snapshot.entries, operationId);
 
-  do {
-    let end = Math.min(start + MAX_CHUNK_LENGTH, text.length);
+  if (!answers) {
+    return [];
+  }
 
-    if (end < text.length && isHighSurrogate(text.charCodeAt(end - 1))) {
-      end -= 1;
+  const results = new Map<string, EntryRecord>();
+
+  for (const entry of answers.entries) {
+    const message = entry.model?.[0];
+
+    if (message?.role === "toolResult") {
+      results.set(message.toolCallId, entry);
     }
+  }
 
-    chunks.push(text.slice(start, end));
-    start = end;
-  } while (start < text.length);
+  // The tool slots and the generation in flight belong to the newest input of the run.
+  const slots = new Map(answers.current ? snapshot.tools.map((slot) => [slot.callId, slot]) : []);
+  const updates = answers.entries.flatMap((entry) => answerUpdates(entry, results, slots));
+  const inFlight = answers.current ? snapshot.generation?.message : undefined;
 
-  return chunks;
+  return inFlight ? [...updates, ...messageTextUpdates(inFlight)] : updates;
 }
 
-function isHighSurrogate(code: number): boolean {
-  return code >= 0xd8_00 && code <= 0xdb_ff;
+/** Returns the token usage of the committed answers of an operation, or undefined if none. */
+export function operationUsage(
+  entries: readonly EntryRecord[],
+  operationId: string,
+): ACPUsage | undefined {
+  const messages = (operationAnswers(entries, operationId)?.entries ?? [])
+    .flatMap((entry) => entry.model ?? [])
+    .filter((message) => message.role === "assistant");
+
+  if (messages.length === 0) {
+    return;
+  }
+
+  const total = (pick: (usage: (typeof messages)[number]["usage"]) => number | undefined): number =>
+    messages.reduce((sum, message) => sum + (pick(message.usage) ?? 0), 0);
+
+  return {
+    totalTokens: total((usage) => usage.totalTokens),
+    inputTokens: total((usage) => usage.input),
+    outputTokens: total((usage) => usage.output),
+    thoughtTokens: total((usage) => usage.reasoning),
+    cachedReadTokens: total((usage) => usage.cacheRead),
+    cachedWriteTokens: total((usage) => usage.cacheWrite),
+  };
 }
 
 /**
- * Returns the assistant text of the operation with `operationId` in `snapshot`: the text of the
- * committed answers after its prompt, then the text of the generation in flight. This is the
- * same text that a client received as chunks while the operation ran.
+ * Returns the entries after the prompt of an operation up to the next input, and whether no
+ * input follows them. Returns undefined if the transcript has no such prompt.
  */
-export function operationText(snapshot: SnapshotEvent, operationId: string): string {
-  const start = snapshot.entries.findIndex((entry) => isPromptOf(entry, operationId));
+function operationAnswers(
+  entries: readonly EntryRecord[],
+  operationId: string,
+): { entries: EntryRecord[]; current: boolean } | undefined {
+  const start = entries.findIndex((entry) => isPromptOf(entry, operationId));
 
   if (start === -1) {
-    return "";
+    return;
   }
 
-  const later = snapshot.entries.slice(start + 1);
+  const later = entries.slice(start + 1);
   const next = later.findIndex(isInput);
-  const answers = next === -1 ? later : later.slice(0, next);
-  const committed = answers.flatMap((entry) => entry.model ?? []).map(assistantText);
 
-  // The generation in flight answers the newest input of the run.
-  const inFlight = next === -1 ? snapshot.generation?.message : undefined;
+  return next === -1
+    ? { entries: later, current: true }
+    : { entries: later.slice(0, next), current: false };
+}
 
-  return [...committed, inFlight ? assistantText(inFlight) : ""].join("");
+/**
+ * Returns the updates of a committed assistant message: its text and thinking, then the tool
+ * calls that started. Other entries give no updates, because their tool calls give the results.
+ */
+function answerUpdates(
+  entry: EntryRecord,
+  results: ReadonlyMap<string, EntryRecord>,
+  slots: ReadonlyMap<string, ToolSlot>,
+): SessionUpdate[] {
+  const message = entry.model?.[0];
+
+  if (message?.role !== "assistant") {
+    return [];
+  }
+
+  const calls = message.content.flatMap((block) => {
+    if (block.type !== "toolCall") {
+      return [];
+    }
+
+    const result = results.get(block.id);
+    const slot = slots.get(block.id);
+    const start = toolCallStart(block.id, block.name, block.arguments);
+
+    // Pi ends a faulted or orphaned call without a result entry, which is a failure.
+    if (result || slot?.status === "done") {
+      return [start, toolCallEnd(block.id, result)];
+    }
+
+    if (slot?.status !== "running") {
+      return [];
+    }
+
+    return slot.output === undefined
+      ? [start]
+      : [start, toolCallOutput(block.id, slot.output, slot.details)];
+  });
+
+  return [...messageTextUpdates(message), ...calls];
 }
 
 function isPromptOf(entry: EntryRecord, operationId: string): boolean {
@@ -141,12 +214,4 @@ function isPromptOf(entry: EntryRecord, operationId: string): boolean {
 
 function isInput(entry: EntryRecord): boolean {
   return entry.kind === PROMPT_ENTRY_KIND || entry.kind === USER_ENTRY_KIND;
-}
-
-function assistantText(message: Message | AssistantMessage): string {
-  if (message.role !== "assistant") {
-    return "";
-  }
-
-  return message.content.map((part) => (part.type === "text" ? part.text : "")).join("");
 }

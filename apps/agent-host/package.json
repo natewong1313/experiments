@@ -22,10 +22,12 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/computer": "catalog:",
     "@earendil-works/chord": "catalog:",
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-durable": "catalog:",
     "@experiments/oxlint-config": "workspace:*",
+    "@experiments/pi-acp": "workspace:*",
     "agents": "catalog:",
     "@experiments/typescript-config": "workspace:*",
     "drizzle-kit": "^0.31.11"

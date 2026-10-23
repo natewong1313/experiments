@@ -1,66 +1,37 @@
-import {
-  ActionType as AHPActionType,
-  ResponsePartKind as AHPResponsePartKind,
+import type {
+  ChatAction as AHPChatAction,
+  ResponsePart as AHPResponsePart,
 } from "@microsoft/agent-host-protocol";
-import type { ChatAction as AHPChatAction } from "@microsoft/agent-host-protocol";
-import type { PromptText } from "./agent-connection";
-import type { MarkdownText } from "./chat/turn-rows";
+import type { PromptOutput } from "./agent-connection";
+import { TurnParts } from "./turn-parts";
+
+type ApplyAction = (turnId: string, action: AHPChatAction) => Promise<boolean>;
 
 /**
- * Writes the text of a prompt run to a markdown part of its turn. A run gets at most one
- * snapshot, before its deltas. The snapshot holds all the text of the turn so far: the output
- * appends what it adds to the stored part, or writes it to a new markdown part if it does not
- * extend the stored part, as after the agent retried a generation. A delta appends to the part.
+ * Writes the output of a prompt run to the response parts of its turn. Text goes to markdown
+ * parts, thinking to reasoning parts, and tool calls to tool call parts. A run gets at most one
+ * replay, before its live updates, which brings the stored parts to the output of the agent so
+ * far. The caller passes one output at a time, so the actions of each output apply in order.
  */
 export class TurnOutput {
   private turnId: string;
-  private part: MarkdownText;
-  private apply: (turnId: string, action: AHPChatAction) => Promise<boolean>;
+  private apply: ApplyAction;
+  private parts: TurnParts;
 
-  constructor(
-    turnId: string,
-    part: MarkdownText,
-    apply: (turnId: string, action: AHPChatAction) => Promise<boolean>,
-  ) {
+  /** `stored` holds the response parts of the turn so far, with their streamed text. */
+  constructor(turnId: string, stored: readonly AHPResponsePart[], apply: ApplyAction) {
     this.turnId = turnId;
-    this.part = part;
     this.apply = apply;
+    this.parts = new TurnParts(turnId, stored);
   }
 
-  async write({ kind, text }: PromptText): Promise<void> {
-    if (kind === "delta") {
-      await this.append(text);
+  async write(output: PromptOutput): Promise<void> {
+    const actions =
+      output.kind === "live" ? this.parts.apply(output.update) : this.parts.replace(output.updates);
 
-      return;
+    for (const action of actions) {
+      // oxlint-disable-next-line no-await-in-loop -- the actions apply in order
+      await this.apply(this.turnId, action);
     }
-
-    const stored = this.part.content;
-
-    if (text.startsWith(stored)) {
-      await this.append(text.slice(stored.length));
-
-      return;
-    }
-
-    this.part = { id: `${this.turnId}:${crypto.randomUUID()}`, content: text };
-
-    await this.apply(this.turnId, {
-      type: AHPActionType.ChatResponsePart,
-      turnId: this.turnId,
-      part: { kind: AHPResponsePartKind.Markdown, ...this.part },
-    });
-  }
-
-  private async append(content: string): Promise<void> {
-    if (content === "") {
-      return;
-    }
-
-    await this.apply(this.turnId, {
-      type: AHPActionType.ChatDelta,
-      turnId: this.turnId,
-      partId: this.part.id,
-      content,
-    });
   }
 }

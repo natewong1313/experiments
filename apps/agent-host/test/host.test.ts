@@ -36,7 +36,8 @@ async function createSubscribedSession(peer: Peer): Promise<CreatedSession> {
   return created;
 }
 
-function start(peer: Peer, chat: string, text: string): string {
+/** Starts a turn with `text`. The message selects `model` if it is given. */
+function start(peer: Peer, chat: string, text: string, model?: string): string {
   const turnId = crypto.randomUUID();
   peer.notify("dispatchAction", {
     channel: chat,
@@ -45,7 +46,11 @@ function start(peer: Peer, chat: string, text: string): string {
       type: "chat/turnStarted",
       turnId,
       startedAt: new Date().toISOString(),
-      message: { text, origin: { kind: "user" } },
+      message: {
+        text,
+        origin: { kind: "user" },
+        ...(model !== undefined && { model: { id: model } }),
+      },
     },
   });
 
@@ -202,7 +207,7 @@ it("runs another session while one is waiting and rejects a second active turn",
     const second = await createSubscribedSession(peer);
     const held = start(peer, first.chat, "hold");
     await vi.waitFor(() => {
-      expect(peer.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
+      expect(peer.actions.some((item) => item.action.type === "chat/responsePart")).toBe(true);
     });
     start(peer, first.chat, "second");
     await vi.waitFor(() => {
@@ -241,7 +246,7 @@ it("continues a prompt without clients and removes history on explicit disposal"
   const session = await createSubscribedSession(first);
   start(first, session.chat, "hold");
   await vi.waitFor(() => {
-    expect(first.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
+    expect(first.actions.some((item) => item.action.type === "chat/responsePart")).toBe(true);
   });
   first.close();
   await env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId)).finishPrompt();
@@ -308,7 +313,7 @@ async function restart(name: string): Promise<DurableObjectStub<AgentSession>> {
 async function startHeldTurn(peer: Peer, chat: string): Promise<string> {
   const turnId = start(peer, chat, "hold");
   await vi.waitFor(() => {
-    expect(peer.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
+    expect(peer.actions.some((item) => item.action.type === "chat/responsePart")).toBe(true);
   });
 
   return turnId;
@@ -388,6 +393,129 @@ it("cancels the prompt of a turn that a restart interrupted", async () => {
     await vi.waitFor(async () => {
       expect(await stub.cancellationCount()).toBe(1);
     });
+  } finally {
+    peer.close();
+  }
+});
+
+/** Waits until the peer receives an action of `type` for `turnId`. */
+async function waitForAction(peer: Peer, type: string, turnId: string): Promise<void> {
+  await vi.waitFor(() => {
+    expect(
+      peer.actions.some(
+        (item) =>
+          item.action.type === type && "turnId" in item.action && item.action.turnId === turnId,
+      ),
+    ).toBe(true);
+  });
+}
+
+// The parts of a "tools" turn: its thinking, its completed read, and its answer.
+function toolsParts(turnId: string): unknown[] {
+  return [
+    { kind: "reasoning", id: turnId, content: "Thinking" },
+    {
+      kind: "toolCall",
+      toolCall: {
+        status: "completed",
+        toolCallId: "read-1",
+        toolName: "read",
+        success: true,
+        toolInput: JSON.stringify({ path: "/a" }),
+        content: [{ type: "text", text: "file text" }],
+      },
+    },
+    { kind: "markdown", content: "Done" },
+  ];
+}
+
+it("records the thinking, tool calls, text, and usage of a turn", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const turnId = start(peer, session.chat, "tools");
+    await waitForAction(peer, "chat/turnComplete", turnId);
+
+    const state = await chatState(peer, session.chat);
+    expect(state.turns).toMatchObject([
+      {
+        id: turnId,
+        state: "complete",
+        responseParts: toolsParts(turnId),
+        usage: { inputTokens: 2, outputTokens: 1 },
+      },
+    ]);
+  } finally {
+    peer.close();
+  }
+});
+
+it("continues thinking and tool calls after the session restarts", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const name = sessionDOName(hostId, session.sessionId);
+    const turnId = start(peer, session.chat, "hold tools");
+    await waitForAction(peer, "chat/toolCallComplete", turnId);
+
+    const stub = await restart(name);
+    finishHeldPrompt(name, "Done");
+
+    // The replay repeats the thinking and the tool call, which the turn keeps once.
+    // Matching the whole array also checks that the turn has no other parts.
+    const state = await endedState(peer, stub, session.chat);
+    expect(state.turns).toMatchObject([
+      { id: turnId, state: "complete", responseParts: toolsParts(turnId) },
+    ]);
+  } finally {
+    peer.close();
+  }
+});
+
+it("selects the model of a message for its turn and later turns", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
+    expect(await stub.agentModel()).toBe("fast");
+
+    const first = start(peer, session.chat, "hello", "smart");
+    await waitForAction(peer, "chat/turnComplete", first);
+    expect(await stub.agentModel()).toBe("smart");
+
+    const second = start(peer, session.chat, "again");
+    await waitForAction(peer, "chat/turnComplete", second);
+    expect(await stub.agentModel()).toBe("smart");
+
+    const state = await chatState(peer, session.chat);
+    expect(state.turns.map((turn) => turn.message.model)).toEqual([{ id: "smart" }, undefined]);
+  } finally {
+    peer.close();
+  }
+});
+
+it("rejects a turn with a model that the agent does not list", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    start(peer, session.chat, "hello", "missing");
+    await vi.waitFor(() => {
+      expect(peer.actions.some((item) => item.rejectionReason === "Unknown model missing")).toBe(
+        true,
+      );
+    });
+
+    const state = await chatState(peer, session.chat);
+    expect(state.turns).toEqual([]);
+    expect(state.activeTurn).toBeUndefined();
   } finally {
     peer.close();
   }
@@ -555,7 +683,7 @@ it("sends ACP cancellation when disposing an active session", async () => {
     const session = await createSubscribedSession(peer);
     start(peer, session.chat, "hold");
     await vi.waitFor(() => {
-      expect(peer.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
+      expect(peer.actions.some((item) => item.action.type === "chat/responsePart")).toBe(true);
     });
     await peer.request("disposeSession", { channel: session.channel });
     const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));

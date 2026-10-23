@@ -12,6 +12,8 @@ import type {
   AgentConnection as ACPAgentConnection,
   AnyMessage as ACPAnyMessage,
   PromptResponse as ACPPromptResponse,
+  SessionConfigOption as ACPSessionConfigOption,
+  SessionUpdate as ACPSessionUpdate,
   Stream as ACPStream,
 } from "@agentclientprotocol/sdk";
 import { TEST_AGENT } from "./host";
@@ -47,8 +49,80 @@ type ReplayMarker = { start: boolean; end: boolean };
 
 const PromptMetaSchema = z.object({ [OPERATION_ID_META]: z.string().optional() }).nullish();
 
-/** A prompt of the test agent: its text so far, and its result once it ends. */
-type TestOperation = { text: string; result?: ACPPromptResponse };
+/** A test operation retains its output for replay and its result after completion. */
+type TestOperation = { updates: ACPSessionUpdate[]; result?: ACPPromptResponse };
+
+// The values of the `model` config option are the model IDs that the host lists.
+const TEST_MODELS = TEST_AGENT.models.map((model) => model.id);
+
+// The usage that the test agent reports for the "tools" prompt.
+const TOOLS_USAGE = { totalTokens: 3, inputTokens: 2, outputTokens: 1 };
+
+function textUpdate(text: string): ACPSessionUpdate {
+  return { sessionUpdate: "agent_message_chunk", content: { type: "text", text } };
+}
+
+/**
+ * Returns scripted output for `text`. The "stream" prompt produces three text chunks.
+ * The "tools" and "hold tools" prompts produce thinking and file-read updates. Only "tools" adds a final text answer.
+ * All other prompts return their input as one text chunk.
+ */
+function scriptOf(text: string): ACPSessionUpdate[] {
+  if (text === "stream") {
+    return ["st", "re", "am"].map((chunk) => textUpdate(chunk));
+  }
+
+  if (text !== "tools" && text !== "hold tools") {
+    return [textUpdate(text)];
+  }
+
+  return [
+    { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "Thinking" } },
+    {
+      sessionUpdate: "tool_call",
+      toolCallId: "read-1",
+      title: "read",
+      name: "read",
+      kind: "read",
+      status: "in_progress",
+      rawInput: { path: "/a" },
+    },
+    {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "read-1",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "file text" } }],
+    },
+    ...(text === "tools" ? [textUpdate("Done")] : []),
+  ];
+}
+
+/** Splits replayed message text into short chunks to test how the session joins them. */
+function replayChunks(update: ACPSessionUpdate): ACPSessionUpdate[] {
+  if (update.sessionUpdate !== "agent_message_chunk" || update.content.type !== "text") {
+    return [update];
+  }
+
+  const { text } = update.content;
+  const count = Math.max(1, Math.ceil(text.length / REPLAY_CHUNK_LENGTH));
+
+  return Array.from({ length: count }, (_, index) =>
+    textUpdate(text.slice(index * REPLAY_CHUNK_LENGTH, (index + 1) * REPLAY_CHUNK_LENGTH)),
+  );
+}
+
+function modelOptions({ model, offeredModels }: DurableAgent): ACPSessionConfigOption[] {
+  return [
+    {
+      type: "select",
+      id: "model",
+      name: "Model",
+      category: "model",
+      currentValue: model,
+      options: offeredModels.map((value) => ({ value, name: value })),
+    },
+  ];
+}
 
 /**
  * The agent state of one session object. It outlives a restart of the object, as the state of a
@@ -61,6 +135,10 @@ type DurableAgent = {
   // The prompt that waits for `finishPrompt` or a cancellation.
   held?: TestOperation;
   operationsDisabled: boolean;
+  // The value of the `model` config option.
+  model: string;
+  // The values that the `model` config option offers.
+  offeredModels: string[];
 };
 
 const durableAgents: Map<string, DurableAgent> = new Map();
@@ -76,14 +154,13 @@ export function finishHeldPrompt(name: string, text: string): void {
     throw new Error("No held prompt");
   }
 
-  held.text += text;
+  held.updates.push(textUpdate(text));
   held.result = { stopReason: "end_turn" };
 }
 
-/** The held prompt as this object runs it: where it sends text, and how it ends. */
 type HeldRun = {
   operation: TestOperation;
-  send(text: string): Promise<void>;
+  send(update: ACPSessionUpdate): Promise<void>;
   result: ReturnType<typeof Promise.withResolvers<ACPPromptResponse>>;
 };
 
@@ -149,9 +226,22 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
           throw new ACPRequestError(INTERNAL_ERROR, "Agent setup failed");
         }
 
-        return { sessionId: crypto.randomUUID() };
+        return { sessionId: crypto.randomUUID(), configOptions: modelOptions(agent) };
       })
-      .onRequest(acpMethods.agent.session.load, () => ({}))
+      .onRequest(acpMethods.agent.session.load, () => ({
+        configOptions: modelOptions(agent),
+      }))
+      .onRequest(acpMethods.agent.session.setConfigOption, ({ params }) => {
+        const value = z.string().safeParse(params.value);
+
+        if (params.configId !== "model" || !value.success) {
+          throw ACPRequestError.invalidParams(undefined, "Unknown config option");
+        }
+
+        agent.model = value.data;
+
+        return { configOptions: modelOptions(agent) };
+      })
       .onNotification(acpMethods.agent.session.cancel, () => {
         this.cancellations += 1;
         this.endHeld({ stopReason: "cancelled" });
@@ -161,63 +251,57 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
         const output = text?.type === "text" ? text.text : "";
         const operationId = PromptMetaSchema.parse(params._meta)?.[OPERATION_ID_META];
 
-        async function send(chunk: string, marker?: ReplayMarker): Promise<void> {
+        async function send(update: ACPSessionUpdate, marker?: ReplayMarker): Promise<void> {
           await client.notify(acpMethods.client.session.update, {
             sessionId: params.sessionId,
-            update: {
-              sessionUpdate: "agent_message_chunk",
-              content: { type: "text", text: chunk },
-              ...(marker && { _meta: { [REPLAY_META]: marker } }),
-            },
+            update: { ...update, ...(marker && { _meta: { [REPLAY_META]: marker } }) },
           });
         }
 
-        // A prompt with an operation ID first replays the text of the operation so far.
-        async function replay(replayed: string): Promise<void> {
-          const count = Math.max(1, Math.ceil(replayed.length / REPLAY_CHUNK_LENGTH));
+        // A prompt with an operation ID first replays the output of the operation so far.
+        async function replay(updates: readonly ACPSessionUpdate[]): Promise<void> {
+          const replayed = updates.flatMap((update) => replayChunks(update));
 
-          for (let index = 0; index < count; index += 1) {
-            const chunk = replayed.slice(
-              index * REPLAY_CHUNK_LENGTH,
-              (index + 1) * REPLAY_CHUNK_LENGTH,
-            );
+          if (replayed.length === 0) {
+            replayed.push(textUpdate(""));
+          }
 
-            // oxlint-disable-next-line no-await-in-loop -- the chunks must arrive in order
-            await send(chunk, { start: index === 0, end: index === count - 1 });
+          for (const [index, update] of replayed.entries()) {
+            // oxlint-disable-next-line no-await-in-loop -- the updates must arrive in order
+            await send(update, { start: index === 0, end: index === replayed.length - 1 });
           }
         }
 
         const known = operationId === undefined ? undefined : agent.operations.get(operationId);
 
         if (known !== undefined) {
-          await replay(known.text);
+          await replay(known.updates);
 
           return known.result ?? (await this.holdRun(known, send));
         }
 
-        const operation: TestOperation = { text: "" };
+        const operation: TestOperation = { updates: scriptOf(output) };
 
         if (operationId !== undefined) {
           agent.operations.set(operationId, operation);
-          await replay("");
+          await replay([]);
         }
 
-        // "stream" arrives as several updates; anything else is a single update.
-        const chunks = output === "stream" ? ["st", "re", "am"] : [output];
-        operation.text = chunks.join("");
-        await Promise.all(
-          chunks.map(async (chunk) => {
-            await send(chunk);
-          }),
-        );
+        for (const update of operation.updates) {
+          // oxlint-disable-next-line no-await-in-loop -- the updates must arrive in order
+          await send(update);
+        }
 
-        if (output === "hold") {
+        if (output === "hold" || output === "hold tools") {
           agent.held = operation;
 
           return await this.holdRun(operation, send);
         }
 
-        operation.result = { stopReason: "end_turn" };
+        operation.result = {
+          stopReason: "end_turn",
+          ...(output === "tools" && { usage: TOOLS_USAGE }),
+        };
 
         return operation.result;
       })
@@ -311,10 +395,11 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
     const { held } = this.durableAgent();
 
     if (held && text !== undefined) {
-      held.text += text;
+      const update = textUpdate(text);
+      held.updates.push(update);
 
       try {
-        await this.heldRun?.send(text);
+        await this.heldRun?.send(update);
       } catch {
         // The connection closed. The text stays in the prompt for a reattachment.
       }
@@ -339,10 +424,20 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
     this.durableAgent().operationsDisabled = true;
   }
 
-  /** Waits until the held prompt ends in this object, and sends its later text to `send`. */
+  /** Makes the agent offer only `models`, also after an eviction. */
+  offerModels(models: string[]): void {
+    this.durableAgent().offeredModels = models;
+  }
+
+  /** Returns the value of the agent's `model` config option. */
+  agentModel(): string {
+    return this.durableAgent().model;
+  }
+
+  /** Waits until the held prompt ends in this object, and sends its later updates to `send`. */
   private async holdRun(
     operation: TestOperation,
-    send: (text: string) => Promise<void>,
+    send: (update: ACPSessionUpdate) => Promise<void>,
   ): Promise<ACPPromptResponse> {
     this.heldRun?.result.resolve({ stopReason: "cancelled" });
     this.heldRun = { operation, send, result: Promise.withResolvers<ACPPromptResponse>() };
@@ -362,7 +457,14 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
 
   private durableAgent(): DurableAgent {
     const name = this.ctx.id.name ?? "";
-    const agent = durableAgents.get(name) ?? { operations: new Map(), operationsDisabled: false };
+
+    const agent = durableAgents.get(name) ?? {
+      operations: new Map(),
+      operationsDisabled: false,
+      model: TEST_MODELS[0] ?? "",
+      offeredModels: TEST_MODELS,
+    };
+
     durableAgents.set(name, agent);
 
     return agent;

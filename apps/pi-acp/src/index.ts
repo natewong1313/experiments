@@ -11,20 +11,26 @@ import {
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  type SessionUpdate,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
   PROTOCOL_VERSION,
   RequestError,
 } from "@agentclientprotocol/sdk";
 import type { AgentEventStream } from "@earendil-works/pi-durable";
 import type { PiHarness, PiSession } from "agents/harness/pi";
 import { AcpSessionEventsWatcher } from "./acp-session-watch";
+import { textChunks } from "./frame-limits";
+import { MODEL_CONFIG_ID, modelConfigOptions, modelOf } from "./model-option";
+import type { AcpModel, SessionModel } from "./model-option";
 import {
   OPERATION_ID_META,
   operationIdOf,
-  operationText,
+  operationUpdates,
+  operationUsage,
   promptEntry,
   replayUpdates,
-  stopReasonOf,
-  textChunks,
+  responseOf,
 } from "./operations";
 import { websocketStream } from "./websocket-stream";
 
@@ -33,6 +39,12 @@ type AcpConnectParams = {
   harness: PiHarness;
   cwd: string;
   name?: string;
+  /**
+   * The models that a client can select with the `model` session config option.
+   * Each model must be available in the `Models` configured for Pi.
+   * Without models, sessions have no config options.
+   */
+  models?: readonly AcpModel[];
 };
 
 type AttachedSession = {
@@ -44,6 +56,20 @@ type AttachedSession = {
 const DEFAULT_NAME = "pi-acp";
 const CURRENT_VERSION = "1.4.0";
 
+export type { AcpModel } from "./model-option";
+export { modelValue } from "./model-option";
+
+/** Returns the model that Pi has for the session now. */
+async function currentModel(session: PiSession): Promise<SessionModel | undefined> {
+  const events = await session.events();
+
+  try {
+    return events.snapshot.agent.model;
+  } finally {
+    await events.stop();
+  }
+}
+
 // Make an ACP agent connection for one WebSocket.
 export function connectAcp(params: AcpConnectParams): AgentConnection {
   return new AcpAgent(params).connection;
@@ -54,14 +80,16 @@ class AcpAgent {
   private harness: PiHarness;
   private cwd: string;
   private name: string;
+  private models: readonly AcpModel[];
   private initialized = false;
   private attachedSessions = new Map<string, AttachedSession>();
   private runningPrompts = new Set<string>();
 
-  constructor({ socket, harness, cwd, name = DEFAULT_NAME }: AcpConnectParams) {
+  constructor({ socket, harness, cwd, name = DEFAULT_NAME, models = [] }: AcpConnectParams) {
     this.harness = harness;
     this.cwd = cwd;
     this.name = name;
+    this.models = models;
     this.connection = this.createACPAgentConnection(socket);
 
     void this.startCleanupWatcher();
@@ -76,6 +104,9 @@ class AcpAgent {
         this.loadSession(params, client),
       )
       .onRequest(methods.agent.session.prompt, ({ params }) => this.prompt(params))
+      .onRequest(methods.agent.session.setConfigOption, ({ params }) =>
+        this.setConfigOption(params),
+      )
       .onNotification(methods.agent.session.cancel, ({ params }) => this.cancel(params))
       .connect(websocketStream(socket));
   }
@@ -102,9 +133,9 @@ class AcpAgent {
   ): Promise<NewSessionResponse> {
     this.validateSessionSetup(params);
     const session = await this.harness.sessions.create();
-    await this.attachSession(session, client);
+    const attached = await this.attachSession(session, client);
 
-    return { sessionId: session.id };
+    return { sessionId: session.id, ...(await this.configOf(attached)) };
   }
 
   private async loadSession(
@@ -113,8 +144,10 @@ class AcpAgent {
   ): Promise<LoadSessionResponse> {
     this.validateSessionSetup(params);
 
-    if (this.attachedSessions.has(params.sessionId)) {
-      return {};
+    const attached = this.attachedSessions.get(params.sessionId);
+
+    if (attached) {
+      return await this.configOf(attached);
     }
 
     const available = await this.harness.sessions.list();
@@ -126,16 +159,56 @@ class AcpAgent {
     const session = this.harness.session(params.sessionId);
 
     await this.replayHistory(session, client);
-    await this.attachSession(session, client);
 
-    return {};
+    return await this.configOf(await this.attachSession(session, client));
   }
 
   /**
-   * Runs a text prompt. A prompt with an operation ID first replays the text of the operation so
-   * far, which is empty for a new operation. If pi already has the operation, the prompt
-   * reattaches to it: the client receives the replay, then its later updates and its result.
-   * The operation runs once, also when its connection closes before it settles.
+   * Selects the model of a session. The model applies to the next generation, even while a
+   * prompt runs.
+   */
+  private async setConfigOption(
+    params: SetSessionConfigOptionRequest,
+  ): Promise<SetSessionConfigOptionResponse> {
+    const attached = this.requireAttached(params.sessionId);
+    const model = typeof params.value === "string" ? modelOf(this.models, params.value) : undefined;
+
+    if (params.configId !== MODEL_CONFIG_ID || !model) {
+      throw RequestError.invalidParams(undefined, "Unknown config option or value");
+    }
+
+    await attached.session.setModel({ provider: model.provider, id: model.id });
+
+    // The options show the model that Pi has now.
+    return { configOptions: modelConfigOptions(this.models, await currentModel(attached.session)) };
+  }
+
+  /**
+   * Returns the config options of an attached session, if the agent has models. A session
+   * without a model gets the first of `models`, so the options show the model that Pi uses.
+   */
+  private async configOf(
+    attached: AttachedSession,
+  ): Promise<Pick<NewSessionResponse, "configOptions">> {
+    const [first] = this.models;
+    let model = first ? await currentModel(attached.session) : undefined;
+
+    if (first && !model) {
+      await attached.session.setModel({ provider: first.provider, id: first.id });
+      model = await currentModel(attached.session);
+    }
+
+    const configOptions = modelConfigOptions(this.models, model);
+
+    return configOptions.length === 0 ? {} : { configOptions };
+  }
+
+  /**
+   * Runs a text prompt. A prompt with an operation ID first replays all operation output so far.
+   * A new operation has no output to replay. If Pi already has the operation, the prompt reattaches to it.
+   * The client receives the replay, followed by later updates and the result.
+   * The operation runs once, even if its connection closes before completion.
+   * The response for a prompt with an operation ID includes the operation's token usage.
    */
   private async prompt(params: PromptRequest): Promise<PromptResponse> {
     const attached = this.requireAttached(params.sessionId);
@@ -150,7 +223,7 @@ class AcpAgent {
     if (operationId !== undefined && (await this.isKnown(session, operationId))) {
       await this.reattach(attached, operationId);
 
-      return stopReasonOf(await session.wait(operationId));
+      return await this.responseOf(session, operationId, await session.wait(operationId));
     }
 
     if (this.runningPrompts.has(session.id)) {
@@ -166,19 +239,28 @@ class AcpAgent {
 
       const input = params.prompt.map((part) => ({ type: "text" as const, text: part.text }));
 
-      if (operationId === undefined) {
-        return stopReasonOf(await session.prompt(input));
+      // The new operation has no output yet. The replay tells the client where its output starts.
+      if (operationId !== undefined) {
+        await this.replay(attached, []);
       }
 
-      // The new operation has no text yet. The replay tells the client where its text starts.
-      await this.replay(attached, "");
+      // A prompt without an operation ID gets one, so its result can count its usage.
+      const id = operationId ?? crypto.randomUUID();
+      const result = await session.prompt(input, { operationId: id, entry: promptEntry(id) });
 
-      return stopReasonOf(
-        await session.prompt(input, { operationId, entry: promptEntry(operationId) }),
-      );
+      return await this.responseOf(session, id, result);
     } finally {
       this.runningPrompts.delete(session.id);
     }
+  }
+
+  /** Returns the response of a settled operation with its token usage. */
+  private async responseOf(
+    session: PiSession,
+    operationId: string,
+    result: Awaited<ReturnType<PiSession["wait"]>>,
+  ): Promise<PromptResponse> {
+    return responseOf(result, operationUsage(await session.messages(), operationId));
   }
 
   /** Returns true if pi has the operation, settled or not. */
@@ -194,24 +276,26 @@ class AcpAgent {
   }
 
   /**
-   * Replaces the event watch of the session with one that starts with the text of the
-   * operation so far. The old watch stops first, and the new snapshot holds everything that it
-   * did not send, so the client misses nothing after the replay.
+   * Stops the old session watch before opening a new one.
+   * The new snapshot includes output not sent by the old watch. Replaying it before starting the new watch prevents missing output.
    */
   private async reattach(attached: AttachedSession, operationId: string): Promise<void> {
     const { session, client } = attached;
     await attached.watch.stop();
     const watch = await session.events();
 
-    await this.replay(attached, operationText(watch.snapshot, operationId));
+    await this.replay(attached, operationUpdates(watch.snapshot, operationId));
 
     this.watchSession(session, client, watch).start();
   }
 
-  /** Sends `text` as the replay of an operation, in chunks that fit in one frame each. */
-  private async replay({ session, client }: AttachedSession, text: string): Promise<void> {
-    for (const update of replayUpdates(text)) {
-      // eslint-disable-next-line no-await-in-loop the chunks must arrive in order
+  /** Sends `updates` as the replay of an operation. Each update fits in one frame. */
+  private async replay(
+    { session, client }: AttachedSession,
+    updates: readonly SessionUpdate[],
+  ): Promise<void> {
+    for (const update of replayUpdates(updates)) {
+      // eslint-disable-next-line no-await-in-loop the updates must arrive in order
       await client.notify(methods.client.session.update, { sessionId: session.id, update });
     }
   }
@@ -257,12 +341,14 @@ class AcpAgent {
     return attached;
   }
 
-  private async attachSession(session: PiSession, client: AgentContext): Promise<void> {
+  private async attachSession(session: PiSession, client: AgentContext): Promise<AttachedSession> {
     const previous = this.attachedSessions.get(session.id);
     const watch = this.watchSession(session, client, await session.events());
     await previous?.watch.stop();
 
     watch.start();
+
+    return this.requireAttached(session.id);
   }
 
   /** Makes `events` the event watch of the session. The caller starts it. */
@@ -276,6 +362,9 @@ class AcpAgent {
       watch: events,
       client,
       signal: this.connection.signal,
+      ...(this.models.length > 0 && {
+        configOptionsOf: (model) => modelConfigOptions(this.models, model),
+      }),
     });
     this.attachedSessions.set(session.id, { session, client, watch });
 

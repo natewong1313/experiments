@@ -12,7 +12,10 @@ export const TEST_AGENT: AHPAgentInfo = {
   provider: "test",
   displayName: "Test",
   description: "In-process ACP agent",
-  models: [],
+  models: [
+    { id: "fast", provider: "test", name: "Fast" },
+    { id: "smart", provider: "test", name: "Smart" },
+  ],
 };
 
 export class AgentHost extends BaseHost<TestEnv, AgentHostConnectionRouter> {

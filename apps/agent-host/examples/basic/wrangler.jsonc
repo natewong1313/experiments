@@ -13,11 +13,11 @@
     "bindings": [
       {
         "name": "AGENT_HOST",
-        "class_name": "AgentHost",
+        "class_name": "AgentHostRoot",
       },
       {
         "name": "AGENT_SESSION",
-        "class_name": "AgentSession",
+        "class_name": "AgentHostSession",
       },
       {
         "name": "AGENT_ROUTER",
@@ -28,7 +28,7 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["AgentHost", "AgentSession", "AgentHostConnectionRouter"],
+      "new_sqlite_classes": ["AgentHostRoot", "AgentHostSession", "AgentHostConnectionRouter"],
     },
   ],
   "compatibility_flags": ["nodejs_compat"],

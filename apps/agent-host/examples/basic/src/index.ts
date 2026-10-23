@@ -20,4 +20,4 @@ const worker: ExportedHandler<Env> = {
 
 export default worker;
 
-export { AgentHostConnectionRouter, AgentHost, AgentSession } from "./durable-objects";
+export { AgentHostConnectionRouter, AgentHostRoot, AgentHostSession } from "./durable-objects";

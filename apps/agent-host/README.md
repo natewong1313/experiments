@@ -78,7 +78,9 @@ require any binding names.
 
 - Override `AgentHostRoot.getAgentInfo()` and `AgentHostSession.getAgentInfo()` to describe the
   single agent backend. Return the same value from both. The session checks the provider of
-  a create request against it.
+  a create request against it, and the model of a message against its `models`. The ID of
+  each model must be a value of the agent's ACP `model` config option. The agent connection
+  fails if the option does not offer every listed model, so a creation fails at once.
 - Override `AgentHostSession.connectAgent(sessionId)` to return an ACP `Stream`.
 - Override `AgentHostSession.createAlarmScheduler(options)` when other code in the session
   object also needs the Durable Object alarm. The default scheduler keeps the named alarms in
@@ -116,8 +118,26 @@ creation, the request fails, and the session continues the creation in the backg
 client can retry, or watch the root channel for the result. An error response from the agent
 fails the creation at once. A dispose that the host does not acknowledge fails, and the
 session completes it in the background.
-Clients dispatch `chat/turnStarted` and `chat/turnCancelled`. Agent text becomes
-markdown response parts and deltas, followed by completion or error actions.
+Clients dispatch `chat/turnStarted` and `chat/turnCancelled`. The session turns the ACP
+updates of a prompt into response parts, in the order the agent sends them:
+
+- `agent_message_chunk` text becomes markdown parts and `chat/delta`.
+- `agent_thought_chunk` text becomes reasoning parts and `chat/reasoning`.
+- `tool_call` and `tool_call_update` become tool call parts. A call that leaves `pending`
+  runs without confirmation, its text content becomes `chat/toolCallContentChanged`, and
+  `completed` or `failed` completes it with that content.
+- The `usage` of the prompt response becomes `chat/usage`, with the full ACP usage under
+  `_meta["agent-host/acpUsage"]`.
+
+Text continues the last part if it has the same kind, and starts a new part otherwise. The
+first part of a turn has the turn ID as its ID. The session handles the updates of a prompt one
+at a time, in arrival order, and applies the completion or error action that ends the turn
+after all of them.
+
+A `chat/turnStarted` message can set `model` to the ID of one of the agent's models. Before
+the prompt, the session selects it with ACP `session/set_config_option` on the agent's
+config option with category `model`. The selection stays for later turns until a message
+selects another model. A message with an unknown model, or with model `config`, is rejected.
 
 Subscribe to root for the catalogue, a session for its default-chat reference,
 and the chat for its conversation and activity status. The session summary in the
@@ -132,16 +152,20 @@ A turn also survives a restart of the session or a lost agent connection, if the
 supports the operation ID extension. The session sends the AHP turn ID as
 `_meta["agent-host/operationId"]` of `session/prompt`. An agent that advertises
 `agentCapabilities._meta["agent-host/operationId"]: true` runs each operation ID once. A
-repeated prompt with that ID reattaches to the operation: the agent first sends one
-`agent_message_chunk` with `_meta["agent-host/replay"]: true` and all the text of the
-operation so far, then the later updates and the result. `apps/pi-acp` implements the
-extension.
+prompt with that ID starts with a replay of the output of the operation so far: its text,
+thinking, and tool call updates, each with `_meta["agent-host/replay"]: { start, end }`.
+`start` marks the first update and `end` the last. A new operation replays one empty
+`agent_message_chunk`. A repeated prompt reattaches to the operation: after the replay come
+the later updates and the result. `apps/pi-acp` implements the extension.
 
 While a turn is active, the `continueTurn` alarm runs every `turnHeartbeatMs`. After a
 restart, it opens a new agent connection and prompts again with the same operation ID. The
-session skips the replayed text that it already stored, so the turn keeps one response. If
-the replayed text differs, as after the agent generated it again, the session writes all of
-it to a new markdown part. A lost connection schedules another attempt, and the turn ends
+session matches the longest start of the replay to the stored parts in order, skipping stored
+parts that the agent no longer has and parts of kinds that the output does not write. Matched
+text parts get the text that the replay adds, and matched tool calls advance, so the turn keeps
+one response. The rest of the replay, as after the agent generated text again, becomes new
+parts. If all of the replay matches, its last part must match the last stored part, so later
+text continues the right part. A second replay of the same output changes nothing. A lost connection schedules another attempt, and the turn ends
 with an error after `turnAttempts` failures in a row or an error response from the agent.
 A cancellation after a restart opens a connection to send `session/cancel`. Without the
 extension, an unfinished turn becomes an error after a restart, because the session cannot
@@ -160,8 +184,9 @@ and fetch the catalogue again. The host does not send a prompt again or restart 
 `reconnect` leaves the connection uninitialized, so the client can retry or initialize. A router
 deletes its storage when its connection closes.
 
-There are no multiple chats, tool approval UI, resource APIs, terminals, authentication, or
-automatic prompt retries. Agent tools may still run internally.
+There are no multiple chats, tool approvals, resource APIs, terminals, authentication, or
+automatic prompt retries. Tool call content other than text, plans, and model config values
+are not shown.
 
 ## Database layout
 
@@ -266,7 +291,8 @@ The same `test` command also runs `test/integration` through Wrangler's
 `createTestHarness()`. The integration fixture reuses the basic example's concrete Worker
 and Durable Objects with the real Pi harness, ACP WebSocket adapters, and workspace tools.
 Only the model provider uses Faux. Tests cover shared streaming, a workspace write,
-history recovery after a session restart, and disposal. The harness resets storage between
+thinking and tool call parts, model selection, history recovery after a session restart, a
+turn that continues across a restart, and disposal. The harness resets storage between
 tests and prints runtime diagnostics on failure. No Cloudflare credentials are required.
 
 Run `pnpm --filter @experiments/agent-host test:workers` or

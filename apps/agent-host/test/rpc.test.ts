@@ -149,6 +149,19 @@ it("rejects create parameters that do not belong to the session", async () => {
   expect(remoteDirectory.message).toBe("Expected a local file working directory");
 });
 
+it("fails a creation at once when the agent does not offer a listed model", async () => {
+  const req = request();
+  const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));
+  const session: SessionRPC = stub;
+
+  await stub.offerModels(["fast"]);
+  const failed = await rpcError(() => session.create(req.params));
+  expect(failed).toMatchObject({
+    name: "SessionCreateError",
+    message: "Invalid params: Agent does not offer models smart that the agent info lists",
+  });
+});
+
 it("removes failed session setup and propagates its operation error over RPC", async () => {
   const req = request();
   const stub = env.CONVERSATIONS.getByName(sessionDOName(req.hostId, req.sessionId));

@@ -26,8 +26,9 @@ const WIDE = 10;
 const SHORT_HISTORY = 3;
 const LONG_HISTORY = 20;
 const LAST = -1;
-// The test agent sends three deltas per turn. Turn start and completion each change the status.
-const STREAM_DELTAS = 3;
+// The test agent sends three chunks per turn: one starts the part, and two are deltas.
+// Turn start and completion each change the status.
+const STREAM_DELTAS = 2;
 const STATUS_CHANGES = 2;
 
 /** Stores `count` ended turns in the chat of a session that has no chat subscribers. */
