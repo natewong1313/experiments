@@ -58,7 +58,10 @@ export function createPiHarness(env: MultiAgentEnv, workspace: Workspace): PiHar
   });
 }
 
-export function createOpenCodeHarness(env: MultiAgentEnv, workspace: Workspace): OpenCodeHarness {
+export function createOpenCodeHarness(
+  env: Pick<MultiAgentEnv, "AI" | "WORKSPACE_DIR">,
+  workspace: Workspace,
+): OpenCodeHarness {
   const ai = createOpenCodeAI({ binding: env.AI });
   const model = ai("@cf/moonshotai/kimi-k2.7-code", { reasoningEffort: "low" });
 

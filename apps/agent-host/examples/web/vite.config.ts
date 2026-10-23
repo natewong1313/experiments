@@ -12,6 +12,7 @@ const viteConfig = defineConfig({
     allowedHosts: true,
   },
   resolve: {
+    dedupe: ["agents"],
     tsconfigPaths: true,
   },
   plugins: [

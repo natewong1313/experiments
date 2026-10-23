@@ -101,12 +101,19 @@ kinds renders them without changes to the client.
 
 ### Agent and model
 
-Turns run on the Pi agent, the same wiring as the [basic example](../basic):
-[`src/host/durable-objects.ts`](src/host/durable-objects.ts) starts a `PiHarness`
-over the
-Computer workspace tools and connects it to the session through
-`@experiments/harness-acp`. The model is a Workers AI model served through the `AI`
-binding, `@cf/moonshotai/kimi-k2.7-code` by default.
+Choose Pi or OpenCode beside **New session**. Each session saves its agent
+selection and keeps it when it reconnects or restarts. Requests without a
+provider still use Pi.
+
+[`src/host/durable-objects.ts`](src/host/durable-objects.ts) selects the harness
+for that provider. [`src/host/harness.ts`](src/host/harness.ts) configures Pi;
+OpenCode reuses the [multi-agent example's factory](../multi-agent/src/harness.ts)
+and durable workspace plugin. Both connect through `@experiments/harness-acp`.
+
+Pi offers the Workers AI model catalog, with Kimi K2.7 Code selected by default.
+OpenCode offers Kimi K2.7 Code, matching the multi-agent example. Both use the
+same durable workspace tools. Vite resolves `agents` to one copy so Lifecycle
+and its harnesses share the capability registry.
 
 The `AI` binding is declared `remote` in [wrangler.jsonc](wrangler.jsonc), so a
 turn calls Workers AI on your account. `wrangler dev` needs a logged-in

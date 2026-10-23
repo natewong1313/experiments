@@ -1,9 +1,7 @@
 import { Workspace } from "@cloudflare/computer";
 import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
 import { createGitClient } from "@cloudflare/computer/git";
-import { Harness, createRegistry } from "@earendil-works/pi-durable";
 import { Lifecycle } from "agents/lifecycle";
-import { PiHarness } from "agents/harness/pi";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 
@@ -22,15 +20,10 @@ import type { AcpModel } from "@experiments/harness-acp";
 import { LifecycleSessionAlarms, websocketStream } from "@experiments/agent-host/helpers";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 
-import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
+import { JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
 import { evictObject } from "./debug-eviction";
-import { sessionTelemetry } from "./session-telemetry";
-
-/** The model that a new session runs until a client selects another one. */
-const DEFAULT_MODEL: AcpModel = {
-  provider: CLOUDFLARE_PROVIDER_ID,
-  id: "@cf/moonshotai/kimi-k2.7-code",
-};
+import { createPiHarness, DEFAULT_MODEL } from "./harness";
+import { createOpenCodeHarness } from "../../../multi-agent/src/harness";
 
 export class AgentHostConnectionRouter extends BaseConnectionRouter<
   Env,
@@ -52,8 +45,8 @@ export class AgentHostRoot extends BaseAgentHostRoot<Env, AgentHostConnectionRou
     evictObject(this.ctx);
   }
 
-  getAgentInfo(): AgentInfo {
-    return piAgentInfo(this.env.AI);
+  getAgentInfo(): AgentInfo[] {
+    return [agentInfo(this.env.AI, "pi"), agentInfo(this.env.AI, "opencode")];
   }
 }
 
@@ -73,8 +66,8 @@ export class AgentHostSession extends BaseAgentHostSession<
     evictObject(this.ctx);
   }
 
-  getAgentInfo(): AgentInfo {
-    return piAgentInfo(this.env.AI);
+  getAgentInfo(provider = "pi"): AgentInfo {
+    return agentInfo(this.env.AI, provider);
   }
 
   workspace = new Workspace({
@@ -90,52 +83,10 @@ export class AgentHostSession extends BaseAgentHostSession<
       }),
     ],
   });
-  registry = createRegistry();
-  harness = new PiHarness({
-    harness: async ({ storage, context, onWake }): Promise<Harness> => {
-      // Setup the workspace.
-      await this.workspace.fs.mkdir(this.env.WORKSPACE_DIR, {
-        recursive: true,
-      });
-
-      const models = createModels();
-      const ai = createAI({ binding: this.env.AI });
-      models.setProvider(ai.provider);
-
-      this.registry.install({
-        name: "workspace",
-        sections: [
-          {
-            key: "preamble",
-            render: (): string =>
-              `You are a concise coding assistant. Your durable workspace is ${this.env.WORKSPACE_DIR}. Use read, write, edit, delete, ls, find, grep and exec to work with files. exec runs JavaScript modules, not shell commands. Paths are absolute.`,
-            tag: false,
-          },
-        ],
-        tools: createWorkspaceTools(this.workspace),
-      });
-
-      const objectName = this.ctx.id.name ?? this.ctx.id.toString();
-
-      return Harness.open(
-        storage,
-        {
-          models,
-          registry: this.registry,
-          telemetry: sessionTelemetry(objectName),
-          settings: { retry: { enabled: true, maxRetries: 2, baseDelayMs: 500 } },
-          onWake,
-        },
-        context,
-      );
-    },
-    defaults: {
-      model: DEFAULT_MODEL,
-      thinkingLevel: "low",
-    },
-  });
+  harness = createPiHarness(this.env, this.workspace, this.ctx.id.name ?? this.ctx.id.toString());
+  opencode = createOpenCodeHarness(this.env, this.workspace);
   sessionAlarms = new LifecycleSessionAlarms(this.ctx);
-  lifecycle = Lifecycle.install(this).use(this.sessionAlarms).use(this.harness);
+  lifecycle = Lifecycle.install(this).use(this.sessionAlarms).use(this.harness).use(this.opencode);
 
   async alarm(): Promise<void> {
     await this.lifecycle.alarm();
@@ -149,19 +100,21 @@ export class AgentHostSession extends BaseAgentHostSession<
     return this.env.WORKSPACE_DIR;
   }
 
-  async connectAgent(_sessionId: string): Promise<ACPStream> {
+  async connectAgent(_sessionId: string, provider: string): Promise<ACPStream> {
     const { 0: client, 1: server } = new WebSocketPair();
 
     await this.lifecycle.start();
 
     connectAcp({
       socket: server,
-      harness: this.harness,
+      harness: provider === "opencode" ? this.opencode : this.harness,
       cwd: this.env.WORKSPACE_DIR,
       onDiagnostic: (diagnostic): void => {
         console.info("ACP timing", { objectName: this.ctx.id.name, ...diagnostic });
       },
-      models: piModels(this.env.AI).map((entry) => entry.acp),
+      models: piModels(this.env.AI)
+        .filter((entry) => provider !== "opencode" || entry.acp.id === DEFAULT_MODEL.id)
+        .map((entry) => entry.acp),
     });
 
     return websocketStream(client);
@@ -206,11 +159,19 @@ function piModels(ai: Ai): PiCatalogEntry[] {
 }
 
 /** Returns the agent info that AHP lists, with the default model first. */
-function piAgentInfo(ai: Ai): AgentInfo {
+function agentInfo(ai: Ai, provider: string): AgentInfo {
+  if (provider !== "pi" && provider !== "opencode") {
+    throw new Error(`Unknown agent provider: ${provider}`);
+  }
+
+  const name = provider === "opencode" ? "OpenCode" : "Pi";
+
   return {
-    provider: "pi",
-    displayName: "Pi",
-    description: "Pi coding agent",
-    models: piModels(ai).map((entry) => entry.info),
+    provider,
+    displayName: name,
+    description: `${name} coding agent`,
+    models: piModels(ai)
+      .filter((entry) => provider !== "opencode" || entry.acp.id === DEFAULT_MODEL.id)
+      .map((entry) => entry.info),
   };
 }

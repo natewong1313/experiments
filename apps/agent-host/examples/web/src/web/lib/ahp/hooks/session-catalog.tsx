@@ -44,7 +44,7 @@ export type AhpSessionsState = {
   /** Whether a session creation is in flight. */
   creating: boolean;
   /** Creates a session and returns its channel URI, or `null` on failure. */
-  create(): Promise<AHPURI | null>;
+  create(provider?: string): Promise<AHPURI | null>;
 };
 
 /** The callbacks a catalog watcher reports to. */
@@ -213,27 +213,33 @@ export function SessionCatalogProvider({ children }: SessionCatalogProviderProps
     };
   }, [client]);
 
-  const create = useCallback(async (): Promise<AHPURI | null> => {
-    if (client === undefined) {
-      return null;
-    }
+  const create = useCallback(
+    async (provider?: string): Promise<AHPURI | null> => {
+      if (client === undefined) {
+        return null;
+      }
 
-    const created = `ahp-session:/${crypto.randomUUID()}`;
+      const created = `ahp-session:/${crypto.randomUUID()}`;
 
-    setCreating(true);
+      setCreating(true);
 
-    try {
-      await client.request("createSession", { channel: created });
+      try {
+        await client.request("createSession", {
+          channel: created,
+          ...(provider !== undefined && { provider }),
+        });
 
-      return created;
-    } catch (error) {
-      setMessage(errorMessage(error));
+        return created;
+      } catch (error) {
+        setMessage(errorMessage(error));
 
-      return null;
-    } finally {
-      setCreating(false);
-    }
-  }, [client]);
+        return null;
+      } finally {
+        setCreating(false);
+      }
+    },
+    [client],
+  );
 
   return (
     <SessionCatalogContext.Provider value={{ status, sessions, agents, message, creating, create }}>
