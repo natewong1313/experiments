@@ -49,6 +49,9 @@ export type TurnChangeParams = {
 
 export type LoadedTurns = { turns: AHPTurn[]; activeTurn?: AHPActiveTurn };
 
+/** A markdown part and all its streamed text. */
+export type MarkdownText = { id: string; content: string };
+
 /** Reducer inputs use this placeholder message. Stored messages do not change after insertion. */
 export const UNLOADED_MESSAGE: AHPMessage = { text: "", origin: { kind: AHPMessageKind.User } };
 
@@ -168,6 +171,48 @@ export class TurnRows {
     this.writeParts(inserted.id, [], turn.responseParts);
 
     return inserted.id;
+  }
+
+  /** Returns the message of a turn. */
+  message(row: number): AHPMessage | undefined {
+    return this.orm
+      .select({ message: turnsTable.message })
+      .from(turnsTable)
+      .where(eq(turnsTable.id, row))
+      .get()?.message;
+  }
+
+  /** Returns the last markdown part of a turn with its streamed text. */
+  lastMarkdown(turn: number): MarkdownText | undefined {
+    const markdown = and(
+      eq(responsePartsTable.turn, turn),
+      eq(responsePartsTable.kind, AHPResponsePartKind.Markdown),
+    );
+
+    const row = this.orm
+      .select({ id: responsePartsTable.id, payload: responsePartsTable.payload })
+      .from(responsePartsTable)
+      .where(markdown)
+      .orderBy(desc(responsePartsTable.position))
+      .limit(1)
+      .get();
+
+    if (!row) {
+      return;
+    }
+
+    const segments = this.orm
+      .select({ text: textSegmentsTable.text })
+      .from(textSegmentsTable)
+      .where(eq(textSegmentsTable.part, row.id))
+      .orderBy(asc(textSegmentsTable.position))
+      .all();
+
+    const part = joinText(row.payload, segments.map((segment) => segment.text).join(""));
+
+    return part.kind === AHPResponsePartKind.Markdown
+      ? { id: part.id, content: part.content }
+      : undefined;
   }
 
   update(row: number, values: TurnChangeParams): void {

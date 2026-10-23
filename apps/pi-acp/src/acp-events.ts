@@ -1,4 +1,5 @@
 import type { SessionUpdate, ToolKind } from "@agentclientprotocol/sdk";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentEvent } from "@earendil-works/pi-durable";
 
 // Map Pi tool names to the ACP tool kinds.
@@ -18,6 +19,15 @@ const toolKinds = new Map<string, ToolKind>([
 export class AcpEventUpdates {
   private readonly sentTextLengths = new Map<number, number>();
   private readonly currentToolOutputs = new Map<string, string>();
+
+  /** `inFlight` is the message in flight when the watch starts. Its text counts as sent. */
+  constructor(inFlight?: AssistantMessage) {
+    for (const [index, part] of (inFlight?.content ?? []).entries()) {
+      if (part.type === "text" || part.type === "thinking") {
+        this.sentTextLengths.set(index, (part.type === "text" ? part.text : part.thinking).length);
+      }
+    }
+  }
 
   update(event: AgentEvent): SessionUpdate[] {
     switch (event.type) {

@@ -4,7 +4,15 @@ export type { AgentInfo } from "./host/durable-object";
 
 export { AgentHostSession } from "./session/durable-object";
 
-export type { SessionLifecyclePolicy } from "./session/durable-object";
+export type {
+  SessionAlarmHandler,
+  SessionAlarmInfo,
+  SessionAlarmName,
+  SessionAlarmPolicy,
+  SessionAlarmScheduler,
+  SessionAlarmSchedulerOptions,
+  SessionLifecyclePolicy,
+} from "./session/durable-object";
 
 export { AgentHostConnectionRouter } from "./router/durable-object";
 

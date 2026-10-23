@@ -176,8 +176,10 @@ export async function connectPeerAt(router: string): Promise<Peer> {
 export type CreatedSession = { sessionId: string; channel: string; chat: string };
 
 /** Creates a session, subscribes the peer to its session channel, and returns its chat. */
-export async function createSession(peer: Peer): Promise<CreatedSession> {
-  const sessionId = crypto.randomUUID();
+export async function createSession(
+  peer: Peer,
+  sessionId: string = crypto.randomUUID(),
+): Promise<CreatedSession> {
   const channel = `ahp-session:/${sessionId}`;
   await peer.request("createSession", { channel, provider: "test" });
   const subscribed = SubscribeResultSchema.parse(await peer.request("subscribe", { channel }));

@@ -11,7 +11,7 @@ type AcpSessionWatchParams = {
 
 // Listens to the AgentEventStream from pi and converts them.
 export class AcpSessionEventsWatcher {
-  private updates = new AcpEventUpdates();
+  private updates: AcpEventUpdates;
   private sessionId: string;
   private watch: AgentEventStream;
   private client: AgentContext;
@@ -22,6 +22,8 @@ export class AcpSessionEventsWatcher {
     this.watch = watch;
     this.client = client;
     this.signal = signal;
+    // The snapshot holds the text in flight, so the watch sends only the text after it.
+    this.updates = new AcpEventUpdates(watch.snapshot.generation?.message);
   }
 
   start(): void {

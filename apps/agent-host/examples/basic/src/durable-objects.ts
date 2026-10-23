@@ -2,11 +2,12 @@ import { Workspace } from "@cloudflare/computer";
 import { WorkerJavaScriptBackend } from "@cloudflare/computer/backends/worker-javascript";
 import { createGitClient } from "@cloudflare/computer/git";
 import { Harness, createRegistry } from "@earendil-works/pi-durable";
+import type { ToolRegistration } from "@earendil-works/pi-durable";
 import { Lifecycle } from "agents/lifecycle";
-import { PiHarness } from "agents/harnesses/pi";
+import { PiHarness } from "agents/harness/pi";
+import type { PiModel } from "agents/harness/pi";
 import { createModels } from "@earendil-works/pi-ai/models";
 import type { Models } from "@earendil-works/pi-ai/models";
-import type { ModelRef } from "@earendil-works/pi-durable";
 import { CLOUDFLARE_PROVIDER_ID, createAI } from "agents/models/pi-ai";
 
 import {
@@ -14,9 +15,13 @@ import {
   AgentHostSession as BaseAgentHostSession,
   AgentHostConnectionRouter as BaseConnectionRouter,
 } from "@experiments/agent-host";
-import type { AgentInfo } from "@experiments/agent-host";
+import type {
+  AgentInfo,
+  SessionAlarmScheduler,
+  SessionAlarmSchedulerOptions,
+} from "@experiments/agent-host";
 import { connectAcp } from "@experiments/pi-acp";
-import { websocketStream } from "@experiments/agent-host/helpers";
+import { LifecycleSessionAlarms, websocketStream } from "@experiments/agent-host/helpers";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 
 import { createWorkspaceTools, JAVASCRIPT_BACKEND, workspaceStorage } from "./workspace";
@@ -68,7 +73,7 @@ export class AgentSession extends BaseAgentHostSession<Env, AgentHostConnectionR
   });
   registry = createRegistry();
   harness = new PiHarness({
-    harness: async ({ storage, context }): Promise<Harness> => {
+    harness: async ({ storage, context, onWake }): Promise<Harness> => {
       // Setup the workspace.
       await this.workspace.fs.mkdir(this.env.WORKSPACE_DIR, {
         recursive: true,
@@ -76,28 +81,56 @@ export class AgentSession extends BaseAgentHostSession<Env, AgentHostConnectionR
 
       const models = this.createModels();
 
-      this.registry.batch(() => {
-        this.registry.systemPrompt.section(
-          "preamble",
-          () =>
-            `You are a concise coding assistant. Your durable workspace is ${this.env.WORKSPACE_DIR}. Use read, write, edit, delete, ls, find, grep and exec to work with files. exec runs JavaScript modules, not shell commands. Paths are absolute.`,
-          { tag: false },
-        );
-
-        for (const tool of createWorkspaceTools(this.workspace)) {
-          this.registry.tools.add(tool);
-        }
+      this.registry.install({
+        name: "workspace",
+        sections: [
+          {
+            key: "preamble",
+            render: (): string =>
+              `You are a concise coding assistant. Your durable workspace is ${this.env.WORKSPACE_DIR}. Use read, write, edit, delete, ls, find, grep and exec to work with files. exec runs JavaScript modules, not shell commands. Paths are absolute.`,
+            tag: false,
+          },
+        ],
+        tools: this.createTools(),
       });
 
-      return Harness.open(storage, { models, registry: this.registry }, context);
+      return Harness.open(
+        storage,
+        {
+          models,
+          registry: this.registry,
+          settings: { retry: { enabled: true, maxRetries: 2, baseDelayMs: 500 } },
+          onWake,
+        },
+        context,
+      );
     },
     defaults: {
       model: this.getDefaultModel(),
       thinkingLevel: "low",
-      retry: { enabled: true, maxRetries: 2, baseDelayMs: 500 },
     },
   });
-  lifecycle = Lifecycle.install(this).use(this.harness);
+  // The session alarms and Pi share the Durable Object alarm through one Lifecycle.
+  sessionAlarms = new LifecycleSessionAlarms(this.ctx);
+  lifecycle = Lifecycle.install(this).use(this.sessionAlarms).use(this.harness);
+
+  /**
+   * Runs the Lifecycle jobs, which include the session alarms. Lifecycle does not replace an
+   * `alarm` that the class defines, so this method forwards to it.
+   */
+  override async alarm(): Promise<void> {
+    await this.lifecycle.alarm();
+  }
+
+  protected override createAlarmScheduler(
+    options: SessionAlarmSchedulerOptions,
+  ): SessionAlarmScheduler {
+    return this.sessionAlarms.scheduler(options);
+  }
+
+  protected createTools(): ToolRegistration[] {
+    return createWorkspaceTools(this.workspace);
+  }
 
   protected createModels(): Models {
     const models = createModels();
@@ -107,10 +140,10 @@ export class AgentSession extends BaseAgentHostSession<Env, AgentHostConnectionR
     return models;
   }
 
-  protected getDefaultModel(): ModelRef {
+  protected getDefaultModel(): PiModel {
     return {
       provider: CLOUDFLARE_PROVIDER_ID,
-      modelId: "@cf/moonshotai/kimi-k2.7-code",
+      id: "@cf/moonshotai/kimi-k2.7-code",
     };
   }
 

@@ -1,3 +1,4 @@
+import * as z from "zod";
 import {
   client as acpClient,
   methods as acpMethods,
@@ -20,16 +21,56 @@ type OpenOptions = {
   sessionId: string | null;
 };
 
-type TextHandler = (text: string) => Promise<void>;
+/**
+ * Text of a prompt. A `snapshot` holds all the text of the prompt so far and replaces the text
+ * that the handler has. A `delta` continues the text.
+ */
+export type PromptText = { kind: "snapshot" | "delta"; text: string };
+
+type TextHandler = (text: PromptText) => Promise<void>;
+
+type PromptOptions = {
+  /**
+   * Identifies the prompt at the agent. An agent that supports operation IDs runs a prompt with
+   * a known ID once, and a repeated prompt reattaches to it.
+   */
+  operationId?: string;
+  /**
+   * Reattaches to the prompt with `operationId`. Requires an agent that supports operation IDs.
+   */
+  reattach?: boolean;
+};
 
 type ConnectedSession = {
   connection: ACPClientConnection;
   sessionId: string;
+  // True if the agent runs each operation ID once.
+  supportsOperations: boolean;
   /**
    * Receives text while a prompt is active. Text outside a prompt, including session/load replay, is ignored.
    */
   onText?: TextHandler;
+  // True while a prompt with an operation ID waits for the end of its replay.
+  replaying?: boolean;
+  // The replayed text so far. Undefined before the first replay chunk.
+  replayed?: string;
 };
+
+/**
+ * The `_meta` key of a prompt's operation ID. The agent advertises the key in its capabilities.
+ * The sibling in apps/pi-acp/src/operations.ts serves this key.
+ */
+const OPERATION_ID_META = "agent-host/operationId";
+
+/**
+ * The `_meta` key of the chunks that replay all the text of a prompt with an operation ID so
+ * far. Its value is `{ start, end }`, which marks the first and the last chunk of the replay.
+ * The agent replays every such prompt before its other updates, with one empty chunk for a new
+ * operation.
+ */
+const REPLAY_META = "agent-host/replay";
+
+const ReplayMarkerSchema = z.object({ start: z.boolean(), end: z.boolean() });
 
 /**
  * Maintains one ACP session connection and forwards text updates to the active prompt's handler.
@@ -68,28 +109,51 @@ export class AgentConnection {
     }
   }
 
+  /** Returns true if the connected agent runs each operation ID once. */
+  supportsOperations(): boolean {
+    return this.connected()?.supportsOperations === true;
+  }
+
   /**
-   * Sends a text prompt and forwards its text updates until the request settles.
+   * Sends a text prompt and forwards its text updates until the request settles. A prompt with
+   * an operation ID first gets a `snapshot` of all its text so far, then `delta` text. Other
+   * prompts get only `delta` text.
    * The caller must wait for this request to settle before starting another prompt.
    *
-   * @throws {Error} If no connection is available.
+   * @throws {Error} If no connection is available, or if `options` reattaches to an agent that
+   * does not support operation IDs.
    */
-  async prompt(text: string, onText: TextHandler): Promise<ACPPromptResponse> {
+  async prompt(
+    text: string,
+    onText: TextHandler,
+    options: PromptOptions = {},
+  ): Promise<ACPPromptResponse> {
     const session = this.connected();
 
     if (!session) {
       throw new Error("Agent is not connected");
     }
 
+    const { operationId, reattach = false } = options;
+
+    if (reattach && (operationId === undefined || !session.supportsOperations)) {
+      throw new Error("Agent cannot reattach to a prompt");
+    }
+
     session.onText = onText;
+    session.replaying = operationId !== undefined && session.supportsOperations;
 
     try {
       return await session.connection.agent.request(acpMethods.agent.session.prompt, {
         sessionId: session.sessionId,
         prompt: [{ type: "text", text }],
+        ...(operationId !== undefined &&
+          session.supportsOperations && { _meta: { [OPERATION_ID_META]: operationId } }),
       });
     } finally {
       session.onText = undefined;
+      session.replaying = undefined;
+      session.replayed = undefined;
     }
   }
 
@@ -165,9 +229,9 @@ export class AgentConnection {
 
     try {
       signal.throwIfAborted();
-      const sessionId = await this.initialize(connection, options);
+      const { sessionId, supportsOperations } = await this.initialize(connection, options);
       signal.throwIfAborted();
-      opened = { connection, sessionId };
+      opened = { connection, sessionId, supportsOperations };
       this.current = opened;
 
       return opened;
@@ -185,11 +249,16 @@ export class AgentConnection {
    *
    * @throws {Error} If an existing session is requested but the agent does not support loading sessions.
    */
-  private async initialize(connection: ACPClientConnection, options: OpenOptions): Promise<string> {
+  private async initialize(
+    connection: ACPClientConnection,
+    options: OpenOptions,
+  ): Promise<{ sessionId: string; supportsOperations: boolean }> {
     const initialized = await connection.agent.request(acpMethods.agent.initialize, {
       protocolVersion: ACP_PROTOCOL_VERSION,
       clientCapabilities: {},
     });
+
+    const supportsOperations = initialized.agentCapabilities?._meta?.[OPERATION_ID_META] === true;
 
     if (options.sessionId === null) {
       const created = await connection.agent.request(acpMethods.agent.session.new, {
@@ -197,7 +266,7 @@ export class AgentConnection {
         mcpServers: [],
       });
 
-      return created.sessionId;
+      return { sessionId: created.sessionId, supportsOperations };
     }
 
     if (initialized.agentCapabilities?.loadSession !== true) {
@@ -210,12 +279,14 @@ export class AgentConnection {
       mcpServers: [],
     });
 
-    return options.sessionId;
+    return { sessionId: options.sessionId, supportsOperations };
   }
 
   /**
    * Forwards text chunks only when they match the session with an active prompt handler.
-   * Updates received before initialization or outside a prompt are ignored.
+   * Updates received before initialization or outside a prompt are ignored. A prompt with an
+   * operation ID ignores the chunks before its replay, which repeats their text, and joins the
+   * replay chunks into one snapshot.
    */
   private async receive(
     session: ConnectedSession | undefined,
@@ -224,13 +295,42 @@ export class AgentConnection {
     const { update } = notification;
 
     if (
-      session?.onText &&
-      notification.sessionId === session.sessionId &&
-      update.sessionUpdate === "agent_message_chunk" &&
-      update.content.type === "text"
+      !session?.onText ||
+      notification.sessionId !== session.sessionId ||
+      update.sessionUpdate !== "agent_message_chunk" ||
+      update.content.type !== "text"
     ) {
-      await session.onText(update.content.text);
+      return;
     }
+
+    const { text } = update.content;
+
+    if (session.replaying !== true) {
+      await session.onText({ kind: "delta", text });
+
+      return;
+    }
+
+    const marker = ReplayMarkerSchema.safeParse(update._meta?.[REPLAY_META]).data;
+
+    if (marker?.start === true) {
+      session.replayed = "";
+    }
+
+    if (!marker || session.replayed === undefined) {
+      return;
+    }
+
+    session.replayed += text;
+
+    if (!marker.end) {
+      return;
+    }
+
+    const snapshot = session.replayed;
+    session.replaying = false;
+    session.replayed = undefined;
+    await session.onText({ kind: "snapshot", text: snapshot });
   }
 }
 

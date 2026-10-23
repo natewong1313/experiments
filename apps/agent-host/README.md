@@ -80,9 +80,17 @@ require any binding names.
   single agent backend. Return the same value from both. The session checks the provider of
   a create request against it.
 - Override `AgentHostSession.connectAgent(sessionId)` to return an ACP `Stream`.
+- Override `AgentHostSession.createAlarmScheduler(options)` when other code in the session
+  object also needs the Durable Object alarm. The default scheduler keeps the named alarms in
+  `durability` tables and owns the alarm. A replacement runs `options.handlers` with
+  `options.policies`: each policy sets the attempt timeout, whether a timed-out attempt runs
+  again, the number of attempts, and the delay between them. The
+  `LifecycleSessionAlarms` from `@experiments/agent-host/helpers` runs the alarms as jobs of
+  an `agents/lifecycle` Lifecycle. The [basic example](examples/basic) uses it with the
+  Lifecycle that also wakes its Pi harness.
 - Override `AgentHostSession.getWorkingDirectory()` when `/` is not the default.
 - Override `AgentHostSession.getLifecyclePolicy()` to change the timing of the alarms that
-  complete a creation or a dispose.
+  complete a creation or a dispose, and of the alarm that continues a turn.
 
 All three classes require SQLite-backed Durable Object storage.
 The migrations do not upgrade storage from earlier versions of this package. Delete local
@@ -116,10 +124,28 @@ and the chat for its conversation and activity status. The session summary in th
 catalogue copies the status of the default chat. Sessions do not aggregate activity
 across chats. Use the chat status.
 
-State survives object reconstruction. An unfinished turn becomes a non-resumable
-error after reconstruction. The agent must support ACP `session/load` to continue
-an existing conversation after its connection is lost. ACP load notifications do
-not duplicate the retained AHP transcript.
+State survives object reconstruction. The agent must support ACP `session/load` to continue
+an existing conversation after its connection is lost. ACP load notifications do not
+duplicate the retained AHP transcript.
+
+A turn also survives a restart of the session or a lost agent connection, if the agent
+supports the operation ID extension. The session sends the AHP turn ID as
+`_meta["agent-host/operationId"]` of `session/prompt`. An agent that advertises
+`agentCapabilities._meta["agent-host/operationId"]: true` runs each operation ID once. A
+repeated prompt with that ID reattaches to the operation: the agent first sends one
+`agent_message_chunk` with `_meta["agent-host/replay"]: true` and all the text of the
+operation so far, then the later updates and the result. `apps/pi-acp` implements the
+extension.
+
+While a turn is active, the `continueTurn` alarm runs every `turnHeartbeatMs`. After a
+restart, it opens a new agent connection and prompts again with the same operation ID. The
+session skips the replayed text that it already stored, so the turn keeps one response. If
+the replayed text differs, as after the agent generated it again, the session writes all of
+it to a new markdown part. A lost connection schedules another attempt, and the turn ends
+with an error after `turnAttempts` failures in a row or an error response from the agent.
+A cancellation after a restart opens a connection to send `session/cancel`. Without the
+extension, an unfinished turn becomes an error after a restart, because the session cannot
+continue its prompt without running it again.
 
 Sessions remain until explicit disposal. Disposal stops the connection and removes
 AHP history. Backend-owned data follows the backend's own lifecycle.

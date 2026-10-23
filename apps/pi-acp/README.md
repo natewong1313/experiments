@@ -21,6 +21,19 @@ export class MyAgent extends DurableObject<Env> {
 }
 ```
 
+## Reattaching to a prompt
+
+A `session/prompt` with `_meta["agent-host/operationId"]` runs as a Pi operation with that
+ID, so Pi runs it once. If a connection closes during the prompt, Pi keeps running it. A later
+prompt with the same ID, on any connection, reattaches to it.
+
+Every prompt with an operation ID starts with a replay: all the text of the operation so far,
+as `agent_message_chunk` updates with `_meta["agent-host/replay"]: { start, end }`. `start`
+marks the first chunk and `end` the last. A new operation replays one empty chunk. Each chunk
+holds at most 64 Ki UTF-16 code units, so it fits in one WebSocket frame. The client replaces
+the text it has for the operation with the replay, then treats later chunks as new text.
+`initialize` advertises the extension as `agentCapabilities._meta["agent-host/operationId"]: true`.
+
 ## Disclaimer
 
 This is mostly a proof of concept to make examples work. This hasn't been fully fleshed out yet and should not be used in production.

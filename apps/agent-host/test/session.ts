@@ -1,3 +1,4 @@
+import * as z from "zod";
 import { AgentHostSession as BaseSession } from "../src";
 import type { SessionLifecyclePolicy } from "../src";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import type { AgentInfo as AHPAgentInfo } from "@microsoft/agent-host-protocol";
 import type {
+  AgentConnection as ACPAgentConnection,
   AnyMessage as ACPAnyMessage,
   PromptResponse as ACPPromptResponse,
   Stream as ACPStream,
@@ -29,18 +31,76 @@ const FAST_LIFECYCLE: SessionLifecyclePolicy = {
   retryInitialDelayMs: 10,
   retryMaxDelayMs: 10,
   disposeFallbackMs: 10,
+  // A turn continues from `restoreAfterRestart` at once, so the heartbeat stays long.
+  turnHeartbeatMs: 60_000,
+  turnAttempts: 2,
+};
+
+const OPERATION_ID_META = "agent-host/operationId";
+const REPLAY_META = "agent-host/replay";
+
+// The test agent replays in small chunks, so a test sees the session join them.
+const REPLAY_CHUNK_LENGTH = 2;
+
+/** Marks the first and the last chunk of a replay. */
+type ReplayMarker = { start: boolean; end: boolean };
+
+const PromptMetaSchema = z.object({ [OPERATION_ID_META]: z.string().optional() }).nullish();
+
+/** A prompt of the test agent: its text so far, and its result once it ends. */
+type TestOperation = { text: string; result?: ACPPromptResponse };
+
+/**
+ * The agent state of one session object. It outlives a restart of the object, as the state of a
+ * separate agent would. A prompt with an operation ID runs once, and a repeated prompt
+ * reattaches to it. The state holds only data: the runtime does not let an object use the
+ * promises and streams of the object before its restart.
+ */
+type DurableAgent = {
+  operations: Map<string, TestOperation>;
+  // The prompt that waits for `finishPrompt` or a cancellation.
+  held?: TestOperation;
+  operationsDisabled: boolean;
+};
+
+const durableAgents: Map<string, DurableAgent> = new Map();
+
+/**
+ * Ends the held prompt of the session object `name` without a call to the object, as a separate
+ * agent would while the object restarts. The text stays in the prompt for a reattachment.
+ */
+export function finishHeldPrompt(name: string, text: string): void {
+  const held = durableAgents.get(name)?.held;
+
+  if (!held) {
+    throw new Error("No held prompt");
+  }
+
+  held.text += text;
+  held.result = { stopReason: "end_turn" };
+}
+
+/** The held prompt as this object runs it: where it sends text, and how it ends. */
+type HeldRun = {
+  operation: TestOperation;
+  send(text: string): Promise<void>;
+  result: ReturnType<typeof Promise.withResolvers<ACPPromptResponse>>;
 };
 
 /** The number of agent streams, and the number that the session has not closed. */
 type StreamCounts = { total: number; open: number };
 
 /** The test side of one agent stream. */
-type TestStream = { open: boolean; writeGate?: ReturnType<typeof Promise.withResolvers<null>> };
+type TestStream = {
+  open: boolean;
+  writeGate?: ReturnType<typeof Promise.withResolvers<null>>;
+  // Ends the stream with an error on the session side, as a lost connection does.
+  drop?(): void;
+};
 
 export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter, AgentHost> {
   private cancellations = 0;
   private setup?: ReturnType<typeof Promise.withResolvers<boolean>>;
-  private pending?: ReturnType<typeof Promise.withResolvers<ACPPromptResponse>>;
   private subscribeGate?: ReturnType<typeof Promise.withResolvers<null>>;
   private heldSubscribes = 0;
   private lifecycle?: SessionLifecyclePolicy;
@@ -49,6 +109,8 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
   private heldConnection?: ReturnType<typeof Promise.withResolvers<null>>;
   private streams: TestStream[] = [];
   private newestStream?: TestStream;
+  private agentConnections: ACPAgentConnection[] = [];
+  private heldRun?: HeldRun;
 
   router = this.env.CONNECTIONS;
   host = this.env.COORDINATORS;
@@ -72,10 +134,15 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
 
     const requests: TransformStream<ACPAnyMessage, ACPAnyMessage> = new TransformStream();
     const responses: TransformStream<ACPAnyMessage, ACPAnyMessage> = new TransformStream();
-    acpAgent()
+    const agent = this.durableAgent();
+
+    const connection = acpAgent()
       .onRequest(acpMethods.agent.initialize, () => ({
         protocolVersion: ACP_PROTOCOL_VERSION,
-        agentCapabilities: { loadSession: true },
+        agentCapabilities: {
+          loadSession: true,
+          ...(!agent.operationsDisabled && { _meta: { [OPERATION_ID_META]: true } }),
+        },
       }))
       .onRequest(acpMethods.agent.session.new, async () => {
         if (this.setup && !(await this.setup.promise)) {
@@ -87,35 +154,76 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
       .onRequest(acpMethods.agent.session.load, () => ({}))
       .onNotification(acpMethods.agent.session.cancel, () => {
         this.cancellations += 1;
-        this.pending?.resolve({ stopReason: "cancelled" });
+        this.endHeld({ stopReason: "cancelled" });
       })
       .onRequest(acpMethods.agent.session.prompt, async ({ params, client }) => {
         const [text] = params.prompt;
         const output = text?.type === "text" ? text.text : "";
+        const operationId = PromptMetaSchema.parse(params._meta)?.[OPERATION_ID_META];
+
+        async function send(chunk: string, marker?: ReplayMarker): Promise<void> {
+          await client.notify(acpMethods.client.session.update, {
+            sessionId: params.sessionId,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: chunk },
+              ...(marker && { _meta: { [REPLAY_META]: marker } }),
+            },
+          });
+        }
+
+        // A prompt with an operation ID first replays the text of the operation so far.
+        async function replay(replayed: string): Promise<void> {
+          const count = Math.max(1, Math.ceil(replayed.length / REPLAY_CHUNK_LENGTH));
+
+          for (let index = 0; index < count; index += 1) {
+            const chunk = replayed.slice(
+              index * REPLAY_CHUNK_LENGTH,
+              (index + 1) * REPLAY_CHUNK_LENGTH,
+            );
+
+            // oxlint-disable-next-line no-await-in-loop -- the chunks must arrive in order
+            await send(chunk, { start: index === 0, end: index === count - 1 });
+          }
+        }
+
+        const known = operationId === undefined ? undefined : agent.operations.get(operationId);
+
+        if (known !== undefined) {
+          await replay(known.text);
+
+          return known.result ?? (await this.holdRun(known, send));
+        }
+
+        const operation: TestOperation = { text: "" };
+
+        if (operationId !== undefined) {
+          agent.operations.set(operationId, operation);
+          await replay("");
+        }
+
         // "stream" arrives as several updates; anything else is a single update.
         const chunks = output === "stream" ? ["st", "re", "am"] : [output];
-
+        operation.text = chunks.join("");
         await Promise.all(
-          chunks.map((chunk) =>
-            client.notify(acpMethods.client.session.update, {
-              sessionId: params.sessionId,
-              update: {
-                sessionUpdate: "agent_message_chunk",
-                content: { type: "text", text: chunk },
-              },
-            }),
-          ),
+          chunks.map(async (chunk) => {
+            await send(chunk);
+          }),
         );
 
         if (output === "hold") {
-          this.pending = Promise.withResolvers<ACPPromptResponse>();
+          agent.held = operation;
 
-          return await this.pending.promise;
+          return await this.holdRun(operation, send);
         }
 
-        return { stopReason: "end_turn" };
+        operation.result = { stopReason: "end_turn" };
+
+        return operation.result;
       })
       .connect({ readable: requests.readable, writable: responses.writable });
+
+    this.agentConnections.push(connection);
 
     return this.trackStream({ readable: responses.readable, writable: requests.writable });
   }
@@ -195,8 +303,69 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
     return this.cancellations;
   }
 
-  finishPrompt(): void {
-    this.pending?.resolve({ stopReason: "end_turn" });
+  /**
+   * Ends the held prompt. The prompt first sends `text` to the newest connection that prompted
+   * it. The text stays in the prompt if that connection is closed.
+   */
+  async finishPrompt(text?: string): Promise<void> {
+    const { held } = this.durableAgent();
+
+    if (held && text !== undefined) {
+      held.text += text;
+
+      try {
+        await this.heldRun?.send(text);
+      } catch {
+        // The connection closed. The text stays in the prompt for a reattachment.
+      }
+    }
+
+    this.endHeld({ stopReason: "end_turn" });
+  }
+
+  /** Breaks every agent connection, as a restart of a separate agent does. */
+  dropAgentConnections(): void {
+    for (const stream of this.streams) {
+      stream.drop?.();
+    }
+
+    for (const connection of this.agentConnections.splice(0)) {
+      connection.close();
+    }
+  }
+
+  /** Makes the agent of this session ignore operation IDs, also after an eviction. */
+  disableOperations(): void {
+    this.durableAgent().operationsDisabled = true;
+  }
+
+  /** Waits until the held prompt ends in this object, and sends its later text to `send`. */
+  private async holdRun(
+    operation: TestOperation,
+    send: (text: string) => Promise<void>,
+  ): Promise<ACPPromptResponse> {
+    this.heldRun?.result.resolve({ stopReason: "cancelled" });
+    this.heldRun = { operation, send, result: Promise.withResolvers<ACPPromptResponse>() };
+
+    return await this.heldRun.result.promise;
+  }
+
+  private endHeld(result: ACPPromptResponse): void {
+    const { held } = this.durableAgent();
+
+    if (held) {
+      held.result ??= result;
+    }
+
+    this.heldRun?.result.resolve(held?.result ?? result);
+  }
+
+  private durableAgent(): DurableAgent {
+    const name = this.ctx.id.name ?? "";
+    const agent = durableAgents.get(name) ?? { operations: new Map(), operationsDisabled: false };
+    durableAgents.set(name, agent);
+
+    return agent;
   }
 
   /**
@@ -212,6 +381,13 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
 
     return {
       readable: new ReadableStream({
+        start: (controller): void => {
+          stream.drop = (): void => {
+            stream.open = false;
+            controller.error(new Error("Agent connection dropped"));
+            void cancelReader(reader);
+          };
+        },
         pull: async (controller): Promise<void> => {
           const { done, value } = await reader.read();
 
@@ -241,5 +417,14 @@ export class AgentSession extends BaseSession<TestEnv, AgentHostConnectionRouter
         },
       }),
     };
+  }
+}
+
+/** Cancels the agent side of a dropped stream. The agent may have closed it already. */
+async function cancelReader(reader: ReadableStreamDefaultReader<ACPAnyMessage>): Promise<void> {
+  try {
+    await reader.cancel();
+  } catch {
+    // The stream is closed.
   }
 }

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { evictDurableObject } from "cloudflare:test";
+import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import * as z from "zod";
 import {
@@ -11,6 +11,8 @@ import {
   SubscribeResultSchema,
 } from "@experiments/protocol-schemas/ahp";
 import { connectPeer, createSession as createPeerSession, openPeer } from "./peer";
+import { finishHeldPrompt } from "./session";
+import type { AgentSession } from "./session";
 import type { CreatedSession, Peer } from "./peer";
 import { CloseCode } from "../src/router/websockets";
 import { changeSession } from "./storage";
@@ -265,13 +267,251 @@ it("continues a prompt without clients and removes history on explicit disposal"
   }
 });
 
-it("records an interrupted turn as an error on reconstruction", async () => {
+/**
+ * Runs the due alarms of the session until the chat has no active turn, and returns its state.
+ * The test runtime runs alarms only on request.
+ */
+async function endedState(
+  peer: Peer,
+  stub: DurableObjectStub<AgentSession>,
+  chat: string,
+): Promise<ChatState> {
+  let state: ChatState | undefined;
+
+  await vi.waitFor(async () => {
+    await runDurableObjectAlarm(stub);
+    state = await chatState(peer, chat);
+    expect(state.activeTurn).toBeUndefined();
+  });
+
+  if (!state) {
+    throw new Error("Chat state is missing");
+  }
+
+  return state;
+}
+
+/**
+ * Restarts the session object, as a crash or an eviction does, and returns a new stub. Eviction
+ * in the test runtime waits for the background prompt run, so the test aborts the object
+ * instead. The abort breaks the old stub.
+ */
+async function restart(name: string): Promise<DurableObjectStub<AgentSession>> {
+  await runInDurableObject(env.CONVERSATIONS.getByName(name), (_instance, ctx) => {
+    ctx.abort("Restart for the test");
+  }).catch(() => null);
+
+  return env.CONVERSATIONS.getByName(name);
+}
+
+/** Starts a held turn and waits until the session stores its first text. */
+async function startHeldTurn(peer: Peer, chat: string): Promise<string> {
+  const turnId = start(peer, chat, "hold");
+  await vi.waitFor(() => {
+    expect(peer.actions.some((item) => item.action.type === "chat/delta")).toBe(true);
+  });
+
+  return turnId;
+}
+
+it("continues an active turn after the session restarts", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const turnId = await startHeldTurn(peer, session.chat);
+
+    const stub = await restart(sessionDOName(hostId, session.sessionId));
+    // The restart schedules the turn at once. The new connection reattaches to the prompt.
+    await vi.waitFor(async () => {
+      await runDurableObjectAlarm(stub);
+      expect(await stub.streamCounts()).toEqual({ total: 1, open: 1 });
+    });
+    await stub.finishPrompt(" and more");
+
+    const state = await endedState(peer, stub, session.chat);
+    expect(state.turns).toMatchObject([
+      {
+        id: turnId,
+        state: "complete",
+        responseParts: [{ kind: "markdown", id: turnId, content: "hold and more" }],
+      },
+    ]);
+  } finally {
+    peer.close();
+  }
+});
+
+it("keeps the text that the agent sends while the session is evicted", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const name = sessionDOName(hostId, session.sessionId);
+    const turnId = await startHeldTurn(peer, session.chat);
+
+    const stub = await restart(name);
+    finishHeldPrompt(name, " while away");
+
+    const state = await endedState(peer, stub, session.chat);
+    expect(state.turns).toMatchObject([
+      {
+        id: turnId,
+        state: "complete",
+        responseParts: [{ kind: "markdown", id: turnId, content: "hold while away" }],
+      },
+    ]);
+  } finally {
+    peer.close();
+  }
+});
+
+it("cancels the prompt of a turn that a restart interrupted", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const turnId = await startHeldTurn(peer, session.chat);
+
+    const stub = await restart(sessionDOName(hostId, session.sessionId));
+    peer.notify("dispatchAction", {
+      channel: session.chat,
+      clientSeq: 2,
+      action: { type: "chat/turnCancelled", turnId, duration: 0 },
+    });
+
+    const state = await endedState(peer, stub, session.chat);
+    expect(state.turns).toMatchObject([{ id: turnId, state: "cancelled" }]);
+    await vi.waitFor(async () => {
+      expect(await stub.cancellationCount()).toBe(1);
+    });
+  } finally {
+    peer.close();
+  }
+});
+
+it("admits no turn until the cancellation after a restart reaches the agent", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+  const other = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const turnId = await startHeldTurn(peer, session.chat);
+
+    const stub = await restart(sessionDOName(hostId, session.sessionId));
+    await stub.holdNextConnection();
+    peer.notify("dispatchAction", {
+      channel: session.chat,
+      clientSeq: 2,
+      action: { type: "chat/turnCancelled", turnId, duration: 0 },
+    });
+    await vi.waitFor(() => {
+      expect(peer.actions.some((item) => item.action.type === "chat/turnCancelled")).toBe(true);
+    });
+
+    // The cancellation waits for its connection, so it still claims the agent session.
+    // The first peer waits for the cancellation, so another peer starts the next turn.
+    await other.request("subscribe", { channel: session.chat });
+    start(other, session.chat, "too early");
+    await vi.waitFor(() => {
+      expect(
+        other.actions.some((item) => item.rejectionReason === "A turn is already running"),
+      ).toBe(true);
+    });
+
+    await stub.releaseConnection();
+    await vi.waitFor(async () => {
+      expect(await stub.cancellationCount()).toBe(1);
+    });
+
+    const next = start(other, session.chat, "after");
+    await vi.waitFor(() => {
+      expect(
+        other.actions.some(
+          (item) => item.action.type === "chat/turnComplete" && item.action.turnId === next,
+        ),
+      ).toBe(true);
+    });
+  } finally {
+    peer.close();
+    other.close();
+  }
+});
+
+it("keeps the answer of a turn whose prompt a restart stopped before the agent", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const session = await createSubscribedSession(peer);
+    const name = sessionDOName(hostId, session.sessionId);
+    await env.CONVERSATIONS.getByName(name).holdAgentWrites();
+    const turnId = start(peer, session.chat, "stream");
+    await vi.waitFor(async () => {
+      const state = await chatState(peer, session.chat);
+      expect(state.activeTurn?.id).toBe(turnId);
+    });
+
+    // The new connection sends the prompt with the operation ID of the turn.
+    // The agent does not know the operation, so it runs the prompt as a new one.
+    const stub = await restart(name);
+    const state = await endedState(peer, stub, session.chat);
+    expect(state.turns).toMatchObject([
+      {
+        id: turnId,
+        state: "complete",
+        responseParts: [{ kind: "markdown", id: turnId, content: "stream" }],
+      },
+    ]);
+  } finally {
+    peer.close();
+  }
+});
+
+it("reattaches to the prompt after the agent closes the connection", async () => {
+  const hostId = crypto.randomUUID();
+  const peer = await connectPeer(hostId);
+
+  try {
+    const sessionId = crypto.randomUUID();
+    const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, sessionId));
+    await stub.useFastLifecycle({ turnAttempts: 3 });
+    const session = await createPeerSession(peer, sessionId);
+    await peer.request("subscribe", { channel: session.chat });
+    const turnId = await startHeldTurn(peer, session.chat);
+
+    await stub.dropAgentConnections();
+    await vi.waitFor(async () => {
+      await runDurableObjectAlarm(stub);
+      expect(await stub.streamCounts()).toMatchObject({ total: 2 });
+    });
+    await stub.finishPrompt(" again");
+
+    const state = await endedState(peer, stub, session.chat);
+    expect(state.turns).toMatchObject([
+      {
+        id: turnId,
+        state: "complete",
+        responseParts: [{ kind: "markdown", id: turnId, content: "hold again" }],
+      },
+    ]);
+  } finally {
+    peer.close();
+  }
+});
+
+it("records an interrupted turn as an error when the agent cannot reattach", async () => {
   const hostId = crypto.randomUUID();
   const peer = await connectPeer(hostId);
 
   try {
     const session = await createSubscribedSession(peer);
     const stub = env.CONVERSATIONS.getByName(sessionDOName(hostId, session.sessionId));
+    await stub.disableOperations();
 
     const interrupted = crypto.randomUUID();
 
@@ -293,9 +533,8 @@ it("records an interrupted turn as an error on reconstruction", async () => {
     });
 
     await evictDurableObject(stub);
-    const state = await chatState(peer, session.chat);
-    expect(state.activeTurn).toBeUndefined();
-    expect(state.turns[0]).toMatchObject({ id: interrupted, state: "error", duration: 0 });
+    const state = await endedState(peer, stub, session.chat);
+    expect(state.turns[0]).toMatchObject({ id: interrupted, state: "error" });
     expect(state.turns[0]?.responseParts).toEqual([
       { kind: "markdown", id: "answer", content: "partial" },
       {

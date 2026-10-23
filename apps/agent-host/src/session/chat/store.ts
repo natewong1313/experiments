@@ -18,12 +18,23 @@ import type { SessionDatabaseOrm } from "../db/database";
 import { chatsTable } from "../db/schema";
 import type { ChatMetadata, ChatRecord } from "../db/schema";
 import { TurnRows, UNLOADED_MESSAGE } from "./turn-rows";
-import type { LoadedPart, PartSelection, TurnHeader } from "./turn-rows";
+import type { LoadedPart, MarkdownText, PartSelection, TurnHeader } from "./turn-rows";
 
 /** The number of older turns that one `fetchTurns` call loads. */
 export const FETCH_TURNS_PAGE = 50;
 
 export type NewChat = { summary: AHPChatSummary; metadata: ChatMetadata };
+
+/**
+ * The active turn of a chat, for a prompt that continues it: its AHP ID, the text of its
+ * message, its start, and its last markdown part.
+ */
+export type ActiveTurnText = {
+  turnId: string;
+  text: string;
+  startedAt: string | null;
+  markdown?: MarkdownText;
+};
 
 /** Returns true if a router subscribes to the chat channel. */
 export type HasSubscribers = (chat: string) => boolean;
@@ -142,6 +153,24 @@ export class ChatStore {
     const { activeTurn } = this.require(chat);
 
     return activeTurn === null ? undefined : this.turns.header(activeTurn)?.turnId;
+  }
+
+  /** Returns the active turn of the chat, or undefined if no turn is active. */
+  activeTurn(chat: string): ActiveTurnText | undefined {
+    const { activeTurn } = this.require(chat);
+    const header = activeTurn === null ? undefined : this.turns.header(activeTurn);
+    const message = activeTurn === null ? undefined : this.turns.message(activeTurn);
+
+    if (activeTurn === null || !header || !message) {
+      return;
+    }
+
+    return {
+      turnId: header.turnId,
+      text: message.text,
+      startedAt: header.startedAt,
+      markdown: this.turns.lastMarkdown(activeTurn),
+    };
   }
 
   /** Returns true if the chat has a turn with the AHP turn ID, active or ended. */

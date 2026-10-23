@@ -22,11 +22,21 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@earendil-works/chord": "catalog:",
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-durable": "catalog:",
     "@experiments/oxlint-config": "workspace:*",
+    "agents": "catalog:",
     "@experiments/typescript-config": "workspace:*",
     "drizzle-kit": "^0.31.11"
+  },
+  "peerDependencies": {
+    "agents": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "agents": {
+      "optional": true
+    }
   },
   "exports": {
     ".": "./src/index.ts",

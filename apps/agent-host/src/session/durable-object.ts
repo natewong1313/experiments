@@ -1,13 +1,11 @@
 /* oxlint-disable import/max-dependencies -- The session owns its record, its agent connection, its subscribers, and its catalog entry. */
 import { DurableObject, waitUntil } from "cloudflare:workers";
-import type { DurableAlarmInfo } from "durability";
 import { RequestError as ACPRequestError } from "@agentclientprotocol/sdk";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 import {
   ActionType as AHPActionType,
   AhpErrorCodes as AHPErrorCodes,
   JsonRpcErrorCodes as AHPJsonRpcErrorCodes,
-  ResponsePartKind as AHPResponsePartKind,
 } from "@microsoft/agent-host-protocol";
 import type { AgentInfo as AHPAgentInfo } from "@microsoft/agent-host-protocol";
 import {
@@ -37,8 +35,14 @@ import type { SessionDOName } from "../shared/lookups";
 import { AHPError, chatNotFound, sessionAlreadyExists, sessionNotFound } from "../shared/protocol";
 import { SingleFlight } from "../shared/single-flight";
 import { SessionDatabase } from "./db/database";
+import { durabilityAlarmScheduler } from "./alarm-scheduler";
+import type {
+  SessionAlarmInfo,
+  SessionAlarmScheduler,
+  SessionAlarmSchedulerOptions,
+} from "./alarm-scheduler";
 import type { SessionRecord } from "./db/schema";
-import { applyChat, applyLoaded, applySession, buildSession } from "./state";
+import { applyLoaded, applySession, buildSession } from "./state";
 import { AgentConnection } from "./agent-connection";
 import { UpdatesPublisher } from "./update-publisher";
 import { validateCreateRequest } from "./create-request";
@@ -46,12 +50,22 @@ import type { CreateTarget } from "./create-request";
 import { HostCatalog } from "./host-catalog";
 import { DEFAULT_LIFECYCLE_POLICY, retryDelay } from "./lifecycle-policy";
 import type { SessionLifecyclePolicy } from "./lifecycle-policy";
+import type { ActiveTurnText } from "./chat/store";
 import { defaultChatOf, phaseOf } from "./records";
 import type { ApplyOutcome, SessionChange } from "./records";
 import { SessionStorage } from "./storage";
 import { SessionTurns } from "./turns";
 
 export type { SessionLifecyclePolicy } from "./lifecycle-policy";
+
+export type {
+  SessionAlarmHandler,
+  SessionAlarmInfo,
+  SessionAlarmName,
+  SessionAlarmPolicy,
+  SessionAlarmScheduler,
+  SessionAlarmSchedulerOptions,
+} from "./alarm-scheduler";
 
 /**
  * Owns one session: its persisted state, its ACP connection, and the routers that subscribe
@@ -74,8 +88,8 @@ export abstract class AgentHostSession<
 {
   private db = new SessionDatabase(this.ctx.storage);
   private storage = new SessionStorage({
-    ctx: this.ctx,
     db: this.db,
+    scheduler: (options): SessionAlarmScheduler => this.createAlarmScheduler(options),
     policy: (): SessionLifecyclePolicy => this.getLifecyclePolicy(),
     hasSubscribers: (chat): boolean => this.publisher.hasSubscribers(chat),
     handlers: {
@@ -96,14 +110,17 @@ export abstract class AgentHostSession<
           await this.publisher.check(session.revision);
         }
       },
-      finishCreate: async (info: DurableAlarmInfo): Promise<void> => {
+      finishCreate: async (info: SessionAlarmInfo): Promise<void> => {
         await this.finishCreate(info);
       },
       finishDispose: (): void => {
         // The disposal deletes all storage, which includes the table of the named alarms.
-        // It runs after this handler returns, so `durability` records the run first.
+        // It runs after this handler returns, so the scheduler records the run first.
         // The disposal schedules a new run if it fails.
         waitUntil(this.retryDisposal());
+      },
+      continueTurn: async (): Promise<void> => {
+        await this.turns.continue();
       },
     },
   });
@@ -112,10 +129,10 @@ export abstract class AgentHostSession<
     router: (): DurableObjectNamespace<Router> => this.router,
     sessionId: (): string => this.name().sessionId,
     scheduleFlush: async (time): Promise<void> => {
-      await this.storage.alarms()?.flushSubscribers(time);
+      await this.storage.alarms()?.schedule("flushSubscribers", time);
     },
     scheduleCheck: async (time): Promise<void> => {
-      await this.storage.alarms()?.checkSubscribers(time);
+      await this.storage.alarms()?.schedule("checkSubscribers", time);
     },
   });
   private catalog = new HostCatalog((): StubFor<"host"> => this.host.getByName(this.name().hostId));
@@ -126,6 +143,15 @@ export abstract class AgentHostSession<
       await this.openAgent();
     },
     applyChange: async (change): Promise<ApplyOutcome> => await this.applyChange(change),
+    activeTurn: (): ActiveTurnText | undefined => {
+      const session = this.storage.session();
+
+      return session && this.storage.records.chats.activeTurn(defaultChatOf(session));
+    },
+    scheduleContinue: async (time): Promise<void> => {
+      await this.storage.alarms()?.schedule("continueTurn", time);
+    },
+    policy: (): SessionLifecyclePolicy => this.storage.requireOpen().policy,
   });
   // The creation and the disposal that run now, keyed by default chat.
   // Callers for the same creation wait for them.
@@ -154,6 +180,16 @@ export abstract class AgentHostSession<
 
   protected getWorkingDirectory(): string {
     return "/";
+  }
+
+  /**
+   * Returns the scheduler of the named alarms. The default keeps them in `durability` tables
+   * and owns the Durable Object alarm. Override it to share the alarm with other code, such as
+   * a Lifecycle that runs an agent harness in this object. The storage calls it each time it
+   * opens, so it can run before the constructor of a subclass returns.
+   */
+  protected createAlarmScheduler(options: SessionAlarmSchedulerOptions): SessionAlarmScheduler {
+    return durabilityAlarmScheduler(this.ctx, options);
   }
 
   /** Returns the timing of the creation and dispose alarms. The storage reads it when it opens. */
@@ -348,11 +384,10 @@ export abstract class AgentHostSession<
 
   /**
    * Opens existing storage after a restart and schedules the alarm that continues the phase
-   * it finds. The session does not store the agent connection. Thus a running turn cannot
-   * resume, and the session records an error for it. Writes nothing if the session has no
-   * storage. This method runs in `blockConcurrencyWhile`, so it does not call the host.
-   *
-   * TODO: support resuming turns
+   * it finds. The session does not store the agent connection, so an active turn continues in
+   * the `continueTurn` alarm, which reattaches to the prompt of the turn. Writes nothing if the
+   * session has no storage. This method runs in `blockConcurrencyWhile`, so it does not call
+   * the host or the agent.
    */
   private async restoreAfterRestart(): Promise<void> {
     if (!this.storage.hasTables()) {
@@ -371,13 +406,13 @@ export abstract class AgentHostSession<
       }
 
       case "disposing": {
-        await alarms.finishDispose(Date.now());
+        await alarms.schedule("finishDispose", Date.now());
 
         return;
       }
 
       case "creating": {
-        await alarms.finishCreate(Date.now());
+        await alarms.schedule("finishCreate", Date.now());
         break;
       }
 
@@ -386,26 +421,14 @@ export abstract class AgentHostSession<
       }
     }
 
-    await this.applyChange((session, chats) => {
-      const turnId = chats.activeTurnId(defaultChatOf(session));
-
-      return turnId === undefined
-        ? undefined
-        : applyChat(session, chats, {
-            type: AHPActionType.ChatError,
-            turnId,
-            duration: 0,
-            part: {
-              kind: AHPResponsePartKind.Error,
-              error: { errorType: "agent", message: "Turn interrupted by session restart" },
-            },
-          });
-    });
-
     const session = this.storage.requireSession();
 
+    if (this.storage.records.chats.activeTurnId(defaultChatOf(session)) !== undefined) {
+      await alarms.schedule("continueTurn", Date.now());
+    }
+
     if (session.revision > session.syncedRevision) {
-      await alarms.syncCatalog(Date.now());
+      await alarms.schedule("syncCatalog", Date.now());
     }
 
     await this.publisher.recover(session.revision);
@@ -435,7 +458,7 @@ export abstract class AgentHostSession<
       // The session schedules the alarm before the record. An alarm without a record does nothing.
       // A record without an alarm cannot finish after a restart.
       const { alarms, policy } = this.storage.requireOpen();
-      await alarms.finishCreate(Date.now() + policy.createDeadlineMs);
+      await alarms.schedule("finishCreate", Date.now() + policy.createDeadlineMs);
     }
 
     const session = this.storage.records.insertIfAbsent(() =>
@@ -510,7 +533,7 @@ export abstract class AgentHostSession<
    * stopped. A timeout closes the agent connection, which stops the attempt. The record counts
    * the attempts, so a restart does not reset them. After the last attempt, fails the creation.
    */
-  private async finishCreate({ signal }: DurableAlarmInfo): Promise<void> {
+  private async finishCreate({ signal }: SessionAlarmInfo): Promise<void> {
     const session = this.storage.session();
 
     if (!session || phaseOf(session) !== "creating") {
@@ -570,7 +593,7 @@ export abstract class AgentHostSession<
     at: number,
     change?: (record: SessionRecord) => SessionUpdate,
   ): Promise<void> {
-    await this.storage.requireOpen().alarms.finishDispose(at);
+    await this.storage.requireOpen().alarms.schedule("finishDispose", at);
     const committed = this.storage.records.commitDispose(defaultChat, change);
 
     if (committed?.update) {
@@ -613,7 +636,7 @@ export abstract class AgentHostSession<
 
       if (open) {
         const delay = retryDelay(open.policy, this.disposalFailures);
-        await open.alarms.finishDispose(Date.now() + delay);
+        await open.alarms.schedule("finishDispose", Date.now() + delay);
       }
     }
   }
@@ -674,7 +697,7 @@ export abstract class AgentHostSession<
     await this.publisher.publish([saved.update]);
 
     if (saved.summaryChanged) {
-      await alarms.syncCatalog(Date.now());
+      await alarms.schedule("syncCatalog", Date.now());
     }
 
     return "applied";

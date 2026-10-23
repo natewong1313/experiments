@@ -1,16 +1,22 @@
-import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { createTestHarness } from "wrangler";
 import { AhpClient } from "@microsoft/agent-host-protocol/client";
 import type { Subscription } from "@microsoft/agent-host-protocol/client";
 import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
-import { ActionType, MessageKind, PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
+import {
+  ActionType,
+  MessageKind,
+  PROTOCOL_VERSION,
+  SessionStatus,
+} from "@microsoft/agent-host-protocol";
 import {
   ChatActionSchema,
   ChatStateSchema,
   SessionStateSchema,
   type ChatAction,
 } from "@experiments/protocol-schemas/ahp";
-import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import { GATE_TOOL } from "./gate";
 import type { AgentSession } from "./worker";
 import type { DurableObjectNamespace as WorkerNamespace } from "@cloudflare/workers-types";
 
@@ -23,6 +29,9 @@ const server = createTestHarness({
 });
 
 const worker = server.getWorker<TestEnv>();
+
+// A restart test waits for Pi and the session to start again.
+const RESTART_TEST_TIMEOUT_MS = 60_000;
 const clients: AhpClient[] = [];
 
 beforeAll(async () => {
@@ -87,7 +96,12 @@ async function createSession(
   const env = await worker.getEnv();
   const name = `${hostId}/${sessionId}`;
 
-  return { channel, chat, name, stub: env.AGENT_SESSION.getByName(name) };
+  return {
+    channel,
+    chat,
+    name,
+    stub: env.AGENT_SESSION.getByName(name),
+  };
 }
 
 function startTurn(client: AhpClient, chat: string, text: string): string {
@@ -226,3 +240,71 @@ it("retains history after a restart and continues through ACP session load", asy
 
   expect(tables).toEqual([]);
 });
+
+it(
+  "continues a turn that a session restart interrupts, without a client request",
+  async () => {
+    const hostId = crypto.randomUUID();
+    const client = await connect(hostId);
+    const session = await createSession(client, hostId);
+
+    // The gate holds the turn after its first answer, which asks for the gate tool.
+    const textThenGate = [fauxText("Before restart. "), fauxToolCall(GATE_TOOL, {})];
+    await session.stub.setResponses([
+      fauxAssistantMessage(textThenGate, { stopReason: "toolUse" }),
+    ]);
+    const { subscription } = await client.subscribe(session.chat);
+    const turnId = startTurn(client, session.chat, "Run across a restart.");
+    let streamed = "";
+
+    for await (const event of subscription) {
+      const action = event.type === "action" ? ChatActionSchema.parse(event.params.action) : null;
+
+      if (action?.type === "chat/delta" && action.turnId === turnId) {
+        streamed += action.content;
+      }
+
+      if (streamed === "Before restart. ") {
+        break;
+      }
+    }
+
+    // Pi commits the first answer before it runs the tool, so the restart keeps it.
+    await vi.waitFor(async () => {
+      expect(await session.stub.gateEntered()).toBe(true);
+    });
+    await expect(session.stub.restart()).rejects.toBeInstanceOf(Error);
+
+    // Pi runs the gate tool again after the restart, then asks for the second answer.
+    const env = await worker.getEnv();
+    const restarted = env.AGENT_SESSION.getByName(session.name);
+    await restarted.setResponses([fauxAssistantMessage("After restart.")]);
+    await restarted.releaseGate();
+
+    // No client subscribes after the restart. The `continueTurn` alarm continues the turn.
+    // The catalogue shows when it ends.
+    await vi.waitFor(
+      async () => {
+        const listed = await client.request("listSessions", { channel: "ahp-root://" });
+        expect(listed.items).toMatchObject([
+          { resource: session.channel, status: SessionStatus.Idle },
+        ]);
+      },
+      { timeout: 25_000, interval: 250 },
+    );
+
+    expect(await restarted.modelCallCount()).toBe(1);
+    const reconnected = await connect(hostId);
+    const { result } = await reconnected.subscribe(session.chat);
+    const state = ChatStateSchema.parse(result.snapshot?.state);
+    expect(state.activeTurn).toBeUndefined();
+    expect(state.turns).toMatchObject([
+      {
+        id: turnId,
+        state: "complete",
+        responseParts: [{ kind: "markdown", content: "Before restart. After restart." }],
+      },
+    ]);
+  },
+  RESTART_TEST_TIMEOUT_MS,
+);

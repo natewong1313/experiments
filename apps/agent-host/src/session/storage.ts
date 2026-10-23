@@ -1,6 +1,11 @@
-import { DurabilityAlarms } from "durability";
-import type { DurableAlarmHandler } from "durability";
 import { sessionNotFound } from "../shared/protocol";
+import { resolvePolicies } from "./alarm-scheduler";
+import type {
+  SessionAlarmHandler,
+  SessionAlarmName,
+  SessionAlarmScheduler,
+  SessionAlarmSchedulerOptions,
+} from "./alarm-scheduler";
 import type { SessionDatabase } from "./db/database";
 import type { SessionRecord } from "./db/schema";
 import { retryDelay } from "./lifecycle-policy";
@@ -8,29 +13,20 @@ import type { SessionLifecyclePolicy } from "./lifecycle-policy";
 import { phaseOf, SessionRecords } from "./records";
 import type { HasSubscribers } from "./chat/store";
 
-type AlarmName =
-  | "syncCatalog"
-  | "flushSubscribers"
-  | "checkSubscribers"
-  | "finishCreate"
-  | "finishDispose";
-
-export type SessionAlarms = DurabilityAlarms<AlarmName>;
-
-type OpenStorage = { kind: "open"; alarms: SessionAlarms; policy: SessionLifecyclePolicy };
+type OpenStorage = { kind: "open"; alarms: SessionAlarmScheduler; policy: SessionLifecyclePolicy };
 
 /**
  * The session has storage only between creation and deletion. Without storage, reads return
  * nothing and writes do nothing. This prevents a request for an absent session from creating
- * storage. The `durability` helpers run their own migrations, so they exist only while the
- * storage is open.
+ * storage. A scheduler can run its own migrations, so it exists only while the storage is open.
  */
 type StorageState = { kind: "absent" } | OpenStorage | { kind: "removing"; removed: Promise<void> };
 
 type SessionStorageOptions = {
-  ctx: DurableObjectState;
   db: SessionDatabase;
-  handlers: Record<AlarmName, DurableAlarmHandler>;
+  handlers: Record<SessionAlarmName, SessionAlarmHandler>;
+  /** Creates the scheduler of the named alarms. The storage calls it each time it opens. */
+  scheduler(options: SessionAlarmSchedulerOptions): SessionAlarmScheduler;
   /** Returns the alarm timing. The storage reads it once each time it opens. */
   policy(): SessionLifecyclePolicy;
   /**
@@ -81,22 +77,19 @@ export class SessionStorage {
     await this.options.db.migrate();
     const policy = this.options.policy();
 
-    const alarms = new DurabilityAlarms({
-      context: this.options.ctx,
+    const alarms = this.options.scheduler({
       handlers: this.options.handlers,
-      methods: {
+      policies: resolvePolicies({
         // The host ignores repeated summaries, so a timed-out sync can run again.
         syncCatalog: { attemptTimeoutMs: CATALOG_SYNC_TIMEOUT_MS, retryTimeouts: true },
         // Each creation step can run again, so a timed-out attempt can run again.
         finishCreate: {
           attemptTimeoutMs: policy.createAttemptTimeoutMs,
           retryTimeouts: true,
-          retries: {
-            maxAttempts: policy.createAttempts,
-            delay: (attempt): number => retryDelay(policy, attempt),
-          },
+          maxAttempts: policy.createAttempts,
+          delay: (attempt): number => retryDelay(policy, attempt),
         },
-      },
+      }),
     });
 
     this.state = { kind: "open", alarms, policy };
@@ -121,6 +114,7 @@ export class SessionStorage {
     try {
       await removed;
       this.state = { kind: "absent" };
+      open.alarms.removed?.();
     } catch (error) {
       this.state = open;
       throw error;
@@ -160,7 +154,7 @@ export class SessionStorage {
   }
 
   /** Returns the named alarms while the storage is open. */
-  alarms(): SessionAlarms | undefined {
+  alarms(): SessionAlarmScheduler | undefined {
     return this.opened()?.alarms;
   }
 
