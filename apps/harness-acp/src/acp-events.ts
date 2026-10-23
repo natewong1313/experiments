@@ -179,7 +179,7 @@ export class AcpEventUpdates {
   private readonly currentToolOutputs: Map<string, string> = new Map();
   // The tool calls that the client already has. A later start of one only updates it.
   private readonly startedTools: Set<string> = new Set();
-  // The tool calls that the client has while the model still generates their parameters.
+  // The tool calls announced to the client that have not started execution.
   private readonly pendingTools: Set<string> = new Set();
   // The parameter text that the client has for each pending tool call.
   private readonly pendingInputs: Map<string, string> = new Map();
@@ -332,15 +332,7 @@ export class AcpEventUpdates {
       return [];
     }
 
-    return message.content.flatMap((part, index): SessionUpdate[] => {
-      if (part.type !== "text" && part.type !== "thinking") {
-        return [];
-      }
-
-      const textContent = part.type === "text" ? part.text : part.thinking;
-
-      return this.convertTextUpdate(part.type, textContent, index);
-    });
+    return this.onMessage(message);
   }
 
   private onMessageUpdate(event: Extract<AgentEvent, { type: "message_update" }>): SessionUpdate[] {
@@ -476,7 +468,7 @@ export class AcpEventUpdates {
   }
 }
 
-// JsonValue is validated by copyJson before path traversal.
+// The copyJson call validates the JSON value before path traversal.
 /* oxlint-disable anti-slop/no-runtime-typeof */
 function appendArgument(
   value: JsonValue,

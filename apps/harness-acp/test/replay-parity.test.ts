@@ -528,3 +528,33 @@ it("replays in-flight text on both sides of pending tools in content order", () 
   const replay = operationUpdates(snapshot, OPERATION);
   expect(fold(replay)).toEqual(fold(live));
 });
+
+it("flushes final tool blocks before trailing text when the last partial was throttled", () => {
+  const partial = assistant([{ type: "text", text: "A" }]);
+
+  const message = assistant([
+    { type: "text", text: "A" },
+    { type: "toolCall", id: "c1", name: "read", arguments: { path: "/a" } },
+    { type: "text", text: "B" },
+  ]);
+
+  const committed = entry({ kind: "pi.assistant", model: [message] });
+  const result = toolResult("c1", "file");
+
+  const live = liveUpdates([
+    { type: "message_start", message: partial },
+    { type: "message_end", entry: committed },
+    { type: "tool_execution_start", toolCallId: "c1", toolName: "read", args: { path: "/a" } },
+    { type: "tool_execution_end", toolCallId: "c1", toolName: "read", entry: result },
+  ]);
+
+  const snapshot = snapshotOf([committed, result]);
+  const replay = operationUpdates(snapshot, OPERATION);
+
+  expect(fold(live)).toMatchObject([
+    { kind: "text", text: "A" },
+    { kind: "tool", toolCallId: "c1", status: "completed" },
+    { kind: "text", text: "B" },
+  ]);
+  expect(fold(replay)).toEqual(fold(live));
+});
