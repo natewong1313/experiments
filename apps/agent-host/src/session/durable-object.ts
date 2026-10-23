@@ -155,7 +155,8 @@ export abstract class AgentHostSession<
       await this.storage.alarms()?.schedule("continueTurn", time);
     },
     policy: (): SessionLifecyclePolicy => this.storage.requireOpen().policy,
-    models: (): readonly AHPSessionModelInfo[] => this.getAgentInfo().models,
+    models: (): readonly AHPSessionModelInfo[] =>
+      this.getAgentInfo(this.storage.requireSession().sessionState.provider).models,
   });
   // The creation and the disposal that run now, keyed by default chat.
   // Callers for the same creation wait for them.
@@ -177,10 +178,10 @@ export abstract class AgentHostSession<
   /** The host Durable Object namespace. The session keeps its catalog entry at the host. */
   abstract host: DurableObjectNamespace<Host>;
 
-  protected abstract connectAgent(sessionId: string): Promise<ACPStream>;
+  protected abstract connectAgent(sessionId: string, provider: string): Promise<ACPStream>;
 
-  /** Returns the agent backend. A create request must name its provider or no provider. */
-  protected abstract getAgentInfo(): AHPAgentInfo;
+  /** Returns provider metadata. An omitted provider selects the default backend. */
+  protected abstract getAgentInfo(provider?: string): AHPAgentInfo;
 
   protected getWorkingDirectory(): string {
     return "/";
@@ -210,7 +211,7 @@ export abstract class AgentHostSession<
     try {
       const target = validateCreateRequest(req, {
         sessionId: this.name().sessionId,
-        provider: this.getAgentInfo().provider,
+        provider: this.getAgentInfo(req.provider).provider,
         defaultCwd: this.getWorkingDirectory(),
       });
 
@@ -664,10 +665,11 @@ export abstract class AgentHostSession<
     const defaultChat = defaultChatOf(session);
 
     const acpSessionId = await this.agent.open({
-      stream: (): Promise<ACPStream> => this.connectAgent(session.id),
+      stream: (): Promise<ACPStream> =>
+        this.connectAgent(session.id, session.sessionState.provider),
       cwd: session.cwd,
       sessionId: session.acpSessionId,
-      models: this.getAgentInfo().models.map((model) => model.id),
+      models: this.getAgentInfo(session.sessionState.provider).models.map((model) => model.id),
     });
 
     // A dispose can start while the agent connection opens.

@@ -1,0 +1,17 @@
+{
+  "extends": "@experiments/typescript-config/base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "types": [
+      "@cloudflare/workers-types",
+      "./worker-configuration.d.ts"
+    ],
+    "isolatedModules": false
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

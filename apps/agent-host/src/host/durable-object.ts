@@ -83,7 +83,7 @@ export abstract class AgentHostRoot<
   abstract router: DurableObjectNamespace<Router>;
 
   /** Returns the agent metadata for the root snapshot. */
-  protected abstract getAgentInfo(): AHPAgentInfo;
+  protected abstract getAgentInfo(): AHPAgentInfo | AHPAgentInfo[];
 
   async alarm(info?: AlarmInvocationInfo): Promise<void> {
     await this.durability.alarm(info);
@@ -103,7 +103,7 @@ export abstract class AgentHostRoot<
       return {
         revision,
         state: {
-          agents: [this.getAgentInfo()],
+          agents: [this.getAgentInfo()].flat(),
           activeSessions,
         },
       };

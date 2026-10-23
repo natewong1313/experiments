@@ -28,14 +28,19 @@ pre-commit:
       files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/basic/src apps/agent-host/examples/basic/client
       run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
+    oxlint-agent-host-multi-agent:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/multi-agent/src apps/agent-host/examples/multi-agent/client
+      run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
+
     oxlint-agent-host-web:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       files: git diff --cached --name-only --diff-filter=ACMR -- apps/agent-host/examples/web/src apps/agent-host/examples/web/vite.config.ts
       run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
-    oxlint-pi-acp:
+    oxlint-harness-acp:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
-      files: git diff --cached --name-only --diff-filter=ACMR -- apps/pi-acp/src apps/pi-acp/test apps/pi-acp/vitest.config.ts
+      files: git diff --cached --name-only --diff-filter=ACMR -- apps/harness-acp/src apps/harness-acp/test apps/harness-acp/vitest.config.ts
       run: pnpm exec oxlint --deny-warnings --no-error-on-unmatched-pattern --type-aware {files}
 
     oxlint-protocol-schemas:

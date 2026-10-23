@@ -5,8 +5,8 @@ An example Turborepo monorepo using pnpm, applying the conventions documented in
 
 ## Structure
 
-- `apps/agent-host` - reusable AHP host Durable Object, with basic and web examples in `examples/` that roll their own Pi agent Durable Objects
-- `apps/pi-acp` - conversion layer from ACP WebSocket connections to a mounted Pi harness in your own Durable Object
+- `apps/agent-host` - reusable AHP host Durable Object, with a Pi-only `examples/basic` app and `examples/multi-agent` with Pi and OpenCode on one host
+- `apps/harness-acp` - conversion layer from ACP WebSocket connections to a mounted Pi or OpenCode harness in your own Durable Object
 - `@experiments/ui` - shared React components (no build step, consumed as source)
 - `@experiments/oxlint-config` - shared oxlint configs (one `oxlint.config.ts` entrypoint per framework)
 - `@experiments/typescript-config` - shared tsconfigs

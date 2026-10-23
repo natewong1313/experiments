@@ -15,6 +15,7 @@ import { operationUpdates, promptEntry } from "../src/operations";
 const OPERATION = "operation";
 
 type Block = AssistantMessage["content"][number];
+
 type ToolSlot = SnapshotEvent["tools"][number];
 
 /** What a client knows after a list of updates: text runs, and tool calls in creation order. */
@@ -142,9 +143,10 @@ function fold(updates: SessionUpdate[]): Folded[] {
     }
 
     if (update.sessionUpdate === "tool_call") {
-      expect(
-        folded.some((part) => part.kind === "tool" && part.toolCallId === update.toolCallId),
-      ).toBe(false);
+      if (folded.some((part) => part.kind === "tool" && part.toolCallId === update.toolCallId)) {
+        throw new Error("Duplicate tool call");
+      }
+
       folded.push({
         kind: "tool",
         toolCallId: update.toolCallId,
@@ -175,6 +177,7 @@ it("replays text on both sides of a tool call in the order that the live watch s
     { type: "toolCall", id: "c1", name: "read", arguments: { path: "/a" } },
     { type: "text", text: "B" },
   ]);
+
   const second = assistant([{ type: "text", text: "C" }]);
   const firstEntry = entry({ kind: "pi.assistant", model: [first] });
   const result = toolResult("c1", "file");
@@ -186,6 +189,7 @@ it("replays text on both sides of a tool call in the order that the live watch s
     { type: "tool_execution_end", toolCallId: "c1", toolName: "read", entry: result },
     ...streamed(second, secondEntry),
   ]);
+
   const replay = operationUpdates(snapshotOf([firstEntry, result, secondEntry]), OPERATION);
 
   expect(fold(replay)).toEqual(fold(live));
@@ -201,6 +205,7 @@ it("replays a tool call that Pi ended without a result as failed", () => {
     { type: "tool_execution_start", toolCallId: "c1", toolName: "read", args: {} },
     { type: "tool_execution_end", toolCallId: "c1", toolName: "read" },
   ]);
+
   const slot: ToolSlot = { callId: "c1", name: "read", status: "done" };
   const replay = operationUpdates(snapshotOf([committed], [slot]), OPERATION);
 
@@ -214,6 +219,7 @@ it("replays only the tool calls that started, with the output of a running one",
     { type: "toolCall", id: "c1", name: "read", arguments: {} },
     { type: "toolCall", id: "c2", name: "read", arguments: {} },
   ]);
+
   const committed = entry({ kind: "pi.assistant", model: [message] });
 
   const live = liveUpdates([
@@ -221,10 +227,12 @@ it("replays only the tool calls that started, with the output of a running one",
     { type: "tool_execution_start", toolCallId: "c1", toolName: "read", args: {} },
     { type: "tool_execution_update", toolCallId: "c1", toolName: "read", output: { set: "par" } },
   ]);
+
   const slots: ToolSlot[] = [
     { callId: "c1", name: "read", status: "running", output: "par" },
     { callId: "c2", name: "read", status: "pending" },
   ];
+
   const replay = operationUpdates(snapshotOf([committed], slots), OPERATION);
 
   expect(fold(replay)).toEqual(fold(live));
@@ -241,6 +249,7 @@ it("updates a started tool call when Pi starts it again after a restart", () => 
     toolName: "read",
     args: {},
   });
+
   const [fresh] = updates.update({
     type: "tool_execution_start",
     toolCallId: "c2",

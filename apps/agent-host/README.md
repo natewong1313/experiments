@@ -77,11 +77,16 @@ require any binding names.
   ```
 
 - Override `AgentHostRoot.getAgentInfo()` and `AgentHostSession.getAgentInfo()` to describe the
-  single agent backend. Return the same value from both. The session checks the provider of
-  a create request against it, and the model of a message against its `models`. The ID of
+  agent backends. The root can return one `AgentInfo` or an array. The session receives the
+  requested provider during creation and the stored provider for later model checks. Return
+  the matching metadata, or the default backend when no provider is given. The session checks
+  the provider against the returned metadata and the model against its `models`. The ID of
   each model must be a value of the agent's ACP `model` config option. The agent connection
   fails if the option does not offer every listed model, so a creation fails at once.
-- Override `AgentHostSession.connectAgent(sessionId)` to return an ACP `Stream`.
+- Override `AgentHostSession.connectAgent(sessionId, provider)` to return an ACP `Stream`. The stored
+  provider selects the backend, including after a restart. Existing single-provider overrides
+  can ignore the extra argument. See [the multi-agent example](examples/multi-agent) for Pi and
+  OpenCode on the same host.
 - Override `AgentHostSession.createAlarmScheduler(options)` when other code in the session
   object also needs the Durable Object alarm. The default scheduler keeps the named alarms in
   `durability` tables and owns the alarm. A replacement runs `options.handlers` with
@@ -156,7 +161,7 @@ prompt with that ID starts with a replay of the output of the operation so far: 
 thinking, and tool call updates, each with `_meta["agent-host/replay"]: { start, end }`.
 `start` marks the first update and `end` the last. A new operation replays one empty
 `agent_message_chunk`. A repeated prompt reattaches to the operation: after the replay come
-the later updates and the result. `apps/pi-acp` implements the extension.
+the later updates and the result. `apps/harness-acp` implements the extension.
 
 While a turn is active, the `continueTurn` alarm runs every `turnHeartbeatMs`. After a
 restart, it opens a new agent connection and prompts again with the same operation ID. The

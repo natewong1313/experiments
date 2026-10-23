@@ -4,7 +4,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { Harness, createRegistry } from "@earendil-works/pi-durable";
 import type { ToolRegistration } from "@earendil-works/pi-durable";
-import { connectAcp } from "@experiments/pi-acp";
+import { connectAcp } from "@experiments/harness-acp";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 import { Lifecycle } from "agents/lifecycle";
 import { PiHarness } from "agents/harness/pi";

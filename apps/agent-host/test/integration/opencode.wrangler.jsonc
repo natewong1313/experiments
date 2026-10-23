@@ -1,0 +1,24 @@
+{
+  "$schema": "../../../../node_modules/wrangler/config-schema.json",
+  "name": "agent-host-opencode",
+  "main": "opencode-worker.ts",
+  "compatibility_date": "2026-09-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "WORKSPACE_DIR": "/workspace" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "AGENT_HOST", "class_name": "AgentHostRoot" },
+      { "name": "AGENT_SESSION", "class_name": "AgentHostSession" },
+      { "name": "AGENT_ROUTER", "class_name": "AgentHostConnectionRouter" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AgentHostRoot", "AgentHostSession", "AgentHostConnectionRouter"],
+    },
+  ],
+  "ai": { "binding": "AI" },
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+}

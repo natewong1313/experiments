@@ -1,12 +1,12 @@
-# Pi ACP
+# Harness ACP
 
-Translation layer that takes incoming ACP requests and converts them to PiHarness calls. If you have Pi running in a durable object, this lets you take in ACP over websockets and have everything just work.
+ACP over WebSockets for `PiHarness` and `OpenCodeHarness` from `agents/harness/pi` and `agents/harness/opencode`. Both adapters support text prompts, durable operation replay, cancellation, session loading, model selection, thinking, tool updates, and token usage.
 
 ## Usage
 
 ```ts
 import { DurableObject } from "cloudflare:workers";
-import { connectAcp } from "@experiments/pi-acp";
+import { connectAcp } from "@experiments/harness-acp";
 import { PiHarness } from "agents/harness/pi";
 
 export class MyAgent extends DurableObject<Env> {
@@ -21,11 +21,15 @@ export class MyAgent extends DurableObject<Env> {
 }
 ```
 
+Pass an `OpenCodeHarness` to the same `connectAcp` function to use OpenCode. Model options use `{ provider, id }` for both adapters. The OpenCode adapter converts them to OpenCode's `{ providerID, id }` internally.
+
+The multi-agent host example offers both harnesses and their workspace tools on one host. See [its README](../agent-host/examples/multi-agent/README.md). The [basic example](../agent-host/examples/basic/README.md) uses Pi only.
+
 ## Reattaching to a prompt
 
-A `session/prompt` with `_meta["agent-host/operationId"]` runs as a Pi operation with that
-ID, so Pi runs it once. If a connection closes during the prompt, Pi keeps running it. A later
-prompt with the same ID, on any connection, reattaches to it.
+A `session/prompt` with `_meta["agent-host/operationId"]` runs as a harness operation with that
+ID, so the harness runs it once. If a connection closes during the prompt, the harness keeps running it. A later
+prompt with the same ID, on any connection to the same harness, reattaches to it.
 
 Every prompt with an operation ID starts with a replay of the output of the operation so far:
 its text, thinking, and tool call updates, in order, each with
@@ -54,13 +58,15 @@ text is split into chunks of at most 64 Ki UTF-16 code units, tool output keeps 
 ## Models
 
 Pass `models` to `connectAcp` to let a client select the model of a session. Each model must be
-on the `Models` that Pi opens with. Sessions then have a `model` select config option, with
+available in the harness. Sessions then have a `model` select config option, with
 category `model`, whose values are `provider/id`. `session/new` and `session/load` return it,
-`session/set_config_option` changes the model with `session.setModel`, and a model change
-sends `config_option_update`. The option shows the model that Pi has for the session. A
+`session/set_config_option` changes the model with the harness model setter, and a model change
+sends `config_option_update`. The option shows the model that the harness has for the session. A
 session without one gets the first of `models`. `modelValue(provider, id)` returns the value
 of a model.
 
 ## Disclaimer
 
 This is mostly a proof of concept to make examples work. This hasn't been fully fleshed out yet and should not be used in production.
+
+OpenCode operation IDs accept letters, digits, `.`, `_`, `~`, and `-`. AHP's UUID operation IDs meet this restriction. OpenCode replay reads the full history, including compacted messages. For text and reasoning parts already in a reconnect snapshot, remaining output arrives when that part ends. OpenCode deltas have no offsets to distinguish buffered text from new text. New parts stream normally. Permissions and structured questions have no ACP client handlers in this adapter. Configure the harness for unattended tools. The multi-agent example replaces local filesystem and shell tools with workspace tools.

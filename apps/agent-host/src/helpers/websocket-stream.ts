@@ -105,7 +105,7 @@ function createWritable(socket: WebSocket): WritableStream<ACPAnyMessage> {
 /**
  * Adapts and accepts an unaccepted Workers WebSocket, owning its lifecycle.
  *
- * Sibling in apps/pi-acp/src/websocket-stream.ts has different failure semantics:
+ * Sibling in apps/harness-acp/src/websocket-stream.ts has different failure semantics:
  * it soft-fails protocol errors, while this one closes the socket with code 1007.
  */
 export function websocketStream(socket: WebSocket): ACPStream {

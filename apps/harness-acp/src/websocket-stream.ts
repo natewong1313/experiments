@@ -70,6 +70,7 @@ export function websocketStream(socket: WebSocket): Stream {
           ended = true;
           socket.close(FAILED_CONNECTION_CLOSE, "Invalid ACP frame");
           controller.error(new Error("Invalid ACP WebSocket frame"));
+
           return;
         }
 
@@ -79,6 +80,7 @@ export function websocketStream(socket: WebSocket): Stream {
           value = JSON.parse(text.data);
         } catch {
           sendProtocolError(socket, RequestError.parseError());
+
           return;
         }
 
@@ -86,6 +88,7 @@ export function websocketStream(socket: WebSocket): Stream {
 
         if (!message.success) {
           sendProtocolError(socket, RequestError.invalidRequest(value));
+
           return;
         }
 

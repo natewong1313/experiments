@@ -27,10 +27,16 @@
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-durable": "catalog:",
     "@experiments/oxlint-config": "workspace:*",
-    "@experiments/pi-acp": "workspace:*",
-    "agents": "catalog:",
+    "@experiments/harness-acp": "workspace:*",
     "@experiments/typescript-config": "workspace:*",
-    "drizzle-kit": "^0.31.11"
+    "drizzle-kit": "^0.31.11",
+    "@opencode/sdk": "catalog:",
+    "@opencode/plugin": "catalog:",
+    "agents": "catalog:"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./helpers": "./src/helpers/index.ts"
   },
   "peerDependencies": {
     "agents": "catalog:"
@@ -39,9 +45,5 @@
     "agents": {
       "optional": true
     }
-  },
-  "exports": {
-    ".": "./src/index.ts",
-    "./helpers": "./src/helpers/index.ts"
   }
 }

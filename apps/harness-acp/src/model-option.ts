@@ -5,7 +5,7 @@ export type AcpModel = { provider: string; id: string; name?: string };
 /** The ID of the session config option that selects the model. */
 export const MODEL_CONFIG_ID = "model";
 
-/** The model of a Pi session, as its agent state holds it. */
+/** The current session model, with a provider and model ID. */
 export type SessionModel = { readonly provider: string; readonly modelId: string };
 
 /** Returns the config value of a model: its provider and ID, joined with a slash. */

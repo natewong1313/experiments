@@ -1,3 +1,4 @@
+import * as z from "zod";
 import type {
   PromptRequest,
   PromptResponse,
@@ -30,37 +31,38 @@ const PROMPT_ENTRY_KIND = "acp.prompt";
 
 // Pi records typed input under this kind.
 const USER_ENTRY_KIND = "pi.user";
+const OperationIdSchema = z.string().min(1);
+const PromptDataSchema = z.object({ operationId: OperationIdSchema });
+
+type PromptEntry = { kind: typeof PROMPT_ENTRY_KIND; data: z.output<typeof PromptDataSchema> };
 
 /** Returns the operation ID of a prompt, or undefined if the prompt has none. */
 export function operationIdOf(params: PromptRequest): string | undefined {
   const operationId = params._meta?.[OPERATION_ID_META];
 
-  return typeof operationId === "string" && operationId !== "" ? operationId : undefined;
+  return OperationIdSchema.safeParse(operationId).data;
 }
 
 /** Returns the transcript entry that records a prompt with `operationId`. */
-export function promptEntry(operationId: string): {
-  kind: string;
-  data: { operationId: string };
-} {
+export function promptEntry(operationId: string): PromptEntry {
   return { kind: PROMPT_ENTRY_KIND, data: { operationId } };
 }
 
 /**
  * Returns the ACP response of a settled operation, with the token usage of its answers.
  *
- * @throws {Error} If pi did not answer for another reason than an abort.
+ * @throws {Error} If the harness does not answer and the operation was not cancelled.
  */
 export function responseOf(result: PiOperationResult, usage?: ACPUsage): PromptResponse {
   if (result.status === "done") {
     return { stopReason: "end_turn", ...(usage && { usage }) };
   }
 
-  if (result.reason === "aborted") {
+  if (result.reason === "aborted" || result.reason === "interrupted") {
     return { stopReason: "cancelled", ...(usage && { usage }) };
   }
 
-  throw new Error(result.reason ?? "Pi did not answer the prompt");
+  throw new Error(result.reason ?? "Harness did not answer the prompt");
 }
 
 /** Marks `updates` as the replay of an operation. An empty replay is one empty text chunk. */
@@ -90,7 +92,7 @@ export function operationUpdates(snapshot: SnapshotEvent, operationId: string): 
     return [];
   }
 
-  const results = new Map<string, EntryRecord>();
+  const results: Map<string, EntryRecord> = new Map();
 
   for (const entry of answers.entries) {
     const message = entry.model?.[0];
@@ -121,8 +123,9 @@ export function operationUsage(
     return;
   }
 
-  const total = (pick: (usage: (typeof messages)[number]["usage"]) => number | undefined): number =>
-    messages.reduce((sum, message) => sum + (pick(message.usage) ?? 0), 0);
+  function total(pick: (usage: (typeof messages)[number]["usage"]) => number | undefined): number {
+    return messages.reduce((sum, message) => sum + (pick(message.usage) ?? 0), 0);
+  }
 
   return {
     totalTokens: total((usage) => usage.totalTokens),
@@ -149,7 +152,7 @@ function operationAnswers(
   }
 
   const later = entries.slice(start + 1);
-  const next = later.findIndex(isInput);
+  const next = later.findIndex((entry) => isInput(entry));
 
   return next === -1
     ? { entries: later, current: true }
@@ -202,14 +205,9 @@ function isPromptOf(entry: EntryRecord, operationId: string): boolean {
     return false;
   }
 
-  const { data } = entry;
+  const data = PromptDataSchema.safeParse(entry.data);
 
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    !Array.isArray(data) &&
-    data.operationId === operationId
-  );
+  return data.success && data.data.operationId === operationId;
 }
 
 function isInput(entry: EntryRecord): boolean {

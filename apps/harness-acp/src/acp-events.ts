@@ -13,7 +13,7 @@ import type { SessionModel } from "./model-option";
 type ConfigOptionsOf = (model: SessionModel | undefined) => SessionConfigOption[];
 
 // Map Pi tool names to the ACP tool kinds.
-const toolKinds = new Map<string, ToolKind>([
+const toolKinds: Map<string, ToolKind> = new Map([
   ["read", "read"],
   ["write", "edit"],
   ["edit", "edit"],
@@ -51,7 +51,11 @@ export function messageTextUpdates(message: AssistantMessage): SessionUpdate[] {
 }
 
 /** Returns the update that creates a tool call that started. */
-export function toolCallStart(toolCallId: string, toolName: string, args: unknown): SessionUpdate {
+export function toolCallStart(
+  toolCallId: string,
+  toolName: string,
+  args: unknown,
+): Extract<SessionUpdate, { sessionUpdate: "tool_call" }> {
   return { sessionUpdate: "tool_call", ...startFields(toolCallId, toolName, args) };
 }
 
@@ -117,10 +121,10 @@ export function toolCallEnd(toolCallId: string, entry: EntryRecord | undefined):
 
 // AcpEventUpdates
 export class AcpEventUpdates {
-  private readonly sentTextLengths = new Map<number, number>();
-  private readonly currentToolOutputs = new Map<string, string>();
+  private readonly sentTextLengths: Map<number, number> = new Map();
+  private readonly currentToolOutputs: Map<string, string> = new Map();
   // The tool calls that the client already has. A later start of one only updates it.
-  private readonly startedTools = new Set<string>();
+  private readonly startedTools: Set<string> = new Set();
   private readonly configOptionsOf?: ConfigOptionsOf;
   private currentModel?: SessionModel;
 
@@ -151,30 +155,47 @@ export class AcpEventUpdates {
 
   update(event: AgentEvent): SessionUpdate[] {
     switch (event.type) {
-      case "agent_changed":
+      case "agent_changed": {
         return this.onAgentChanged(event);
-      case "message_start":
+      }
+
+      case "message_start": {
         return this.onMessageStart();
-      case "message_end":
+      }
+
+      case "message_end": {
         return this.onMessageEnd(event);
-      case "message_update":
+      }
+
+      case "message_update": {
         return this.onMessageUpdate(event);
-      case "tool_execution_start":
+      }
+
+      case "tool_execution_start": {
         return this.onToolExecutionStart(event);
-      case "tool_execution_update":
+      }
+
+      case "tool_execution_update": {
         return this.onToolExecutionUpdate(event);
-      case "tool_execution_end":
+      }
+
+      case "tool_execution_end": {
         return this.onToolExecutionEnd(event);
-      default:
+      }
+
+      default: {
         return [];
+      }
     }
   }
 
   private onAgentChanged(event: Extract<AgentEvent, { type: "agent_changed" }>): SessionUpdate[] {
     const { model } = event.agent;
+
     const changed =
       model?.provider !== this.currentModel?.provider ||
       model?.modelId !== this.currentModel?.modelId;
+
     this.currentModel = model;
 
     if (!changed || !this.configOptionsOf) {
@@ -186,6 +207,7 @@ export class AcpEventUpdates {
 
   private onMessageStart(): SessionUpdate[] {
     this.sentTextLengths.clear();
+
     return [];
   }
 
@@ -202,6 +224,7 @@ export class AcpEventUpdates {
       }
 
       const textContent = part.type === "text" ? part.text : part.thinking;
+
       return this.convertTextUpdate(part.type, textContent, index);
     });
   }
@@ -213,10 +236,12 @@ export class AcpEventUpdates {
 
         if (block.type !== "text" && block.type !== "thinking") {
           this.sentTextLengths.delete(contentIndex);
+
           return [];
         }
 
         const textContent = block.type === "text" ? block.text : block.thinking;
+
         return this.convertTextUpdate(block.type, textContent, contentIndex);
       }
 
@@ -277,6 +302,7 @@ export class AcpEventUpdates {
     event: Extract<AgentEvent, { type: "tool_execution_end" }>,
   ): SessionUpdate[] {
     this.currentToolOutputs.delete(event.toolCallId);
+
     return [toolCallEnd(event.toolCallId, event.entry)];
   }
 

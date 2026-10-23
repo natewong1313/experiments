@@ -1,5 +1,5 @@
-import { modelValue } from "@experiments/pi-acp";
-import type { AcpModel } from "@experiments/pi-acp";
+import { modelValue } from "@experiments/harness-acp";
+import type { AcpModel } from "@experiments/harness-acp";
 import type { AgentInfo } from "../../src";
 import type { AgentHostConnectionRouter } from "./router";
 import type { AgentHostRoot } from "./root";

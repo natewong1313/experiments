@@ -1,5 +1,5 @@
 {
-  "name": "@experiments/pi-acp",
+  "name": "@experiments/harness-acp",
   "private": true,
   "type": "module",
   "exports": {
@@ -18,7 +18,9 @@
     "@earendil-works/pi-durable": "catalog:",
     "@experiments/protocol-schemas": "workspace:*",
     "agents": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@opencode/sdk": "catalog:",
+    "@opencode/plugin": "catalog:"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "catalog:",

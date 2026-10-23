@@ -89,7 +89,7 @@ type ConnectedSession = {
 
 /**
  * The `_meta` key of a prompt's operation ID. The agent advertises the key in its capabilities.
- * The sibling in apps/pi-acp/src/operations.ts serves this key.
+ * The sibling in apps/harness-acp/src/operations.ts serves this key.
  */
 const OPERATION_ID_META = "agent-host/operationId";
 

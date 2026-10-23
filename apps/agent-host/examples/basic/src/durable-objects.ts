@@ -17,8 +17,8 @@ import type {
   SessionAlarmScheduler,
   SessionAlarmSchedulerOptions,
 } from "@experiments/agent-host";
-import { connectAcp, modelValue } from "@experiments/pi-acp";
-import type { AcpModel } from "@experiments/pi-acp";
+import { connectAcp, modelValue } from "@experiments/harness-acp";
+import type { AcpModel } from "@experiments/harness-acp";
 import { LifecycleSessionAlarms, websocketStream } from "@experiments/agent-host/helpers";
 import type { Stream as ACPStream } from "@agentclientprotocol/sdk";
 

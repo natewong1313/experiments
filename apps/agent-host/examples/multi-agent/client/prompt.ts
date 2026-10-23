@@ -1,0 +1,147 @@
+import { PROTOCOL_VERSION as AHP_PROTOCOL_VERSION } from "@microsoft/agent-host-protocol";
+import * as z from "zod";
+import { ChatActionSchema, SessionActionSchema } from "@experiments/protocol-schemas/ahp";
+import type { Subscription as AHPSubscription } from "@microsoft/agent-host-protocol/client";
+import { AhpClient } from "@microsoft/agent-host-protocol/client";
+import { WebSocketTransport } from "@microsoft/agent-host-protocol/ws";
+
+const TIMEOUT_MS = 120_000;
+const ARGUMENT_OFFSET = 2;
+const CreationErrorSchema = z.object({ message: z.string() });
+
+const SessionPreviewSchema = z.object({
+  lifecycle: z.enum(["creating", "ready", "failed"]),
+  defaultChat: z.string(),
+  creationError: CreationErrorSchema.optional(),
+});
+
+const [endpoint, prompt = "Say hello in one sentence.", requestedProvider = "pi"] =
+  process.argv.slice(ARGUMENT_OFFSET);
+
+const provider = z.enum(["pi", "opencode"]).parse(requestedProvider);
+
+const transport = await WebSocketTransport.connect(
+  endpoint ?? "ws://localhost:8787/hosts/00000000-0000-4000-8000-000000000001/ahp",
+);
+
+const client = new AhpClient(transport);
+const session = `ahp-session:/${crypto.randomUUID()}`;
+
+const timeout = setTimeout(() => {
+  void client.shutdown();
+}, TIMEOUT_MS);
+
+async function waitUntilReady(
+  subscription: AHPSubscription,
+  initial: z.output<typeof SessionPreviewSchema>,
+): Promise<void> {
+  if (initial.lifecycle === "ready") {
+    return;
+  }
+
+  if (initial.lifecycle === "failed") {
+    throw new Error(initial.creationError?.message ?? "Session creation failed");
+  }
+
+  for await (const event of subscription) {
+    if (event.type !== "action") {
+      continue;
+    }
+
+    const action = SessionActionSchema.parse(event.params.action);
+
+    if (action.type === "session/ready") {
+      return;
+    }
+
+    if (action.type === "session/creationFailed") {
+      throw new Error(action.error.message);
+    }
+  }
+
+  throw new Error("Connection closed before session became ready");
+}
+
+async function runPrompt(chat: string, text: string): Promise<void> {
+  const { subscription } = await client.subscribe(chat);
+  const turnId = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
+
+  const request = JSON.stringify({
+    jsonrpc: "2.0",
+    method: "dispatchAction",
+    params: {
+      channel: chat,
+      clientSeq: 1,
+      action: {
+        type: "chat/turnStarted",
+        turnId,
+        startedAt,
+        message: { text, origin: { kind: "user" } },
+      },
+    },
+  });
+
+  transport.send(request);
+
+  for await (const event of subscription) {
+    if (event.type !== "action") {
+      continue;
+    }
+
+    if (event.params.rejectionReason !== undefined) {
+      throw new Error(event.params.rejectionReason);
+    }
+
+    const action = ChatActionSchema.parse(event.params.action);
+
+    if (!("turnId" in action) || action.turnId !== turnId) {
+      continue;
+    }
+
+    if (action.type === "chat/delta") {
+      process.stdout.write(action.content);
+    }
+
+    if (action.type === "chat/error") {
+      throw new Error(action.part.error.message);
+    }
+
+    if (action.type === "chat/turnComplete") {
+      process.stdout.write("\n");
+
+      return;
+    }
+
+    if (action.type === "chat/turnCancelled") {
+      throw new Error("Turn was cancelled");
+    }
+  }
+
+  throw new Error("Connection closed before turn completed");
+}
+
+try {
+  client.connect();
+  await client.initialize({
+    clientId: crypto.randomUUID(),
+    protocolVersions: [AHP_PROTOCOL_VERSION],
+  });
+  await client.request("createSession", { channel: session, provider });
+  const { result, subscription } = await client.subscribe(session);
+  const preview = SessionPreviewSchema.parse(result.snapshot?.state);
+  await waitUntilReady(subscription, preview);
+  const chat = preview.defaultChat;
+  process.stderr.write(`${JSON.stringify({ session, chat })}\n`);
+  await runPrompt(chat, prompt);
+} finally {
+  clearTimeout(timeout);
+
+  try {
+    if (client.connectionState.status === "connected") {
+      await client.request("disposeSession", { channel: session });
+    }
+  } finally {
+    await client.shutdown();
+  }
+}

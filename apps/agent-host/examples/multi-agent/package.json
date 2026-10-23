@@ -1,0 +1,32 @@
+{
+  "name": "@experiments/agent-host-multi-agent-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types --include-runtime=false --strict-vars=false",
+    "check-types": "wrangler types --include-runtime=false --strict-vars=false && tsc --noEmit && tsc --noEmit -p client/tsconfig.json",
+    "lint": "oxlint --deny-warnings --type-aware src client",
+    "prompt": "tsx client/prompt.ts"
+  },
+  "dependencies": {
+    "@cloudflare/computer": "catalog:",
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-durable": "catalog:",
+    "@experiments/agent-host": "workspace:*",
+    "@experiments/harness-acp": "workspace:*",
+    "@experiments/protocol-schemas": "workspace:*",
+    "@microsoft/agent-host-protocol": "catalog:",
+    "@opencode/plugin": "catalog:",
+    "@opencode/sdk": "catalog:",
+    "agents": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@experiments/oxlint-config": "workspace:*",
+    "@experiments/typescript-config": "workspace:*",
+    "tsx": "4.23.15"
+  }
+}
