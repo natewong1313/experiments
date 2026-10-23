@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "catalog:",
+    "@earendil-works/chord": "catalog:",
     "@earendil-works/pi-durable": "catalog:",
     "@experiments/protocol-schemas": "workspace:*",
     "agents": "catalog:",

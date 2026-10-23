@@ -18,14 +18,18 @@ minimumReleaseAgeExclude:
   - miniflare@5.20261001.0-alpha
   - wrangler@4.147.0
   - '@cloudflare/computer@0.4.0'
-  - agents@0.25.0
+  - agents@0.30.0
+  - '@earendil-works/chord@1.4.0'
+  - '@earendil-works/pi-ai@1.4.0'
+  - '@earendil-works/pi-durable@1.4.0'
 catalog:
   '@agentclientprotocol/sdk': 1.7.0
-  '@earendil-works/pi-ai': 0.99.2
-  '@earendil-works/pi-durable': 0.99.2
+  '@earendil-works/chord': 1.4.0
+  '@earendil-works/pi-ai': 1.4.0
+  '@earendil-works/pi-durable': 1.4.0
   '@cloudflare/computer': 0.4.0
   zod: 4.6.5
-  agents: 0.25.0
+  agents: 0.30.0
   '@microsoft/agent-host-protocol': 0.9.0
   react: 19.2.8
   react-dom: 19.2.8
